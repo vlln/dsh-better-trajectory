@@ -1,41 +1,41 @@
 /**
  * dsh-better-trajectory 浏览器半边。
  *
- * 只注册一个 `conversation.view` 页签（id `better-trajectory`，紧挨内置的
- * `trajectory`），视图的数据来自内置轨迹 target 的 `useTrajectory` hook。
- * 不声明宿主服务、路由或工具；Node half 是空 apply。
+ * 注册一个 `conversation.view` 页签，内部直接渲染内置 `trajectory` 页签的
+ * TrajectoryView 组件，只在其上方加一条筛选栏。原生组件、原生子槽与原生
+ * 交互都不复制；筛选通过裁剪后的 `useTrajectory` 快照传入。
  */
 import { en, NS, zh } from './locales'
-import { BetterTrajectoryView } from './view'
+import { SupersetView, type NativeTrajectoryHandle } from './superset'
 import css from './styles.css'
 
-/** 本插件用到的最小客户端上下文（避免依赖不随插件分发的官方类型包）。 */
 interface ClientContext {
   effect(callback: () => (() => void) | void, label?: string): () => void
   slots: {
     inject(name: string, callback: () => () => void): void
     register(descriptor: Record<string, unknown>, component: unknown): () => void
+    entries(name: string): readonly {
+      component: unknown
+      options: { id?: string }
+      inject?: (...args: any[]) => Record<string, unknown>
+    }[]
   }
   locale: {
     register(namespace: string, dictionaries: { zh: unknown, en: unknown }): () => void
-    bind(namespace: string): (key: string, params?: Record<string, string | number>) => string
+    bind(namespace: string): (key: string, params?: Record<string, unknown>) => string
   }
-  get(name: string): any
 }
 
-/** 需要的客户端服务：槽位、文案；`sessions` / `uiConversation` 只用于「加载更早」。 */
-export const inject = ['slots', 'locale', 'sessions', 'uiConversation']
+/** 只依赖槽位与文案；原生轨迹组件自带 session / remote 注入。 */
+export const inject = ['slots', 'locale']
 
-/** Cordis 客户端插件名。 */
 export const name = 'dsh-better-trajectory-client'
 
-/** 视图 id。 */
 const VIEW_ID = 'better-trajectory'
 
-/**
- * 注入样式表。多个实例（理论上不会同时存在）各带一份，卸载时各自收回。
- * @returns 清理函数。
- */
+/** 原生视图 id。 */
+const NATIVE_VIEW_ID = 'trajectory'
+
 function installStyles(): () => void {
   const element = document.createElement('style')
   element.dataset.betterTrajectory = ''
@@ -53,6 +53,40 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(installStyles, 'better-trajectory: styles')
 
   const t = ctx.locale.bind(NS)
+  const nativeT = ctx.locale.bind('trajectory')
+  const handles = new WeakMap<object, NativeTrajectoryHandle>()
+
+  const getImages = (): {
+    entry: unknown
+    factory: unknown
+    injected: Record<string, unknown>
+    t: (key: string, params?: Record<string, unknown>) => string
+  } | undefined => {
+    const entry = ctx.slots.entries('conversation.trajectory.images')[0]
+    const factory = (ctx.slots as any)._core?.factory?.('conversation.images.content')
+    if (entry === undefined || factory === undefined) return undefined
+    return {
+      entry: entry.component,
+      factory: factory.component,
+      injected: typeof factory.inject === 'function' ? factory.inject() : {},
+      t: ctx.locale.bind(factory.locale ?? 'conversation'),
+    }
+  }
+
+  const getNative = (): NativeTrajectoryHandle | undefined => {
+    const entry = ctx.slots.entries('conversation.view')
+      .find(item => item.options.id === NATIVE_VIEW_ID)
+    if (entry === undefined) return undefined
+    let handle = handles.get(entry)
+    if (handle === undefined) {
+      handle = {
+        component: entry.component as NativeTrajectoryHandle['component'],
+        inject: (sessionId: string) => (typeof entry.inject === 'function' ? entry.inject(sessionId) : {}),
+      }
+      handles.set(entry, handle)
+    }
+    return handle
+  }
 
   ctx.slots.inject('conversation.view', () => ctx.slots.register({
     name: 'conversation.view',
@@ -60,22 +94,6 @@ export function apply(ctx: ClientContext): void {
     order: 11,
     locale: NS,
     label: () => t('view.label'),
-    // 会话级 props：只补「加载更早」；`useTrajectory` 由内置轨迹插件的
-    // uiSession.provide 提供，不需要在这里重复声明（重复会抛 duplicate hook）。
-    inject: (sessionId: string) => ({
-      loadOlder: async (): Promise<boolean> => {
-        const sessions = ctx.get('sessions')
-        const session = sessions?.binding(sessionId)?.session
-        if (session === undefined || typeof session.loadOlder !== 'function') return false
-        const conversation = ctx.get('uiConversation')
-        const target = conversation?.binding(sessionId)?.target('trajectory')
-        if (target === undefined) return false
-        const before = target.getSnapshot()
-        await session.loadOlder()
-        return target.getSnapshot() !== before
-      },
-    }),
-  }, BetterTrajectoryView))
+    inject: () => ({ getNative, nativeT, getImages }),
+  }, SupersetView))
 }
-
-export default { name, inject, apply }

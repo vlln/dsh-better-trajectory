@@ -1,71 +1,59 @@
 # Better Trajectory
 
-给 DeepSeek Harness 原生「轨迹」加一层可筛选、可搜索的调试视图：按**工具名**、**错误**、**回合**、**类型**或**全文**收敛记录，再查看单条的完整参数与结果。
+原生「轨迹」的**超集**：还是同一个 `TrajectoryView`——原生时间轴、折叠、搜索、详情、Schema、Timing 全在——只在上方加一条筛选栏。
 
-原生「轨迹」页签保留不动；本插件在旁边加一个 **Trajectory+** 页签，读同一份轨迹快照。
+![在原生轨迹上筛选工具调用](docs/filter.png)
 
-![按工具筛选](docs/filter-tools.png)
+## 为什么不是另一套轨迹 UI
 
-## 它解决什么
+上一版自己重画了一张表，丢了原生时间轴、折叠和详情。这一版改成：
 
-原生轨迹擅长「按时间顺序看发生了什么」，但调试时经常是反过来的：
+- 从槽位注册表里取出内置 `trajectory` 页签正在用的 **TrajectoryView 组件**；
+- 把它的轨迹快照裁剪后，通过 `useTrajectory` 交给它；
+- 没有筛选时传**原快照本身**（身份不变），所以原生行为与单独打开「轨迹」完全一致。
 
-- 这次会话里 `bash` 到底被调了几次、每次参数是什么？
-- 哪些工具报错了？错误码 / 错误原文是什么？
-- 某个工具的输出里有没有出现某个路径、某个错误串？
-- 第 3 回合发生了什么？把消息和上下文先滤掉。
+因此：
 
-Better Trajectory 把这些变成工具栏上的几个点击，或者搜索框里的一条 `tool:bash status:error`。
+- 原生「轨迹」页签保留，随时可以对照；
+- `Trajectory+` 只是多了一层筛选，不是替代品；
+- 原生以后再增加能力，这里自动继承（除非筛选层需要适配新字段）。
 
-## 用起来什么样
+## 保留的原生能力
 
-### 筛选
+- 回合 / 步骤分组、Turns / Calls / Subcalls 折叠；
+- 输入 / 模型 / 工具条带与可交互时间轴；
+- 原生搜索；
+- 原生详情：Summary / Payload / Result / Schema / Timing，工具 schema、耗时、Token；
+- 图片：复用官方 `MessageImages` 子槽与 `conversation.images.content` Factory（缩略图、预览、文件名/尺寸/大小）；
+- 「加载更早的记录」、实时工具结果、复制、代码视图等。
 
-- **状态**：全部 / 错误 / 运行中，带实时计数。
-- **类型**：全部 / 工具 / 消息 / 其他；上下文、命令、压缩、重试、回合错误归在「其他」。
-- **工具**：按工具名多选，带调用次数；已选工具在切换状态筛选时不会从列表里消失。
+## 新增：工具筛选栏
 
-  ![工具筛选菜单](docs/tool-menu.png)
-- **回合**：按回合收敛，工具行也会落到它所属的回合（不再显示 `—`）。
-- 多个维度叠加；工具栏顶部显示当前生效的筛选胶囊，点 × 单独移除。
+![工具筛选菜单](docs/tool-menu.png)
 
-### 搜索语法
+- **状态**：全部 / 错误 / 运行中，带计数；
+- **工具**：按工具名多选，带调用次数、工具名过滤；
+- **回合**：按回合收敛，只保留该回合的工具调用与回合上下文；
+- 可叠加；右侧实时显示 `匹配 / 总数` 个工具调用；
+- 「清除筛选」一键回到原生全量视图；
+- 筛选按会话记住（`sessionStorage`），切走再回来还在。
 
-搜索框对参数、结果、错误文本和工具名做大小写不敏感的子串匹配。支持：
+### 筛选语义
 
-| 写法 | 含义 |
-|---|---|
-| `bash` | 全文包含 `bash` |
-| `"no such file"` | 精确短语 |
-| `tool:bash` | 工具名匹配（结尾 `*` 可做前缀匹配） |
-| `status:error` | 状态（也接受 `ok` / `running` / `interrupted`） |
-| `kind:tool` | 类型（也接受 `assistant` / `user` / `context` / `error` / `command`） |
-| `turn:3`、`turn:>=3`、`turn:2-4` | 回合数字与范围 |
-| `step:2` | 步骤 |
-| `ms:>1000` | 工具耗时（毫秒） |
-| `id:toolu_...` | 调用 ID 前缀 / 子串 |
-| `code:ENOENT` | 错误码 / 错误名 |
-| `-tool:read` | 排除 |
+筛选作用于**工具调用**，不作用于消息：
 
-不同字段之间是 AND，同一字段的多个值是 OR；`-` 前缀取反。按 `/` 聚焦搜索框，`Esc` 清空。
+- 消息、上下文、回合头、系统提示保留，作为定位上下文；
+- 工具调用按名称 / 状态 / 回合裁剪；子调用跟随父调用，父容器会保留；
+- 时间轴、折叠、搜索、详情都基于裁剪后的轨迹，仍是原生实现；
+- 原生搜索仍然可用，和筛选叠加。
 
-### 详情
+这样做的原因：原生轨迹的回合 / 步骤布局依赖消息与 assistant 记录；只裁剪工具行才能保留原生分组，不会退化成一张扁平表。
 
-点任意一行打开右侧详情：时间、回合 / 步骤、耗时、调用 ID、父调用、Token；错误身份与原文；完整参数（JSON 自动缩进）；完整结果。结果可以切换格式化 / 原始文本，参数和结果各有复制按钮。
-
-![单条工具调用详情](docs/inspector.png)
-
-### 带走证据
-
-- **复制为 Markdown**：表格 + 所有失败记录的参数 / 结果，直接贴进 issue。
-- **复制为 JSON**：结构化记录，方便再用脚本处理。
-- **下载 JSON**：落一份可归档的调试快照。
-- 工具栏的「最新」在浏览历史时不会强制跟随；滚回底部后恢复自动跟随。
-- 筛选状态按会话记住（`sessionStorage`），切到「对话」再回来还在。
+![原生详情面板](docs/inspector.png)
 
 ## 安装
 
-GUI：打开 **Plugins → Add plugin**，填入包名或仓库地址。
+GUI：**Plugins → Add plugin**，填入包名或仓库地址。
 
 CLI（web profile）：
 
@@ -80,7 +68,7 @@ dsh plugin --profile web add github:vlln/dsh-better-trajectory
 dsh plugin --profile web add /path/to/dsh-better-trajectory
 ```
 
-安装后刷新页面。在会话顶部页签里选择 **Trajectory+**；它会和「对话」「轨迹」并列。
+安装后刷新页面，在会话顶部选择 **Trajectory+**。
 
 卸载：
 
@@ -88,47 +76,43 @@ dsh plugin --profile web add /path/to/dsh-better-trajectory
 dsh plugin --profile web remove dsh-better-trajectory
 ```
 
-也可以在 Plugins 页停用本插件，原生「轨迹」不受影响。
-
 ## 兼容性
 
 - 实测：DeepSeek Harness **0.2.2-rc.2**（2026-11-14），web profile，React 18.3。
-- 依赖内置的 `@deepseek-ai/dsh-client-ui-trajectory` 提供的 `useTrajectory` 会话 hook 与 `trajectory` 快照 target；它随 web-app 一起分发。若该插件被禁用，本页签会显示「读不到轨迹数据」而不是崩溃。
-- 声明支持 `dsh >= 0.2.2-rc.1 < 0.3.0`；更早的 0.2.1 未实测，不标为已验证。
-- Desktop 与 web 共用同一个客户端，但 Desktop 未单独实测。
+- 依赖内置 `@deepseek-ai/dsh-client-ui-trajectory` 的 `TrajectoryView` 组件、`useTrajectory` hook 和 `conversation.trajectory.images` 子槽；它随 web-app 分发。
+- 图片优先复用官方 `MessageImages` + `conversation.images.content` Factory；若运行时不再暴露该 Factory，降级为本地缩略图，不影响筛选与文本/工具详情。
+- 声明支持 `dsh >= 0.2.2-rc.1 < 0.3.0`；0.2.1 未实测。
+- Desktop 与 web 共用客户端，但 Desktop 未单独实测。
 
 ## 插件管理
 
-- 安装 / 卸载命令见上；本地目录用 `link:` 安装，改完源码后 `npm run build`，再刷新页面。
-- 本插件没有宿主侧配置项，不在设置页占卡片。
-- 版本号、构建产物（`lib/client.js`）与变更记录见 `CHANGELOG.md`。
+- 安装 / 卸载命令见上；本地目录用 `link:` 安装，改完源码后 `npm run build`，刷新页面。
+- 没有宿主侧配置项，不在设置页占卡片。
+- 原生「轨迹」页签不受影响；本插件只增加 `Trajectory+` 页签。
 
-## 边界与隐私
+## 边界
 
-- **只读**：不写会话事件、不改原生轨迹数据；所有筛选都在浏览器内存里完成。
-- **范围是已加载窗口**：历史很长时，列表顶部提供「加载更早的记录」；没有加载的部分不参与筛选。
-- **全文索引上限**：单条记录只把前 48k 字符放进搜索索引（参数 / 结果 / 错误仍完整保留在详情与复制里），避免一次会话把内存吃满。
-- **没有时间轴**：原生轨迹的时长概览仍由原生页签提供；本页签专注于「筛选 + 详情」。
-- **图片**：结果里的图片以 `[image]` 占位，不渲染预览；文本、JSON、错误信息完整保留。
-- **网络**：不发起任何请求；复制 / 下载由用户手动触发。
-- **数据位置**：全部留在当前页面与会话存储；不会上传到任何地方。
+- **只读**：不写会话事件、不改原生轨迹数据；筛选全在浏览器内存里完成。
+- **范围是已加载窗口**：加载更早的记录后，工具计数会随窗口更新；未加载部分不参与筛选。
+- **只筛工具调用**：消息与上下文保留；这不是一个「只显示错误消息」的全局过滤。
+- **隐私**：不发网络请求；筛选状态仅存 `sessionStorage`。
+- **原生页签仍在**：两个页签共用同一份数据；`Trajectory+` 是超集视图。
 
 ## 开发
 
 ```sh
 pnpm install --offline     # 依赖 store 已有 esbuild / typescript / @types/react
 npm run build              # 构建 lib/client.js
-npm test                   # 纯数据层单测（行投影 / 查询 / 筛选 / 导出）
+npm test                   # 纯筛选层单测
 npm run typecheck          # tsc --noEmit
 npm run verify             # 上面三步 + 语法检查
 ```
 
 结构：
 
-- `src/client/rows.mjs` — 把轨迹快照投影成扁平记录，查询解析与筛选。
-- `src/client/export.mjs` — Markdown / JSON 导出。
-- `src/client/view.tsx` — 页签 UI。
-- `src/client/index.tsx` — 注册 `conversation.view` 页签、文案与样式。
+- `src/client/filter.mjs` — 工具调用索引、分面统计、快照裁剪（纯 ESM）。
+- `src/client/superset.tsx` — 原生 TrajectoryView 包装 + 筛选栏。
+- `src/client/index.tsx` — 取原生组件句柄、注册页签、注入文案与样式。
 - `index.mjs` — 宿主侧空 apply（bundle 的 insert 行需要一个 Cordis 插件）。
 
-详细的工程约束见 `AGENTS.md`。
+工程约束与升级核查点见 `AGENTS.md`。

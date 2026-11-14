@@ -1,7 +1,7 @@
 {
   "name": "dsh-better-trajectory",
   "version": "0.1.0",
-  "description": "Better Trajectory for DeepSeek Harness — a filterable, searchable trajectory ledger for debugging: filter by tool name, error, turn or status; inspect full arguments and results; copy the filtered slice.",
+  "description": "Native Trajectory super-set for DeepSeek Harness: the built-in trajectory view plus tool / status / turn filters, without a second UI.",
   "license": "MIT",
   "type": "module",
   "main": "index.mjs",

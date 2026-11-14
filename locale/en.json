@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Better Trajectory",
-    "description": "A filterable trajectory ledger for debugging: narrow by tool name, errors, turn or full text, then inspect full arguments and results."
+    "description": "A super-set of the native Trajectory view: tool / status / turn filters on top of the built-in timeline, folds, search and inspector."
   }
 }

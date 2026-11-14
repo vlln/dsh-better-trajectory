@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "Better 轨迹",
-    "description": "可筛选的轨迹调试视图：按工具名、错误、回合或全文搜索收敛记录，查看完整参数与结果。"
+    "title": "Better Trajectory",
+    "description": "原生轨迹的超集：在原生 Trajectory 视图上增加工具 / 状态 / 回合筛选，保留时间轴、折叠、搜索与详情。"
   }
 }

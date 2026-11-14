@@ -1,21 +1,46 @@
 # dsh-better-trajectory
 
-> 可分发文件：构建、测试、兼容性契约。当前会话的验证站与端口只在项目本机覆盖里，不写进本文件。
+> 可分发文件：构建、测试、兼容性契约。验证站与端口只在项目本机覆盖里，不写进本文件。
 
 ## 这是什么
 
-一个纯客户端 bundle 插件：注册 `conversation.view` 的 `better-trajectory` 页签，读内置
-`trajectory` target 的快照，投影成可筛选 / 可搜索的调试记录。宿主半边 `index.mjs` 是
+一个纯客户端 bundle 插件：注册 `conversation.view` 的 `better-trajectory` 页签，**直接渲染内置
+`trajectory` 页签的 TrajectoryView 组件**，只在上方加一条工具筛选栏。宿主半边 `index.mjs` 是
 空 `apply`（bundle 的 `insert` 行需要一个 Cordis 插件）。
 
-## 边界
+## 关键机制
 
-- 不 import 内置轨迹的运行时代码，也不复制它的内部类型；只消费公开的 `useTrajectory`
-  hook 与快照字段（`eventNodes` / `eventLocations` / `requests` / `runningCalls` / `partial`）。
-- 不声明自己的 trajectory target，不写会话事件，不重新解析会话日志。
-- 不依赖 `@deepseek-ai/dsh-client-ui-primitives`：官方 primitives 的类型包在某些安装里
-  只存在于 profile 闭包，且导出名跨 rc 会变。UI 用语义 token + 自绘紧凑控件。
-- 不把筛选状态写进 profile / 插件设置；只在浏览器 `sessionStorage` 里按会话记住。
+### 取原生组件
+
+`ctx.slots.entries('conversation.view')` 里找 `options.id === 'trajectory'` 的条目：
+
+- `entry.component` 就是 TrajectoryView；
+- 调用 `entry.inject(sessionId)` 得到它的注入 face；
+- 把 face 的 `hooks.duration` 映射成 `useDuration`（`mapInjected`，用 `useSyncExternalStore` 绑定
+  `subscribe/getSnapshot`），其余 bare props 原样透传；
+- 把 `t` 换成 `ctx.locale.bind('trajectory')` 的绑定；
+- 把 `useTrajectory` 换成裁剪快照的 selector hook。
+
+### 不要声明 `conversation.trajectory.images`
+
+原生条目声明了该子槽；第二份声明会让原生插件在 boot 时失败
+（`slot "conversation.trajectory.images" is already declared`）。本插件**不声明任何 children**。
+
+图片通过 `ctx.slots.entries('conversation.trajectory.images')` 找到官方 `MessageImages` 条目，
+再通过 `ctx.slots._core.factory('conversation.images.content')` 取 Factory 组件手动渲染；
+取不到时退回本地缩略图。`_core.factory` 是运行时私有入口，升级 dsh 时优先核查这里。
+
+### 筛选层
+
+`src/client/filter.mjs`（纯 ESM，单测直接 import）：
+
+- 工具索引按 `(turn, callId)` 去重：同一 callId 在多个回合复用时仍各自计数；
+- 同时索引 `tool-result` 树、`runningCalls`、assistant 的 `tool-call` blocks、`partial`；
+  窗口从中截断时，后两者仍让工具名/计数与屏幕上的原生行一致；
+- 筛选**只裁剪工具调用**：assistant 的非 tool-call blocks、user/context、请求与回合头保留；
+- 没有筛选时返回原快照（身份不变），原生行为零差异；
+- 子调用跟随父调用；父容器命中或任一子调用命中时保留父节点；
+- 回合筛选同时裁剪 `eventNodes`、`requests`、`partial`、`systemPrompts`。
 
 ## 构建
 
@@ -23,32 +48,24 @@
 
 - `react` / `react-dom` / `react/jsx-runtime` / `@deepseek-ai/*` 全部 external；
 - `.css` 以 text 形式打进 bundle，`apply` 时注入 `<style>`；
-- 产物 `lib/client.js` 必须入库（git 安装路径不要求用户构建）。
+- 产物 `lib/client.js` 必须入库。
 
 `npm run verify` = 单测 + `tsc --noEmit` + build + `node --check`。
-
-## 数据层契约
-
-`src/client/rows.mjs` 是纯 ESM，单测直接 import。要点：
-
-- 工具结果递归展开 `subCalls`；`depth` 表示子调用层级。
-- 内置快照不给工具贡献写 `eventLocations`，用最近一个有位置的记录兜底回合 / 步骤。
-- 工具状态：`isError` → `error`（`code === 'interrupted'` 单独标 `interrupted`），
-  `runningCalls` → `running`，其余 `ok`。
-- 搜索文本按源对象缓存在 `WeakMap` 里；流式快照每帧重建时不重算未变节点。
-- 分面计数忽略自身维度；工具名计数额外忽略状态，避免选中「错误」后工具从列表消失。
 
 ## 已验证
 
 - 宿主 **0.2.2-rc.2**（2026-11-14），隔离 web profile。
-- 真实会话里：页签出现、工具行 / 子调用 / 错误状态、工具筛选、错误筛选、查询、详情、
-  复制 Markdown、筛选跨页签保留、原生「轨迹」不受影响、宽手柄隐藏。
+- 原生 UI：时间轴、折叠、原生搜索、详情 Summary/Payload/Result/Schema/Timing、图片
+  （官方 `MessageImages` + Factory）、错误筛选、工具筛选、回合筛选、清除筛选。
 - 图标：Plugins 页实际加载 `data:image/svg+xml`，36×36，`complete + naturalWidth > 0`。
-- 负控与验证站操作记录在 `.work/dsh-better-trajectory/`（不随包分发）。
+- 负控：给客户端条目加不存在的注入服务时，浏览器明确报 `1 entry did not activate` +
+  `pending (waiting for service: ...)`，页签消失。
+- 验证站操作记录在 `.work/dsh-better-trajectory/`（不随包分发）。
 
 ## 改动前先看
 
-- 升级 dsh 基线：先核 `conversation.view` 槽、`uiSession.provide` 的 `trajectory` hook、
-  `TrajectorySnapshot` 字段是否改名；旧名字通常静默失效。
-- 改 UI：只消费 `--dsw-alias-*` / `--dsw-specific-*`，不要写死颜色；圆角用 `--dsw-radius-*`。
-- 改查询语法：先加 `tests/rows.test.mjs` 用例，再改 `parseQuery` / `matchesQuery`。
+- 升级 dsh：核 `conversation.view` 槽、`TrajectoryView` 的 props、`entry.inject` face、
+  `hooks.duration` 映射、`conversation.trajectory.images` 子槽与 Factory 入口。
+- 不要为了图片自己声明 `conversation.trajectory.images`；会顶掉原生声明。
+- 改筛选语义：先加 `tests/filter.test.mjs` 用例，再改 `filterSnapshot`。
+- UI 只消费 `--dsw-alias-*` / `--dsw-specific-*`，不写死颜色。
