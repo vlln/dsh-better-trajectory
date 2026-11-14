@@ -1,0 +1,4 @@
+# dsh-better-trajectory bundle：Node half 是空 apply，行为全在 client。
+- insert:
+    - id: dsh-better-trajectory
+      name: 'dsh-better-trajectory'

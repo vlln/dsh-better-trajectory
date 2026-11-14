@@ -1,0 +1,73 @@
+{
+  "name": "dsh-better-trajectory",
+  "version": "0.1.0",
+  "description": "Better Trajectory for DeepSeek Harness — a filterable, searchable trajectory ledger for debugging: filter by tool name, error, turn or status; inspect full arguments and results; copy the filtered slice.",
+  "license": "MIT",
+  "type": "module",
+  "main": "index.mjs",
+  "icon": "./icon.svg",
+  "exports": {
+    ".": {
+      "default": "./index.mjs"
+    },
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.mjs",
+    "lib/client.js",
+    "icon.svg",
+    "cordis.patch.yml",
+    "locale",
+    "docs",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "peerDependencies": {
+    "react": "^18.2.0"
+  },
+  "engines": {
+    "node": ">=22.19.0",
+    "dsh": ">=0.2.2-rc.1 <0.3.0-0"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check index.mjs && node --check lib/client.js",
+    "prepack": "npm run build",
+    "typecheck": "tsc --noEmit",
+    "verify": "npm run test && npm run typecheck && npm run build && npm run check"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.9.3"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "trajectory",
+    "debugging",
+    "observability"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vlln/dsh-better-trajectory.git"
+  },
+  "author": "vlln",
+  "publishConfig": {
+    "access": "public"
+  }
+}
