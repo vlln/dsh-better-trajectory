@@ -73,7 +73,7 @@ CLI（web profile）：
 # 已发布到 npm 时
 dsh plugin --profile web add dsh-better-trajectory
 
-# 从 GitHub 安装（产物已入库，不需要在用户机器上构建）
+# 发布到 GitHub 后（产物已入库，不需要在用户机器上构建）
 dsh plugin --profile web add github:vlln/dsh-better-trajectory
 
 # 本地开发目录
