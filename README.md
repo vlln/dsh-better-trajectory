@@ -66,6 +66,26 @@
 
 ![原生详情面板](docs/inspector.png)
 
+
+## JSON 查看器
+
+原生 JsonTree 的折叠摘要是一行 `nowrap + ellipsis`，长数组/长对象会被截断；嵌套节点默认收起，长字符串默认不换行。`Trajectory+` 额外提供一个 JSON 查看器：
+
+![JSON 查看器](docs/json-viewer.png)
+
+- 入口：调试面板每行的 `{}`；工具聚合行取该工具最近一次调用。
+- 展开全部 / 收起全部；
+- 长字符串默认换行，可切原始文本；
+- 树内搜索，自动展开命中路径并高亮；
+- 长数组分页（先显示 50 项）；
+- 复制 value / subtree；
+- Arguments / Result / Schema 三个来源；Tree / Raw 切换；
+- 面板可加宽到 88%。
+
+原生详情面板保持不动；这个查看器是它的补充，不是替换。原生详情里的字符串换行默认值也改成开，折叠摘要允许换行。
+
+> MVP 入口暂时放在调试面板和工具聚合行；下一步会补“原生行右键 / 原生详情头部 JSON 按钮”，让任意原生记录都能直接打开。
+
 ## 安装
 
 GUI：**Plugins → Add plugin**，填入包名或仓库地址。
@@ -127,6 +147,7 @@ npm run verify             # 上面三步 + 语法检查
 
 - `src/client/filter.mjs` — 工具调用索引、分面统计、聚合、快照裁剪（纯 ESM）。
 - `src/client/export.mjs` — 筛选结果的 Markdown / JSON 导出。
+- `src/client/json-viewer.tsx` — 可折叠 / 可搜索的 JSON 树查看器。
 - `src/client/superset.tsx` — 原生 TrajectoryView 包装 + 筛选栏 + 调试面板。
 - `src/client/index.tsx` — 取原生组件句柄、注册页签、注入文案与样式。
 - `index.mjs` — 宿主侧空 apply（bundle 的 insert 行需要一个 Cordis 插件）。

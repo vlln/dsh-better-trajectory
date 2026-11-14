@@ -533,15 +533,15 @@
 }
 
 .bts-debug-row-error {
-  grid-template-columns: minmax(90px, 130px) minmax(70px, 120px) 44px 48px minmax(120px, 1fr) 16px;
+  grid-template-columns: minmax(90px, 130px) minmax(70px, 120px) 44px 48px minmax(120px, 1fr) 40px;
 }
 
 .bts-debug-row-slow {
-  grid-template-columns: 56px minmax(70px, 120px) 44px minmax(120px, 1fr) 16px;
+  grid-template-columns: 56px minmax(70px, 120px) 44px minmax(120px, 1fr) 40px;
 }
 
 .bts-debug-row-tool {
-  grid-template-columns: minmax(120px, 240px) 74px 60px 86px 92px 1fr 18px;
+  grid-template-columns: minmax(120px, 240px) 74px 60px 86px 92px 1fr 40px;
 }
 
 .bts-debug-tool {
@@ -615,12 +615,12 @@
   }
 
   .bts-debug-row-error {
-    grid-template-columns: 90px 90px 38px 42px minmax(100px, 1fr) 14px;
+    grid-template-columns: 90px 90px 38px 42px minmax(100px, 1fr) 38px;
     gap: 6px;
   }
 
   .bts-debug-row-tool {
-    grid-template-columns: minmax(100px, 200px) 64px 50px 70px 80px 1fr 16px;
+    grid-template-columns: minmax(100px, 200px) 64px 50px 70px 80px 1fr 38px;
     gap: 6px;
   }
 
@@ -641,25 +641,341 @@
 }
 
 .bts-debug-columns-error {
-  grid-template-columns: minmax(90px, 130px) minmax(70px, 120px) 44px 48px minmax(120px, 1fr) 16px;
+  grid-template-columns: minmax(90px, 130px) minmax(70px, 120px) 44px 48px minmax(120px, 1fr) 40px;
 }
 
 .bts-debug-columns-tool {
-  grid-template-columns: minmax(120px, 240px) 74px 60px 86px 92px 1fr 18px;
+  grid-template-columns: minmax(120px, 240px) 74px 60px 86px 92px 1fr 40px;
 }
 
 .bts-debug-columns-slow {
-  grid-template-columns: 56px minmax(70px, 120px) 44px minmax(120px, 1fr) 16px;
+  grid-template-columns: 56px minmax(70px, 120px) 44px minmax(120px, 1fr) 40px;
 }
 
 @media (max-width: 900px) {
   .bts-debug-columns-error {
-    grid-template-columns: 90px 90px 38px 42px minmax(100px, 1fr) 14px;
+    grid-template-columns: 90px 90px 38px 42px minmax(100px, 1fr) 38px;
     gap: 6px;
   }
 
   .bts-debug-columns-tool {
-    grid-template-columns: minmax(100px, 200px) 64px 50px 70px 80px 1fr 16px;
+    grid-template-columns: minmax(100px, 200px) 64px 50px 70px 80px 1fr 38px;
     gap: 6px;
   }
+}
+
+/* -------------------------------- JSON 查看器 ------------------------------- */
+
+.bts-json-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  background: color-mix(in srgb, var(--dsw-alias-bg-mask-1) 24%, transparent);
+}
+
+.bts-json-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  width: min(66%, 920px);
+  min-width: 360px;
+  background: var(--dsw-alias-bg-layer-1);
+  border-left: 0.5px solid var(--dsw-alias-border-l2);
+  box-shadow: var(--dsw-elevation-prominent);
+}
+
+.bts-json-panel[data-wide] {
+  width: min(88%, 1240px);
+}
+
+.bts-json-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 4px 8px 4px 12px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.bts-json-title {
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  font: 600 12px/18px var(--ds-font-family-code, SFMono-Regular, Menlo, monospace);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bts-json-meta {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font: 10.5px/16px var(--ds-font-family-code, SFMono-Regular, Menlo, monospace);
+}
+
+.bts-json-toolbar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 3px 8px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l1);
+}
+
+.bts-json-search {
+  display: flex;
+  flex: 0 1 260px;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 7px;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-specific-input-major);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.bts-json-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: var(--dsw-font-xxs-12);
+}
+
+.bts-json-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 6px 8px 12px;
+  font: 12px/18px var(--ds-font-family-code, SFMono-Regular, Menlo, monospace);
+  scrollbar-width: thin;
+  scrollbar-color: var(--dsw-alias-scrollbar-bg-l1) transparent;
+}
+
+.bts-json-tree {
+  min-width: 0;
+}
+
+.bts-json-node {
+  min-width: 0;
+}
+
+.bts-json-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: 18px;
+  padding-right: 4px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.bts-json-chevron {
+  flex: none;
+  width: 16px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 9px;
+  line-height: 18px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.bts-json-chevron:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.bts-json-chevron:focus-visible {
+  outline: 1px solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: -1px;
+}
+
+.bts-json-key {
+  color: var(--dsw-alias-json-tree-property, var(--dsw-alias-state-business-primary));
+}
+
+.bts-json-string {
+  color: var(--dsw-alias-json-tree-string, var(--dsw-alias-state-success-primary));
+}
+
+.bts-json-string-wrap {
+  display: inline;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.bts-json-string-clamped {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--dsw-alias-json-tree-string, var(--dsw-alias-state-success-primary));
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.bts-json-number {
+  color: var(--dsw-alias-json-tree-number, var(--dsw-alias-state-business-primary));
+}
+
+.bts-json-bool {
+  color: var(--dsw-alias-json-tree-keyword, var(--dsw-alias-state-warn-primary));
+}
+
+.bts-json-null {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.bts-json-other {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.bts-json-punct,
+.bts-json-bracket {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.bts-json-summary {
+  margin-left: 4px;
+  color: var(--dsw-alias-label-caption);
+  font-size: 10.5px;
+}
+
+.bts-json-type {
+  margin-left: auto;
+  padding-left: 8px;
+  color: var(--dsw-alias-label-caption);
+  font-size: 9.5px;
+}
+
+.bts-json-children {
+  border-left: 0.5px solid var(--dsw-alias-border-l1);
+  margin-left: 7px;
+}
+
+.bts-json-copy {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.bts-json-row:hover .bts-json-copy,
+.bts-json-copy:focus-visible {
+  opacity: 1;
+}
+
+.bts-json-copy:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.bts-json-link {
+  padding: 0 4px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--dsw-alias-link);
+  font: var(--dsw-font-xxxs-11);
+  cursor: pointer;
+}
+
+.bts-json-link:hover {
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+
+.bts-json-more {
+  margin: 2px 0 2px 16px;
+  padding: 1px 6px;
+  border: 0.5px dashed var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-xs);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: var(--dsw-font-xxxs-11);
+  cursor: pointer;
+}
+
+.bts-json-more:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.bts-json-mark {
+  border-radius: 2px;
+  background: var(--dsw-specific-highlight, var(--dsw-alias-state-warn-tertiary));
+  color: inherit;
+}
+
+.bts-json-raw {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-markdown-code-block);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.bts-json-open {
+  width: 20px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font: 9px/18px var(--ds-font-family-code, SFMono-Regular, Menlo, monospace);
+  text-align: center;
+  cursor: pointer;
+}
+
+.bts-json-open:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.bts-debug-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+@media (max-width: 900px) {
+  .bts-json-panel {
+    width: min(92%, 720px);
+    min-width: 0;
+  }
+}
+
+/* 原生 JsonTree 的折叠摘要默认 nowrap + ellipsis；只在本页签内允许换行。 */
+[data-trajectory-superset] aside[aria-label='Event details'] [class*='_summary_'] {
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
 }

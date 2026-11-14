@@ -15,6 +15,7 @@ import {
   isActive, slowestCalls, summarizeTools,
 } from './filter.mjs'
 import { recordsToJson, recordsToMarkdown } from './export.mjs'
+import { JsonViewer } from './json-viewer'
 import type { BetterTrajectoryKey } from './locales'
 import { IconChevron, IconClose, IconFilter, IconSearch } from './icons'
 
@@ -231,6 +232,9 @@ export function SupersetView({
   const [exportMenu, setExportMenu] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [focusRequest, setFocusRequest] = useState<{ view: string, focus: string } | null>(null)
+  const [jsonRecord, setJsonRecord] = useState<any | null>(null)
+  const [jsonSchema, setJsonSchema] = useState<any>(undefined)
+  const [wrapDefault, setWrapDefault] = useState(true)
   const toolSearchRef = useRef<HTMLInputElement | null>(null)
   const debugInitialized = useRef(false)
 
@@ -249,6 +253,10 @@ export function SupersetView({
     [native?.component, sessionId],
   )
   const mapped = useMemo(() => mapInjected(injected), [injected])
+  const jsonStringWrapping = useMemo(() => ({
+    getDefault: () => wrapDefault,
+    setDefault: (value: boolean) => setWrapDefault(value),
+  }), [wrapDefault])
 
   const filteredHook = useCallback(
     (selector: (snapshot: any) => unknown) => selector(filtered),
@@ -315,6 +323,18 @@ export function SupersetView({
   const reveal = (record: any) => {
     // 面板里的行都来自当前筛选结果；保留筛选，只让原生视图自己定位。
     if (record?.callId) setFocusRequest({ view: 'trajectory', focus: record.callId })
+  }
+
+  const openJson = (record: any) => {
+    setJsonRecord(record)
+    setJsonSchema(full.callSchemas?.get(record?.callId))
+  }
+
+  const openLatestToolJson = (name: string) => {
+    const candidates = index.records
+      .filter(record => record.name === name)
+      .sort((left: any, right: any) => (right.time ?? 0) - (left.time ?? 0))
+    if (candidates[0] !== undefined) openJson(candidates[0])
   }
 
   const filteredRecords = useMemo(() => filteredCalls(index, filters as any), [index, filters])
@@ -630,11 +650,18 @@ export function SupersetView({
                   <span />
                 </div>
                 {errors.map((record: any) => (
-                  <button
+                  <div
                     key={`e:${record.turn}:${record.callId}`}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
                     className="bts-debug-row bts-debug-row-error"
                     onClick={() => reveal(record)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        reveal(record)
+                      }
+                    }}
                     title={translate('debug.jump')}
                   >
                     <span className="bts-code">{record.errorCode || record.errorName || 'error'}</span>
@@ -642,8 +669,17 @@ export function SupersetView({
                     <span className="bts-debug-meta">{turnOf(record)}</span>
                     <span className="bts-debug-meta">{formatMs(record.durationMs)}</span>
                     <span className="bts-debug-message">{oneLine(record.errorText || record.result || '', 160)}</span>
-                    <span className="bts-debug-jump">→</span>
-                  </button>
+                    <span className="bts-debug-actions">
+                      <button
+                        type="button"
+                        className="bts-json-open"
+                        title={translate('debug.openJson')}
+                        aria-label={translate('debug.openJson')}
+                        onClick={(event) => { event.stopPropagation(); openJson(record) }}
+                      >{'{}'}</button>
+                      <span className="bts-debug-jump">→</span>
+                    </span>
+                  </div>
                 ))}
               </>
             ) : debugTab === 'tools' ? (
@@ -674,7 +710,16 @@ export function SupersetView({
                     <span className="bts-debug-meta">{translate('debug.tools.p95', { value: formatMs(item.p95Ms) })}</span>
                     <span className="bts-debug-meta">{translate('debug.tools.total', { value: formatMs(item.totalMs) })}</span>
                     <span />
-                    <span className="bts-debug-jump">{filters.tools.includes(item.name) ? '✓' : '+'}</span>
+                    <span className="bts-debug-actions">
+                      <button
+                        type="button"
+                        className="bts-json-open"
+                        title={translate('debug.openJson')}
+                        aria-label={translate('debug.openJson')}
+                        onClick={(event) => { event.stopPropagation(); openLatestToolJson(item.name) }}
+                      >{'{}'}</button>
+                      <span className="bts-debug-jump">{filters.tools.includes(item.name) ? '✓' : '+'}</span>
+                    </span>
                   </button>
                 ))}
               </>
@@ -716,6 +761,7 @@ export function SupersetView({
           t={nativeT}
           useTrajectory={filteredHook}
           renderSlot={renderNativeSlot}
+          jsonStringWrapping={jsonStringWrapping}
           viewRequest={focusRequest ?? (rest as any).viewRequest}
           completeViewRequest={() => {
             setFocusRequest(null)
@@ -723,6 +769,15 @@ export function SupersetView({
           }}
         />
       </div>
+
+      {jsonRecord !== null ? (
+        <JsonViewer
+          record={jsonRecord}
+          schema={jsonSchema}
+          onClose={() => setJsonRecord(null)}
+          t={translate}
+        />
+      ) : null}
 
       {toast !== null ? <div className="bts-toast" role="status">{toast}</div> : null}
     </div>

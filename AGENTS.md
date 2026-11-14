@@ -44,6 +44,10 @@
 - 耗时 / 错误码筛选与工具/状态/回合共用 `matchesRecord`；
 - 调试面板的「错误 / 最慢」点击通过 `viewRequest`（`{view:'trajectory', focus:callId}`）
   让原生视图自己滚动并打开原生详情；不要另造详情面板。
+- JSON 查看器是原生详情之外的补充：只在 `Trajectory+` 内覆盖式打开，数据来自
+  `tool index record` + `snapshot.callSchemas`；不替换原生 Summary/Schema/Timing。
+- 原生 `jsonStringWrapping` 被覆盖为默认开启（包装层传 prop），折叠摘要用作用域
+  CSS 允许换行；类名选择器依赖 `aside[aria-label="Event details"]`，升级时核查。
 
 ## 构建
 
