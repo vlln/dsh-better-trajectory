@@ -40,7 +40,10 @@
 - 筛选**只裁剪工具调用**：assistant 的非 tool-call blocks、user/context、请求与回合头保留；
 - 没有筛选时返回原快照（身份不变），原生行为零差异；
 - 子调用跟随父调用；父容器命中或任一子调用命中时保留父节点；
-- 回合筛选同时裁剪 `eventNodes`、`requests`、`partial`、`systemPrompts`。
+- 回合筛选同时裁剪 `eventNodes`、`requests`、`partial`、`systemPrompts`；
+- 耗时 / 错误码筛选与工具/状态/回合共用 `matchesRecord`；
+- 调试面板的「错误 / 最慢」点击通过 `viewRequest`（`{view:'trajectory', focus:callId}`）
+  让原生视图自己滚动并打开原生详情；不要另造详情面板。
 
 ## 构建
 
@@ -56,7 +59,9 @@
 
 - 宿主 **0.2.2-rc.2**（2026-11-14），隔离 web profile。
 - 原生 UI：时间轴、折叠、原生搜索、详情 Summary/Payload/Result/Schema/Timing、图片
-  （官方 `MessageImages` + Factory）、错误筛选、工具筛选、回合筛选、清除筛选。
+  （官方 `MessageImages` + Factory）、错误筛选、工具筛选、回合筛选、耗时、错误码、清除筛选。
+- 调试面板：错误 / 工具聚合 / 最慢三个视图；点错误或最慢行会跳回原生记录并打开原生详情；
+  工具行切换筛选；筛选结果可复制 Markdown / JSON 或下载 JSON。
 - 图标：Plugins 页实际加载 `data:image/svg+xml`，36×36，`complete + naturalWidth > 0`。
 - 负控：给客户端条目加不存在的注入服务时，浏览器明确报 `1 entry did not activate` +
   `pending (waiting for service: ...)`，页签消失。

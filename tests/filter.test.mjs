@@ -2,8 +2,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
-  buildToolIndex, collectStats, emptyFilters, filterSnapshot, isActive,
-  matchesRecord,
+  buildToolIndex, collectStats, emptyFilters, errorCalls, filterSnapshot, filteredCalls,
+  isActive, matchesRecord, slowestCalls, summarizeTools,
 } from '../src/client/filter.mjs'
 import { snapshot, emptySnapshot } from './fixture.mjs'
 
@@ -19,6 +19,10 @@ test('buildToolIndex flattens completed, nested and running tool calls', () => {
   assert.equal(read.status, 'error')
   assert.equal(read.turn, 1)
   assert.equal(read.step, 1)
+  assert.equal(read.errorCode, 'ENOENT')
+  assert.equal(read.durationMs, 100)
+  assert.match(read.args, /missing\.ts/)
+  assert.match(read.result, /ENOENT/)
 
   const sub = index.records.find(record => record.callId === 'call-sub')
   assert.equal(sub.depth, 1)
@@ -57,6 +61,7 @@ test('facets count errors/running and keep tool options stable', () => {
   assert.equal(stats.running, 1)
   assert.deepEqual(stats.tools.map(item => item.name).sort(), ['bash', 'read', 'run_code'])
   assert.deepEqual(stats.turns.map(item => item.turn), [1, 3])
+  assert.deepEqual(stats.errorCodes, [{ code: 'ENOENT', count: 1 }])
 
   const errorStats = collectStats(index, { ...filters, status: 'error' })
   assert.equal(errorStats.matched, 1)
@@ -66,6 +71,44 @@ test('facets count errors/running and keep tool options stable', () => {
   const bashStats = collectStats(index, { ...filters, tools: ['bash'] })
   assert.equal(bashStats.matched, 3)
   assert.equal(bashStats.running, 1)
+})
+
+test('duration and error-code filters narrow calls', () => {
+  const bash = index.records.find(record => record.name === 'bash')
+  assert.equal(matchesRecord(bash, { ...emptyFilters(), minDuration: 100 }), true)
+  assert.equal(matchesRecord(bash, { ...emptyFilters(), minDuration: 151 }), false)
+  assert.equal(matchesRecord(bash, { ...emptyFilters(), errorCode: 'ENOENT' }), false)
+
+  const read = index.records.find(record => record.name === 'read')
+  assert.equal(matchesRecord(read, { ...emptyFilters(), errorCode: 'ENOENT' }), true)
+  assert.equal(matchesRecord(read, { ...emptyFilters(), minDuration: 101 }), false)
+
+  const filtered = filterSnapshot(snapshot, { ...emptyFilters(), errorCode: 'ENOENT' }, index)
+  assert.equal(filtered.eventNodes.filter(node => node.kind === 'tool-result').length, 1)
+})
+
+test('tool summaries, slowest calls and error calls', () => {
+  const tools = summarizeTools(index)
+  const bash = tools.find(tool => tool.name === 'bash')
+  assert.equal(bash.calls, 3)
+  assert.equal(bash.errors, 0)
+  assert.equal(bash.totalMs, 250)
+  assert.equal(bash.avgMs, 125)
+  assert.equal(bash.p95Ms, 150)
+
+  const read = tools.find(tool => tool.name === 'read')
+  assert.equal(read.errors, 1)
+  assert.equal(read.totalMs, 100)
+
+  const slowest = slowestCalls(index, emptyFilters())
+  assert.equal(slowest[0].name, 'run_code')
+  assert.equal(slowest[0].durationMs, 200)
+
+  const failures = errorCalls(index, emptyFilters())
+  assert.equal(failures.length, 1)
+  assert.equal(failures[0].callId, 'call-read')
+
+  assert.equal(filteredCalls(index, { ...emptyFilters(), tools: ['bash'] }).length, 3)
 })
 
 test('matchesRecord applies tool, status and turn filters', () => {

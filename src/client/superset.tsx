@@ -11,8 +11,10 @@ import {
 import type { ReactNode } from 'react'
 
 import {
-  buildToolIndex, collectStats, emptyFilters, filterSnapshot, isActive,
+  buildToolIndex, collectStats, emptyFilters, errorCalls, filteredCalls, filterSnapshot,
+  isActive, slowestCalls, summarizeTools,
 } from './filter.mjs'
+import { recordsToJson, recordsToMarkdown } from './export.mjs'
 import type { BetterTrajectoryKey } from './locales'
 import { IconChevron, IconClose, IconFilter, IconSearch } from './icons'
 
@@ -43,6 +45,8 @@ interface Filters {
   tools: string[]
   status: 'all' | 'error' | 'running'
   turn: number | null
+  minDuration: number | null
+  errorCode: string | null
 }
 
 const STORAGE_PREFIX = 'dsh-better-trajectory:filters:'
@@ -58,6 +62,8 @@ function loadFilters(sessionId?: string): Filters {
       tools: Array.isArray(value.tools) ? value.tools.filter(item => typeof item === 'string') : [],
       status: value.status === 'error' || value.status === 'running' ? value.status : 'all',
       turn: typeof value.turn === 'number' ? value.turn : null,
+      minDuration: typeof value.minDuration === 'number' ? value.minDuration : null,
+      errorCode: typeof value.errorCode === 'string' ? value.errorCode : null,
     }
   } catch {
     return fallback
@@ -195,6 +201,23 @@ function NativeImage({ source, loadImage }: {
   )
 }
 
+function formatMs(ms?: number | null): string {
+  if (typeof ms !== 'number' || !Number.isFinite(ms)) return '—'
+  if (ms < 1_000) return `${Math.round(ms)}ms`
+  if (ms < 60_000) return `${(ms / 1_000).toFixed(ms < 10_000 ? 1 : 0)}s`
+  return `${Math.floor(ms / 60_000)}m${String(Math.round((ms % 60_000) / 1_000)).padStart(2, '0')}s`
+}
+
+function turnOf(record: any): string {
+  if (typeof record?.turn !== 'number') return '—'
+  return typeof record.step === 'number' ? `${record.turn}/${record.step}` : String(record.turn)
+}
+
+function oneLine(value: string, max = 160): string {
+  const text = String(value ?? '').replace(/\s+/g, ' ').trim()
+  return text.length > max ? `${text.slice(0, max)}…` : text
+}
+
 /** 主视图。 */
 export function SupersetView({
   sessionId, useTrajectory, t, nativeT, getNative, getImages, ...rest
@@ -203,7 +226,13 @@ export function SupersetView({
   const [filters, setFilters] = useState<Filters>(() => loadFilters(sessionId))
   const [toolMenu, setToolMenu] = useState(false)
   const [toolSearch, setToolSearch] = useState('')
+  const [debugOpen, setDebugOpen] = useState(true)
+  const [debugTab, setDebugTab] = useState<'errors' | 'tools' | 'slowest'>('errors')
+  const [exportMenu, setExportMenu] = useState(false)
+  const [toast, setToast] = useState<string | null>(null)
+  const [focusRequest, setFocusRequest] = useState<{ view: string, focus: string } | null>(null)
   const toolSearchRef = useRef<HTMLInputElement | null>(null)
+  const debugInitialized = useRef(false)
 
   const full = useTrajectory ? useTrajectory(snapshot => snapshot) : undefined
   const index = useMemo(() => buildToolIndex(full), [full])
@@ -238,9 +267,22 @@ export function SupersetView({
   }, [imagesApi, rest])
 
   const closeToolMenu = useCallback(() => setToolMenu(false), [])
+  const closeExportMenu = useCallback(() => setExportMenu(false), [])
   const toolPopRef = usePopover(toolMenu, closeToolMenu)
+  const exportPopRef = usePopover(exportMenu, closeExportMenu)
 
   useEffect(() => { saveFilters(sessionId, filters) }, [sessionId, filters])
+  useEffect(() => {
+    if (debugInitialized.current) return
+    if (stats.total === 0) return
+    debugInitialized.current = true
+    if (stats.errors === 0) setDebugTab('tools')
+  }, [stats])
+  useEffect(() => {
+    if (toast === null) return
+    const timer = window.setTimeout(() => setToast(null), 1_800)
+    return () => window.clearTimeout(timer)
+  }, [toast])
   useEffect(() => {
     if (!toolMenu) {
       setToolSearch('')
@@ -268,6 +310,48 @@ export function SupersetView({
         ? previous.tools.filter(item => item !== name)
         : [...previous.tools, name],
     }))
+  }
+
+  const reveal = (record: any) => {
+    // 面板里的行都来自当前筛选结果；保留筛选，只让原生视图自己定位。
+    if (record?.callId) setFocusRequest({ view: 'trajectory', focus: record.callId })
+  }
+
+  const filteredRecords = useMemo(() => filteredCalls(index, filters as any), [index, filters])
+  const errors = useMemo(() => errorCalls(index, filters as any), [index, filters])
+  const slowest = useMemo(() => slowestCalls(index, filters as any), [index, filters])
+  const toolSummary = useMemo(() => summarizeTools(index), [index])
+
+  const filterSummary = [
+    filters.tools.length > 0 ? `tool:${filters.tools.join(',')}` : '',
+    filters.status !== 'all' ? `status:${filters.status}` : '',
+    filters.turn !== null ? `turn:${filters.turn}` : '',
+    filters.minDuration !== null ? `ms>=${filters.minDuration}` : '',
+    filters.errorCode !== null ? `code:${filters.errorCode}` : '',
+  ].filter(Boolean).join(' ')
+
+  const copyText = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setToast(translate('debug.export.copied'))
+    } catch {
+      setToast(translate('debug.export.failed'))
+    }
+  }
+
+  const exportJson = () => recordsToJson(filteredRecords, { sessionId, filter: filterSummary })
+  const exportMarkdown = () => recordsToMarkdown(filteredRecords, { sessionId, filter: filterSummary })
+  const download = () => {
+    setExportMenu(false)
+    const blob = new Blob([exportJson()], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `better-trajectory-${sessionId ?? 'session'}.json`
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 1_000)
   }
 
   if (full === undefined) {
@@ -399,7 +483,53 @@ export function SupersetView({
           ))}
         </select>
 
+        <select
+          className="bts-select"
+          value={filters.minDuration === null ? '' : String(filters.minDuration)}
+          aria-label={translate('filter.duration.aria')}
+          onChange={(event) => {
+            const value = event.target.value
+            setFilters(previous => ({ ...previous, minDuration: value === '' ? null : Number(value) }))
+          }}
+        >
+          <option value="">{translate('filter.duration.all')}</option>
+          <option value="100">{translate('filter.duration.100')}</option>
+          <option value="1000">{translate('filter.duration.1000')}</option>
+          <option value="5000">{translate('filter.duration.5000')}</option>
+        </select>
+
+        {stats.errorCodes.length > 0 || filters.errorCode !== null ? (
+          <select
+            className="bts-select bts-select-code"
+            value={filters.errorCode ?? ''}
+            aria-label={translate('filter.code.aria')}
+            onChange={(event) => {
+              const value = event.target.value
+              setFilters(previous => ({ ...previous, errorCode: value === '' ? null : value }))
+            }}
+          >
+            <option value="">{translate('filter.code.all')}</option>
+            {stats.errorCodes.map(item => (
+              <option key={item.code} value={item.code}>{item.code} · {item.count}</option>
+            ))}
+            {filters.errorCode !== null && !stats.errorCodes.some(item => item.code === filters.errorCode) ? (
+              <option value={filters.errorCode}>{filters.errorCode} · 0</option>
+            ) : null}
+          </select>
+        ) : null}
+
         <span className="bts-spacer" />
+
+        <button
+          type="button"
+          className="bts-button"
+          data-active={debugOpen || undefined}
+          aria-expanded={debugOpen}
+          onClick={() => setDebugOpen(open => !open)}
+        >
+          <IconChevron size={11} data-rotated={debugOpen || undefined} />
+          {translate('debug.toggle')}
+        </button>
 
         <span className="bts-summary" title={translate('filter.scopeHint')}>
           {translate(summaryKey, { matched: stats.matched, total: stats.total })}
@@ -413,6 +543,171 @@ export function SupersetView({
         ) : null}
       </div>
 
+      {debugOpen ? (
+        <section className="bts-debug" aria-label={translate('debug.aria')}>
+          <div className="bts-debug-head">
+            <div className="bts-tabs" role="tablist" aria-label={translate('debug.tabsAria')}>
+              {([
+                ['errors', translate('debug.tab.errors'), errors.length],
+                ['tools', translate('debug.tab.tools'), toolSummary.length],
+                ['slowest', translate('debug.tab.slowest'), slowest.length],
+              ] as const).map(([value, label, count]) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="tab"
+                  aria-selected={debugTab === value}
+                  onClick={() => setDebugTab(value)}
+                >
+                  {label}
+                  <span className="bts-count">{count}</span>
+                </button>
+              ))}
+            </div>
+            <span className="bts-spacer" />
+            <div className="bts-pop-wrap" ref={exportPopRef}>
+              <button
+                type="button"
+                className="bts-button"
+                aria-haspopup="menu"
+                aria-expanded={exportMenu}
+                onClick={() => setExportMenu(open => !open)}
+              >
+                {translate('debug.export')}
+                <IconChevron size={10} />
+              </button>
+              {exportMenu ? (
+                <div className="bts-pop" data-align="right" role="menu" style={{ width: 230 }}>
+                  <button
+                    type="button"
+                    className="bts-pop-item"
+                    role="menuitem"
+                    onClick={() => {
+                      setExportMenu(false)
+                      void copyText(recordsToMarkdown(filteredRecords, { sessionId, filter: filterSummary }))
+                    }}
+                  >
+                    {translate('debug.export.markdown')}
+                  </button>
+                  <button
+                    type="button"
+                    className="bts-pop-item"
+                    role="menuitem"
+                    onClick={() => {
+                      setExportMenu(false)
+                      void copyText(recordsToJson(filteredRecords, { sessionId, filter: filterSummary }))
+                    }}
+                  >
+                    {translate('debug.export.json')}
+                  </button>
+                  <button type="button" className="bts-pop-item" role="menuitem" onClick={download}>
+                    {translate('debug.export.download')}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              className="bts-icon-button"
+              aria-label={translate('debug.close')}
+              title={translate('debug.close')}
+              onClick={() => setDebugOpen(false)}
+            >
+              <IconClose size={12} />
+            </button>
+          </div>
+          <div className="bts-debug-body">
+            {debugTab === 'errors' ? (
+              errors.length === 0 ? (
+                <div className="bts-debug-empty">{translate('debug.errors.empty')}</div>
+              ) : <>
+                <div className="bts-debug-columns bts-debug-columns-error" aria-hidden="true">
+                  <span>{translate('debug.col.code')}</span>
+                  <span>{translate('debug.col.tool')}</span>
+                  <span>{translate('debug.col.turn')}</span>
+                  <span>{translate('debug.col.duration')}</span>
+                  <span>{translate('debug.col.error')}</span>
+                  <span />
+                </div>
+                {errors.map((record: any) => (
+                  <button
+                    key={`e:${record.turn}:${record.callId}`}
+                    type="button"
+                    className="bts-debug-row bts-debug-row-error"
+                    onClick={() => reveal(record)}
+                    title={translate('debug.jump')}
+                  >
+                    <span className="bts-code">{record.errorCode || record.errorName || 'error'}</span>
+                    <span className="bts-debug-tool">{record.name || record.callId}</span>
+                    <span className="bts-debug-meta">{turnOf(record)}</span>
+                    <span className="bts-debug-meta">{formatMs(record.durationMs)}</span>
+                    <span className="bts-debug-message">{oneLine(record.errorText || record.result || '', 160)}</span>
+                    <span className="bts-debug-jump">→</span>
+                  </button>
+                ))}
+              </>
+            ) : debugTab === 'tools' ? (
+              toolSummary.length === 0 ? (
+                <div className="bts-debug-empty">{translate('debug.tools.empty')}</div>
+              ) : <>
+                <div className="bts-debug-columns bts-debug-columns-tool" aria-hidden="true">
+                  <span>{translate('debug.col.tool')}</span>
+                  <span>{translate('debug.col.calls')}</span>
+                  <span>{translate('debug.col.errors')}</span>
+                  <span>{translate('debug.col.p95')}</span>
+                  <span>{translate('debug.col.total')}</span>
+                  <span />
+                  <span />
+                </div>
+                {toolSummary.map(item => (
+                  <button
+                    key={item.name}
+                    type="button"
+                    className="bts-debug-row bts-debug-row-tool"
+                    data-active={filters.tools.includes(item.name) || undefined}
+                    onClick={() => toggleTool(item.name)}
+                    title={translate('debug.tools.toggle')}
+                  >
+                    <span className="bts-debug-tool">{item.name}</span>
+                    <span className="bts-debug-meta">{translate('debug.tools.calls', { count: item.calls })}</span>
+                    <span className="bts-debug-meta">{translate('debug.tools.errors', { count: item.errors })}</span>
+                    <span className="bts-debug-meta">{translate('debug.tools.p95', { value: formatMs(item.p95Ms) })}</span>
+                    <span className="bts-debug-meta">{translate('debug.tools.total', { value: formatMs(item.totalMs) })}</span>
+                    <span />
+                    <span className="bts-debug-jump">{filters.tools.includes(item.name) ? '✓' : '+'}</span>
+                  </button>
+                ))}
+              </>
+            ) : slowest.length === 0 ? (
+              <div className="bts-debug-empty">{translate('debug.slowest.empty')}</div>
+            ) : <>
+              <div className="bts-debug-columns bts-debug-columns-slow" aria-hidden="true">
+                <span>{translate('debug.col.duration')}</span>
+                <span>{translate('debug.col.tool')}</span>
+                <span>{translate('debug.col.turn')}</span>
+                <span>{translate('debug.col.args')}</span>
+                <span />
+              </div>
+              {slowest.map((record: any) => (
+              <button
+                key={`s:${record.turn}:${record.callId}`}
+                type="button"
+                className="bts-debug-row bts-debug-row-slow"
+                onClick={() => reveal(record)}
+                title={translate('debug.jump')}
+              >
+                  <span className="bts-duration">{formatMs(record.durationMs)}</span>
+                  <span className="bts-debug-tool">{record.name || record.callId}</span>
+                  <span className="bts-debug-meta">{turnOf(record)}</span>
+                  <span className="bts-debug-message">{oneLine(record.args || record.errorText || '', 160)}</span>
+                  <span className="bts-debug-jump">→</span>
+                </button>
+              ))}
+            </>}
+          </div>
+        </section>
+      ) : null}
+
       <div className="bts-native" data-trajectory-superset="">
         <Native
           {...rest}
@@ -421,8 +716,15 @@ export function SupersetView({
           t={nativeT}
           useTrajectory={filteredHook}
           renderSlot={renderNativeSlot}
+          viewRequest={focusRequest ?? (rest as any).viewRequest}
+          completeViewRequest={() => {
+            setFocusRequest(null)
+            ;(rest as any).completeViewRequest?.()
+          }}
         />
       </div>
+
+      {toast !== null ? <div className="bts-toast" role="status">{toast}</div> : null}
     </div>
   )
 }

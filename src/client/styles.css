@@ -391,3 +391,275 @@
 .bts-segment button[data-tone='error'] .bts-count {
   color: var(--dsw-alias-state-error-primary);
 }
+
+/* --------------------------------- 调试面板 -------------------------------- */
+
+.bts-root {
+  position: relative;
+}
+
+.bts-icon-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.bts-icon-button:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.bts-icon-button:focus-visible {
+  outline: 1px solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 1px;
+}
+
+.bts-button svg[data-rotated] {
+  transform: rotate(180deg);
+}
+
+.bts-select-code {
+  max-width: 180px;
+}
+
+.bts-debug {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  height: 168px;
+  min-height: 0;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.bts-debug-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 2px 6px 2px 8px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l1);
+}
+
+.bts-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.bts-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: calc(var(--dsw-radius-sm) - 2px);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: var(--dsw-font-xxs-12);
+  cursor: pointer;
+}
+
+.bts-tabs button[aria-selected='true'] {
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: var(--dsw-elevation-stroke);
+  color: var(--dsw-alias-label-primary);
+}
+
+.bts-tabs button:focus-visible {
+  outline: 1px solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 1px;
+}
+
+.bts-debug-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 2px 6px 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--dsw-alias-scrollbar-bg-l1) transparent;
+}
+
+.bts-debug-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--dsw-alias-label-tertiary);
+  font: var(--dsw-font-xs-13);
+}
+
+.bts-debug-row {
+  display: grid;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 25px;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: var(--dsw-radius-xs);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: var(--dsw-font-xxs-12);
+  text-align: left;
+  cursor: pointer;
+}
+
+.bts-debug-row:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.bts-debug-row:focus-visible {
+  outline: 1px solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: -1px;
+}
+
+.bts-debug-row[data-active] {
+  background: var(--dsw-alias-interactive-bg-active);
+}
+
+.bts-debug-row-error {
+  grid-template-columns: minmax(90px, 130px) minmax(70px, 120px) 44px 48px minmax(120px, 1fr) 16px;
+}
+
+.bts-debug-row-slow {
+  grid-template-columns: 56px minmax(70px, 120px) 44px minmax(120px, 1fr) 16px;
+}
+
+.bts-debug-row-tool {
+  grid-template-columns: minmax(120px, 240px) 74px 60px 86px 92px 1fr 18px;
+}
+
+.bts-debug-tool {
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  font-family: var(--ds-font-family-code, SFMono-Regular, Menlo, monospace);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bts-debug-meta,
+.bts-duration {
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code, SFMono-Regular, Menlo, monospace);
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bts-debug-message {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bts-debug-row-error .bts-debug-message {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.bts-debug-jump {
+  color: var(--dsw-alias-label-caption);
+  text-align: right;
+}
+
+.bts-code {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 11%, transparent);
+  color: var(--dsw-alias-state-error-primary);
+  font-family: var(--ds-font-family-code, SFMono-Regular, Menlo, monospace);
+  font-size: 9.5px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bts-toast {
+  position: absolute;
+  right: 12px;
+  bottom: calc(var(--dsh-composer-height, 0px) + 18px);
+  z-index: 30;
+  padding: 5px 11px;
+  border-radius: 999px;
+  corner-shape: round;
+  background: var(--dsw-alias-toast-bg);
+  color: var(--dsw-alias-toast-label);
+  box-shadow: var(--dsw-elevation-prominent);
+  font: var(--dsw-font-xxs-12);
+}
+
+@media (max-width: 900px) {
+  .bts-debug {
+    height: 164px;
+  }
+
+  .bts-debug-row-error {
+    grid-template-columns: 90px 90px 38px 42px minmax(100px, 1fr) 14px;
+    gap: 6px;
+  }
+
+  .bts-debug-row-tool {
+    grid-template-columns: minmax(100px, 200px) 64px 50px 70px 80px 1fr 16px;
+    gap: 6px;
+  }
+
+  .bts-select-code {
+    max-width: 140px;
+  }
+}
+
+.bts-debug-columns {
+  display: grid;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 2px;
+  color: var(--dsw-alias-label-caption);
+  font: var(--dsw-font-xxxs-11);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.bts-debug-columns-error {
+  grid-template-columns: minmax(90px, 130px) minmax(70px, 120px) 44px 48px minmax(120px, 1fr) 16px;
+}
+
+.bts-debug-columns-tool {
+  grid-template-columns: minmax(120px, 240px) 74px 60px 86px 92px 1fr 18px;
+}
+
+.bts-debug-columns-slow {
+  grid-template-columns: 56px minmax(70px, 120px) 44px minmax(120px, 1fr) 16px;
+}
+
+@media (max-width: 900px) {
+  .bts-debug-columns-error {
+    grid-template-columns: 90px 90px 38px 42px minmax(100px, 1fr) 14px;
+    gap: 6px;
+  }
+
+  .bts-debug-columns-tool {
+    grid-template-columns: minmax(100px, 200px) 64px 50px 70px 80px 1fr 16px;
+    gap: 6px;
+  }
+}

@@ -11,14 +11,23 @@
 /** 状态选项。 */
 export const FILTER_STATUSES = ['all', 'error', 'running']
 
-/** @returns {{tools: string[], status: 'all'|'error'|'running', turn: number|null}} */
+/**
+ * @returns {{
+ *   tools: string[],
+ *   status: 'all'|'error'|'running',
+ *   turn: number|null,
+ *   minDuration: number|null,
+ *   errorCode: string|null,
+ * }}
+ */
 export function emptyFilters() {
-  return { tools: [], status: 'all', turn: null }
+  return { tools: [], status: 'all', turn: null, minDuration: null, errorCode: null }
 }
 
 /** @param {ReturnType<typeof emptyFilters>} filters */
 export function isActive(filters) {
   return filters.tools.length > 0 || filters.status !== 'all' || filters.turn !== null
+    || filters.minDuration !== null || filters.errorCode !== null
 }
 
 /** @param {unknown} value */
@@ -40,6 +49,21 @@ function locationOf(location) {
     ...(typeof turnValue === 'number' ? { turn: turnValue } : {}),
     ...(typeof stepValue === 'number' ? { step: stepValue } : {}),
   }
+}
+
+/** 内容块 → 文本；图片/文件用占位符。 */
+function contentText(content) {
+  if (!Array.isArray(content)) return ''
+  const parts = []
+  for (const block of content) {
+    if (!isObject(block)) continue
+    if (typeof block.text === 'string') parts.push(block.text)
+    else if (block.type === 'image') parts.push('[image]')
+    else if (block.type === 'file') parts.push('[file]')
+    else if (block.type === 'tool-call') parts.push(`[tool-call ${asString(block.name)}]`)
+    else parts.push(`[${asString(block.type) || 'block'}]`)
+  }
+  return parts.join('\n')
 }
 
 /** 工具状态。 */
@@ -98,6 +122,17 @@ export function buildToolIndex(snapshot) {
     const status = statusOf(block)
     const turn = typeof block.turn === 'number' ? block.turn : fallbackTurn
     const step = typeof block.step === 'number' ? block.step : fallbackStep
+    const argsRaw = asString(block.call?.argsRaw) || asString(block.argsRaw)
+    const result = contentText(block.content)
+    const errorObject = isObject(block.error) ? block.error : undefined
+    const errorName = asString(errorObject?.name)
+    const errorCode = asString(errorObject?.code)
+    const errorReason = asString(errorObject?.reason)
+    const errorText = [errorName, errorCode, errorReason].filter(Boolean).join(' · ')
+    const started = typeof block.callTime === 'number' ? block.callTime : block.time
+    const durationMs = typeof block.callTime === 'number' && typeof block.time === 'number'
+      ? Math.max(0, block.time - block.callTime)
+      : undefined
     const record = {
       callId,
       name,
@@ -106,6 +141,13 @@ export function buildToolIndex(snapshot) {
       ...(turn === undefined ? {} : { turn }),
       ...(step === undefined ? {} : { step }),
       ...(parentCallId === undefined ? {} : { parentCallId }),
+      ...(started === undefined ? {} : { time: started }),
+      ...(durationMs === undefined ? {} : { durationMs }),
+      ...(argsRaw === '' ? {} : { args: argsRaw }),
+      ...(result === '' ? {} : { result }),
+      ...(errorName === '' ? {} : { errorName }),
+      ...(errorCode === '' ? {} : { errorCode }),
+      ...(errorText === '' ? {} : { errorText }),
     }
     records.push(record)
     if (callId !== '') byKey.set(keyOf(turn, callId), record)
@@ -142,6 +184,7 @@ export function buildToolIndex(snapshot) {
         depth: 0,
         ...(typeof node.turn === 'number' ? { turn: node.turn } : {}),
         ...(typeof node.step === 'number' ? { step: node.step } : {}),
+        ...(asString(block.argsRaw) === '' ? {} : { args: asString(block.argsRaw) }),
       }
       records.push(record)
       byKey.set(keyOf(node.turn, callId), record)
@@ -162,6 +205,7 @@ export function buildToolIndex(snapshot) {
         status: 'running',
         depth: 0,
         ...(typeof partial.turn === 'number' ? { turn: partial.turn } : {}),
+        ...(asString(block.argsRaw) === '' ? {} : { args: asString(block.argsRaw) }),
       }
       records.push(record)
       byKey.set(keyOf(partial.turn, callId), record)
@@ -180,6 +224,8 @@ export function matchesRecord(record, filters) {
   if (filters.status === 'error' && !isErrorStatus(record.status)) return false
   if (filters.status === 'running' && record.status !== 'running') return false
   if (filters.turn !== null && record.turn !== filters.turn) return false
+  if (filters.errorCode !== null && record.errorCode !== filters.errorCode) return false
+  if (filters.minDuration !== null && (record.durationMs ?? -1) < filters.minDuration) return false
   return true
 }
 
@@ -190,6 +236,7 @@ export function matchesRecord(record, filters) {
  */
 export function collectStats(index, filters) {
   const toolCounts = new Map()
+  const codeCounts = new Map()
   let errors = 0
   let running = 0
   let matched = 0
@@ -201,9 +248,15 @@ export function collectStats(index, filters) {
       toolCounts.set(record.name, (toolCounts.get(record.name) ?? 0) + 1)
     }
     const toolsOk = filters.tools.length === 0 || filters.tools.includes(record.name)
-    if (toolsOk && turnOk) {
+    const otherOk = turnOk
+      && (filters.errorCode === null || record.errorCode === filters.errorCode)
+      && (filters.minDuration === null || (record.durationMs ?? -1) >= filters.minDuration)
+    if (toolsOk && otherOk) {
       if (isErrorStatus(record.status)) errors += 1
       if (record.status === 'running') running += 1
+    }
+    if (toolsOk && turnOk && isErrorStatus(record.status) && record.errorCode) {
+      codeCounts.set(record.errorCode, (codeCounts.get(record.errorCode) ?? 0) + 1)
     }
     if (toolsOk && record.turn !== undefined) {
       turnCounts.set(record.turn, (turnCounts.get(record.turn) ?? 0) + 1)
@@ -222,7 +275,66 @@ export function collectStats(index, filters) {
     turns: [...turnCounts.entries()]
       .map(([turn, count]) => ({ turn, count }))
       .sort((left, right) => left.turn - right.turn),
+    errorCodes: [...codeCounts.entries()]
+      .map(([code, count]) => ({ code, count }))
+      .sort((left, right) => right.count - left.count || left.code.localeCompare(right.code)),
   }
+}
+
+/** 按工具聚合调用数、错误数、总耗时、平均 / p95 耗时。 */
+export function summarizeTools(index) {
+  /** @type {Map<string, {name: string, calls: number, errors: number, running: number, totalMs: number, durations: number[]}>} */
+  const map = new Map()
+  for (const record of index.records) {
+    if (record.name === '') continue
+    let item = map.get(record.name)
+    if (item === undefined) {
+      item = { name: record.name, calls: 0, errors: 0, running: 0, totalMs: 0, durations: [] }
+      map.set(record.name, item)
+    }
+    item.calls += 1
+    if (isErrorStatus(record.status)) item.errors += 1
+    if (record.status === 'running') item.running += 1
+    if (typeof record.durationMs === 'number') {
+      item.totalMs += record.durationMs
+      item.durations.push(record.durationMs)
+    }
+  }
+  return [...map.values()].map((item) => {
+    const durations = [...item.durations].sort((left, right) => left - right)
+    const at = (ratio) => durations.length === 0
+      ? null
+      : durations[Math.min(durations.length - 1, Math.ceil((durations.length - 1) * ratio))]
+    return {
+      name: item.name,
+      calls: item.calls,
+      errors: item.errors,
+      running: item.running,
+      totalMs: item.durations.length === 0 ? null : item.totalMs,
+      avgMs: item.durations.length === 0 ? null : item.totalMs / item.durations.length,
+      p95Ms: at(0.95),
+    }
+  }).sort((left, right) => right.calls - left.calls || left.name.localeCompare(right.name))
+}
+
+/** 当前筛选下最慢的调用。 */
+export function slowestCalls(index, filters, limit = 12) {
+  return index.records
+    .filter(record => matchesRecord(record, filters) && typeof record.durationMs === 'number')
+    .sort((left, right) => (right.durationMs ?? 0) - (left.durationMs ?? 0))
+    .slice(0, limit)
+}
+
+/** 当前筛选下的错误调用。 */
+export function errorCalls(index, filters) {
+  return index.records
+    .filter(record => matchesRecord(record, filters) && isErrorStatus(record.status))
+    .sort((left, right) => (left.turn ?? 0) - (right.turn ?? 0) || (left.time ?? 0) - (right.time ?? 0))
+}
+
+/** 当前筛选下的调用。 */
+export function filteredCalls(index, filters) {
+  return index.records.filter(record => matchesRecord(record, filters))
 }
 
 /**
