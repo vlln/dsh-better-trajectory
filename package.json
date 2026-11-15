@@ -1,7 +1,7 @@
 {
   "name": "dsh-better-trajectory",
-  "version": "0.1.0",
-  "description": "Native Trajectory super-set for DeepSeek Harness: the built-in trajectory view plus tool / status / turn filters, without a second UI.",
+  "version": "0.2.0",
+  "description": "Logfire-style super-set for the DeepSeek Harness trajectory: token query bar, record chips, error/raw-data tabs, single tab.",
   "license": "MIT",
   "type": "module",
   "main": "index.mjs",
