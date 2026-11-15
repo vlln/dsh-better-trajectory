@@ -426,6 +426,13 @@ export function TrajectoryView({
     }
     return map
   }, [toolIndex])
+  const maxDurationMs = useMemo(() => {
+    let max = 0
+    for (const record of toolIndex.records) {
+      if (typeof record.durationMs === 'number' && record.durationMs > max) max = record.durationMs
+    }
+    return max
+  }, [toolIndex])
   const hiddenHints = useMemo(() => {
     if (hiddenIndexes === null) return null
     const map = new Map<string, number>()
@@ -588,7 +595,7 @@ export function TrajectoryView({
   }, [hasResidentOlderHistory, loadOlder])
 
   return (
-    <div className={css.root} data-conversation-composer-overlay="">
+    <div className={`${css.root} bt-trajectory-root`} data-conversation-composer-overlay="">
       <QueryBar
         query={queryText}
         onQuery={setQueryText}
@@ -655,6 +662,7 @@ export function TrajectoryView({
           hiddenIndexes={hiddenIndexes}
           hiddenHints={hiddenHints}
           callMeta={callMeta}
+          maxDurationMs={maxDurationMs}
           onShowAll={() => setQueryText('')}
           onSelectedIndexChange={setSelectedTimelineIndex}
           onRecordSelect={handleRecordSelect}

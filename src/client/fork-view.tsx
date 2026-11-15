@@ -7,12 +7,24 @@
  * face 原样传入，所以数据与交互语义不变。
  */
 import { TrajectoryView } from '../vendor/trajectory/TrajectoryView.tsx'
+import theme from '../vendor/trajectory/theme.css'
 
 export interface ForkViewProps {
   qt: (key: string, params?: Record<string, string | number>) => string
   [key: string]: unknown
 }
 
+let themeInstalled = false
+function installTheme(): void {
+  if (themeInstalled || typeof document === 'undefined') return
+  themeInstalled = true
+  const style = document.createElement('style')
+  style.setAttribute('data-bt-theme', '')
+  style.textContent = theme
+  document.head.appendChild(style)
+}
+
 export function ForkView({ qt, ...rest }: ForkViewProps) {
+  installTheme()
   return <TrajectoryView {...rest} qt={qt} />
 }

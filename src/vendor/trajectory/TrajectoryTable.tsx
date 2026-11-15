@@ -315,6 +315,12 @@ function formatDurationMs(milliseconds: number, t: TrajectoryTranslate): string 
   })
 }
 
+function compactDuration(milliseconds: number): string {
+  if (milliseconds < 1000) return `${Math.round(milliseconds)}ms`
+  const seconds = milliseconds / 1000
+  return `${seconds < 10 ? seconds.toFixed(1) : Math.round(seconds)}s`
+}
+
 function formatClock(timestamp: number | null | undefined): string {
   if (timestamp === null || timestamp === undefined) return ''
   try {
@@ -2164,6 +2170,7 @@ export function TrajectoryTable({
   hiddenIndexes = null,
   hiddenHints = null,
   callMeta = null,
+  maxDurationMs = 1,
   onShowAll,
   onSelectedIndexChange,
   onRecordSelect,
@@ -2882,6 +2889,22 @@ export function TrajectoryTable({
                     ? Math.round(record.cell.timeSeconds * 1000)
                     : metaInfo?.durationMs
                   const rowStartedAt = record.cell.startedAt ?? metaInfo?.time
+                  const toolLike = record.cell.kind === 'tool' || record.cell.kind === 'subtool'
+                  const rowName = toolLike
+                    ? (record.cell.toolName ?? 'tool')
+                    : record.cell.kind === 'message'
+                      ? 'assistant'
+                      : record.cell.kind
+                  const rawSub = toolLike
+                    ? String(record.cell.inputDetail ?? '')
+                    : String(displayText ?? '')
+                  const rowSub = rawSub.replace(/\s+/g, ' ').trim()
+                  const rowTone = record.cell.isError
+                    ? 'error'
+                    : stateOf(record) === 'running' ? 'running' : 'ok'
+                  const rowBarWidth = rowDurationMs == null
+                    ? 0
+                    : Math.max(2, Math.round((rowDurationMs / Math.max(1, maxDurationMs)) * 64))
                   const singleToolNotice = record.cell.kind === 'context'
                     && record.cell.sourceBlocks?.length === 1
                     && record.cell.sourceBlocks.every(block => block.type === 'tool-addition' || block.type === 'tool-removal')
@@ -2961,148 +2984,47 @@ export function TrajectoryTable({
                       }}
                     >
                       <td className={css.event}>
-                        {request !== undefined && (
-                          <button
-                            type="button"
-                            className={requestSelected
-                              ? `${css.requestBoundaryControl} ${css.requestBoundaryControlActive}`
-                              : css.requestBoundaryControl}
-                            aria-label={requestLabel}
-                            aria-pressed={requestSelected}
-                            data-label={requestLabel}
-                            data-request-run-index={requestRunIndex}
-                            data-request-status={requestStatus}
-                            style={requestBoundaryStyle}
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              if (requestInfo !== undefined) {
-                                selectRequest({ identity: requestIdentity(requestInfo) })
-                              }
-                            }}
-                            onDoubleClick={(event) => { event.stopPropagation() }}
-                          />
-                        )}
-                        {record.turn !== null
-                    && activeTurn === record.turn
-                    && !isInitialSystem && (
-                          <span className={css.turnRail} aria-hidden="true" />
-                        )}
-                        {!isCollapsedSummary && selectedIndex === record.cell.index && (
-                          <span className={css.selectionRail} aria-hidden="true" />
-                        )}
-                        {!isCollapsedSummary
-                    && !isRequestOnly
-                    && record.turnStart && (
-                          <span
-                            className={sectionActive
-                              ? `${css.turnLabel} ${css.turnLabelActive}`
-                              : css.turnLabel}
-                            aria-label={sectionLabel(record.turn, t)}
-                          >
-                            {record.turn === null
-                              ? sectionLabel(record.turn, t)
-                              : (
-                                <>
-                                  <span className={css.turnLabelFull} aria-hidden="true">
-                                    {sectionLabel(record.turn, t)}
-                                  </span>
-                                  <span className={css.turnLabelCompact} aria-hidden="true">
-                                    #{record.turn}
-                                  </span>
-                                </>
-                              )}
-                          </span>
-                        )}
-                        <div className={css.eventInner}>
-                          <div className={css.rowStack}>
-                          {!isCollapsedSummary && !isRequestOnly && (
-                            <span
-                              className={css.kindSlot}
-                            >
-                              <span
-                                className={`${css.kindTag} ${
-                                  record.cell.kind === 'system'
-                                    ? css.systemNeutral
-                                    : record.cell.kind === 'context'
-                                      ? css.contextGreen
-                                      : record.cell.kind === 'compacted'
-                                        ? css.compacted
-                                        : record.cell.kind === 'tool'
-                                          ? css.toolAmber
-                                          : record.cell.kind === 'message'
-                                            ? css.assistantVioletBright
-                                            : record.cell.kind === 'subtool'
-                                              ? css.subtoolAmber
-                                              : css[record.cell.kind]
-                                }`}
-                                data-role-kind={record.cell.kind}
-                              >
-                                <Tooltip
-                                  label={t(KIND_LABEL_KEY[record.cell.kind])}
-                                  side="right"
-                                >
-                                  <span className={css.kindTagIcon} aria-hidden="true">
-                                    {KIND_ICON[record.cell.kind]}
-                                  </span>
-                                </Tooltip>
-                                <span className={css.kindTagLabel}>
-                                  {t(KIND_LABEL_KEY[record.cell.kind])}
-                                </span>
-                              </span>
-                            </span>
-                          )}
-                          {(record.cell.kind === 'tool' || record.cell.kind === 'subtool')
-                            && (rowStartedAt != null || rowDurationMs != null) && (
-                            <span className={css.rowMeta}>
-                              {rowStartedAt != null && (
-                                <span className={css.rowTime}>{formatClock(rowStartedAt)}</span>
-                              )}
-                              {rowDurationMs != null && (
-                                <span className={css.rowDuration}>{formatDurationMs(rowDurationMs, t)}</span>
-                              )}
-                            </span>
-                          )}
-                          </div>
-                        </div>
+                        <span className={css.rowClock}>
+                          {rowStartedAt != null ? formatClock(rowStartedAt) : ''}
+                        </span>
                       </td>
                       <td className={css.content}>
                         {isRequestOnly
                           ? null
-                          : record.collapsedSummary !== undefined
-                            ? (
-                              <span className={css.collapsedTurnContent} title={record.collapsedSummary}>
-                                <span className={css.collapsedTurnEllipsis}>…</span>
-                                <span className={css.collapsedTurnText}>{record.collapsedSummary}</span>
-                              </span>
-                            )
-                            : (
-                              <span
-                                className={resultText === undefined ? css.contentText : css.resultPreview}
-                                title={resultText === undefined
-                                  ? listDisplayText
-                                  : `${listDisplayText} → ${resultText}`}
-                              >
-                                <span className={resultText === undefined ? undefined : css.resultRequest}>
-                                  <RecordListText
-                                    displayText={displayText}
-                                    toolCallOnly={toolCallOnly}
-                                    toolCallText={toolCallText}
-                                    t={t}
-                                  />
+                          : (
+                            <span
+                              className={css.rowLine}
+                              data-tone={rowTone}
+                              data-mono={toolLike || undefined}
+                              style={{ paddingLeft: `${record.cell.kind === 'subtool' ? 52 : toolLike ? 26 : 0}px` }}
+                            >
+                              <span className={css.rowName}>{rowName}</span>
+                              {rowTone !== 'ok' && (
+                                <span className={css.rowBadge} data-tone={rowTone}>
+                                  {rowTone === 'error' ? qt('row.error') : qt('row.running')}
                                 </span>
-                                {resultText !== undefined && (
-                                  <span className={record.cell.isError ? `${css.inlineResult} ${css.error}` : css.inlineResult}>
-                                    <span className={css.arrow}>→</span>
-                                    <span className={resultText === t('record.noOutput')
-                                      ? `${css.inlineResultText} ${css.noOutputText}`
-                                      : css.inlineResultText}
-                                    >
-                                      {resultText}
-                                    </span>
-                                  </span>
-                                )}
+                              )}
+                              <span
+                                className={css.rowSub}
+                                title={record.collapsedSummary !== undefined ? record.collapsedSummary : rawSub}
+                              >
+                                {record.collapsedSummary !== undefined ? record.collapsedSummary : rowSub}
                               </span>
-                            )}
+                              <span className={css.rowBarWrap}>
+                                {rowBarWidth > 0 && (
+                                  <span
+                                    className={css.rowBar}
+                                    data-tone={rowTone}
+                                    style={{ width: `${rowBarWidth}px` }}
+                                    aria-hidden="true"
+                                  />
+                                )}
+                                <span className={css.rowMs}>
+                                  {rowDurationMs == null || rowDurationMs <= 0 ? '—' : compactDuration(rowDurationMs)}
+                                </span>
+                              </span>
+                            </span>
+                          )}
                       </td>
                     </tr>
                   )
