@@ -3112,8 +3112,10 @@ export function TrajectoryTable({
             tabIndex={0}
             title={t('details.resizeTitle')}
             onDoubleClick={() => {
+              setSnapping(true)
               setDetailsWidth(null)
               setToolRequestOffset(null)
+              window.setTimeout(() => setSnapping(false), 240)
             }}
             onMouseDown={(event) => {
               if (event.button !== 0) return
@@ -3142,8 +3144,6 @@ export function TrajectoryTable({
                 details.removeAttribute('data-dragging')
                 if (!moved) return
                 const targets = [420, 520, 640]
-                const nearest = targets.reduce((best, value) =>
-                  Math.abs(value - latest) < Math.abs(best - latest) ? value : best, targets[0])
               }
               details.setAttribute('data-dragging', '')
               window.addEventListener('mousemove', onMove)
@@ -3166,11 +3166,13 @@ export function TrajectoryTable({
               const currentToolRequestOffset = toolRequestOffset ?? (
                 splitWidth * TOOL_REQUEST_SHARE - defaultToolRequestWidth(splitWidth)
               )
+              setSnapping(true)
               setDetailsWidth(nextDetailsWidth)
               setToolRequestOffset(
                 currentToolRequestOffset
                 + (nextDetailsWidth - currentDetailsWidth) * TOOL_REQUEST_SHARE,
               )
+              window.setTimeout(() => setSnapping(false), 240)
               event.preventDefault()
             }}
           />

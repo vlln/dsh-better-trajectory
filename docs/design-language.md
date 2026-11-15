@@ -237,10 +237,11 @@
 | 详情 chips / tabs / 原始树 / 骨架 / 120ms 淡入 | ✅ |
 | 空态、非法 token 提示、`/` 聚焦 | ✅ |
 | 拖拽分隔 | ✅ 跟手（window `mousemove`/`mouseup`） |
-| 拖拽吸附 420/520/640 | ❌ 移除。mouseup 里 `setDetailsWidth` 会被同一帧的 move 更新覆盖，实测无效；下一版改用 DOM 直接设宽或 CSS 过渡 |
+| 拖拽吸附 420/520/640 | ❌ 未实现。DOM 直写 `style.width=640px` 后，React 的 move 提交把宽度回写成 602，且计算宽度与 inline 值不一致（640 vs 602），已放弃；改为双击复位与键盘步进带 180ms 过渡 |
 | 骨架实际加载截图 | ⚠️ 未捕获（本地加载过快） |
-| 暗色对比度 | ⚠️ 视觉检查通过，未做数值测量 |
+| 对比度 | ✅ 浅色下名称 `18.9:1`；暗色未测（emulation 未切换宿主主题） |
 | prefers-reduced-motion | ✅ 全部 0ms（`getComputedStyle` 实测） |
 | `/` 聚焦、Esc 三段退出 | ✅（Esc 清空实测） |
 | 过滤不闪白 / 无空白 | ✅（过滤后 2 行、无空白、无滚动残影） |
+| 同时动画 ≤ 2 | ❌ 实测 `document.getAnimations()` 为 8（含原生流式光标）；需要排除原生动画后再评估 |
 | 连续 hover 不改尺寸 | ✅（10 行高度前后一致） |
