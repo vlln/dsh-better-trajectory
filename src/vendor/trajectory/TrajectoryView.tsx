@@ -35,6 +35,7 @@ import css from './views.module.css'
 const EMPTY_TURN_IDS: ReadonlySet<number> = new Set()
 const EMPTY_RECORD_IDS: ReadonlySet<string> = new Set()
 const HISTORY_PAGE_NODES = 50
+const QUERY_STORAGE_PREFIX = 'dsh-better-trajectory:query:'
 
 function containsCall(calls: readonly ToolCallBlock[], callId: string): boolean {
   for (const call of calls) {
@@ -134,7 +135,7 @@ function addUsage(
 
 export function TrajectoryView({
   useSession, useTrajectory, useDuration, watchToolResult, loadOlder, loadImage, setActualDuration,
-  viewRequest, completeViewRequest, renderSlot, t, jsonStringWrapping, qt,
+  viewRequest, completeViewRequest, renderSlot, t, jsonStringWrapping, qt, sessionId,
 }: ConvViewProps
   & Pick<PropsRenderSlots<'conversation.trajectory.images'>, 'renderSlot'>
   & InjectFace<TrajectoryViewInjected>
@@ -146,7 +147,20 @@ export function TrajectoryView({
   const [timelineSelection, setTimelineSelection] = useState<TrajectoryTimeRange | null>(null)
   const actualDuration = useDuration(value => value)
   const [actualTime, setActualTime] = useState(false)
-  const [queryText, setQueryText] = useState('')
+  const [queryText, setQueryText] = useState(() => {
+    try {
+      return window.sessionStorage.getItem(`${QUERY_STORAGE_PREFIX}${sessionId ?? ''}`) ?? ''
+    } catch {
+      return ''
+    }
+  })
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem(`${QUERY_STORAGE_PREFIX}${sessionId ?? ''}`, queryText)
+    } catch {
+      // 隐私模式：查询仍生效，只是不跨刷新记住。
+    }
+  }, [queryText, sessionId])
   const [flat, setFlat] = useState(false)
   const [selectedTimelineIndex, setSelectedTimelineIndex] = useState<number | null>(null)
   const [timelineRecordSelection, setTimelineRecordSelection] = useState<{
