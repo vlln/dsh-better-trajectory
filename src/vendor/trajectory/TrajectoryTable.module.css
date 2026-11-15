@@ -2400,3 +2400,38 @@ tr[data-selected='true'][data-error='true'] {
 .rowLine[data-tone='error'] .rowSub {
   color: var(--bt-error, #d92d20);
 }
+
+/* chevron + focus + drag snap */
+.rowChevron,
+.rowChevronSpace {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-right: -4px;
+  border: 0;
+  background: transparent;
+  color: var(--bt-text-3, #9aa1ab);
+  font-size: 9px;
+  line-height: 14px;
+  text-align: center;
+  cursor: pointer;
+  transform: rotate(90deg);
+  transition: transform var(--bt-dur-2, 90ms) var(--bt-ease-std, ease);
+}
+
+.rowChevron[data-folded] {
+  transform: rotate(0deg);
+}
+
+.rowChevron:hover {
+  color: var(--bt-text, #1c2128);
+}
+
+.table tr:focus-visible {
+  outline: 2px solid var(--bt-accent, #2563eb);
+  outline-offset: -2px;
+}
+
+.details[data-snapping] {
+  transition: width var(--bt-dur-5, 220ms) var(--bt-ease-out, ease);
+}

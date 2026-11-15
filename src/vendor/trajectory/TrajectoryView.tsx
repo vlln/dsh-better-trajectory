@@ -162,6 +162,9 @@ export function TrajectoryView({
     }
   }, [queryText, sessionId])
   const [flat, setFlat] = useState(false)
+  const [toast, setToast] = useState<{ id: number; text: string; undo?: () => void } | null>(null)
+  const toastTimer = useRef<number | null>(null)
+  const toastSeq = useRef(0)
   const [selectedTimelineIndex, setSelectedTimelineIndex] = useState<number | null>(null)
   const [timelineRecordSelection, setTimelineRecordSelection] = useState<{
     readonly index: number
@@ -588,6 +591,29 @@ export function TrajectoryView({
     })
   }
 
+  const dismissToast = useCallback(() => {
+    if (toastTimer.current !== null) window.clearTimeout(toastTimer.current)
+    toastTimer.current = null
+    setToast(null)
+  }, [])
+
+  const pushToast = useCallback((text: string, undo?: () => void) => {
+    if (toastTimer.current !== null) window.clearTimeout(toastTimer.current)
+    const id = ++toastSeq.current
+    setToast({ id, text, ...(undo === undefined ? {} : { undo }) })
+    toastTimer.current = window.setTimeout(() => {
+      setToast(current => current?.id === id ? null : current)
+    }, 4000)
+  }, [])
+
+  const changeQuery = useCallback((next: string) => {
+    if (next === '' && queryText.trim() !== '') {
+      const previous = queryText
+      pushToast(qt('toast.cleared'), () => setQueryText(previous))
+    }
+    setQueryText(next)
+  }, [pushToast, qt, queryText])
+
   const loadEarlierHistory = useCallback(async () => {
     if (!hasResidentOlderHistory && !await loadOlder()) return false
     setHistoryNodeLimit(limit => limit + HISTORY_PAGE_NODES)
@@ -598,7 +624,7 @@ export function TrajectoryView({
     <div className={`${css.root} bt-trajectory-root`} data-conversation-composer-overlay="">
       <QueryBar
         query={queryText}
-        onQuery={setQueryText}
+        onQuery={changeQuery}
         tokens={query.tokens}
         stats={{
           total: toolStats.total,
@@ -663,7 +689,7 @@ export function TrajectoryView({
           hiddenHints={hiddenHints}
           callMeta={callMeta}
           maxDurationMs={maxDurationMs}
-          onShowAll={() => setQueryText('')}
+          onShowAll={() => changeQuery('')}
           onSelectedIndexChange={setSelectedTimelineIndex}
           onRecordSelect={handleRecordSelect}
           recordSelection={timelineRecordSelection}
@@ -684,6 +710,30 @@ export function TrajectoryView({
           onInspectApplied={completeViewRequest}
         />
       </div>
+      {toast !== null && (
+        <div
+          className={css.toast}
+          role="status"
+          onMouseEnter={() => {
+            if (toastTimer.current !== null) window.clearTimeout(toastTimer.current)
+            toastTimer.current = null
+          }}
+          onMouseLeave={() => {
+            if (toastTimer.current !== null) window.clearTimeout(toastTimer.current)
+            toastTimer.current = window.setTimeout(() => {
+              setToast(current => current?.id === toast.id ? null : current)
+            }, 2000)
+          }}
+        >
+          <span>{toast.text}</span>
+          {toast.undo !== undefined && (
+            <button type="button" className={css.toastAction} onClick={() => { toast.undo?.(); dismissToast() }}>
+              {qt('toast.undo')}
+            </button>
+          )}
+          <button type="button" className={css.toastClose} aria-label={qt('toast.dismiss')} onClick={dismissToast}>×</button>
+        </div>
+      )}
     </div>
   )
 }

@@ -2197,8 +2197,10 @@ export function TrajectoryTable({
   const [codeWrappingOnOpen, setCodeWrappingOnOpen] = useState(false)
   const [thinkingDisclosure, setThinkingDisclosure] = useState<{ recordId: string; expanded: boolean }>()
   const [detailsWidth, setDetailsWidth] = useState<number | null>(null)
+  const [snapping, setSnapping] = useState(false)
   const [toolRequestOffset, setToolRequestOffset] = useState<number | null>(null)
   const detailsResizeDrag = useRef<DetailsResizeDrag | null>(null)
+  const detailsResizeMoved = useRef(false)
   const appliedRecordSelection = useRef<TrajectoryTableProps['recordSelection']>(null)
   const appliedRecordFocus = useRef<TrajectoryTableProps['recordFocus']>(null)
   const tabHistory = useRef<Set<DetailTab>>(new Set(['overview']))
@@ -2998,6 +3000,34 @@ export function TrajectoryTable({
                               data-mono={toolLike || undefined}
                               style={{ paddingLeft: `${record.cell.kind === 'subtool' ? 52 : toolLike ? 26 : 0}px` }}
                             >
+                              {(() => {
+                                const next = records[position + 1]
+                                const id = trajectoryRecordId(record.cell)
+                                const collapsedHere = record.collapsedSummary !== undefined
+                                  && collapsedAssistants.has(id)
+                                const foldable = record.cell.kind === 'message'
+                                  && (collapsedHere
+                                    || (next !== undefined
+                                      && (next.cell.kind === 'tool' || next.cell.kind === 'subtool')))
+                                const folded = collapsedHere
+                                return foldable
+                                  ? (
+                                    <button
+                                      type="button"
+                                      className={css.rowChevron}
+                                      data-folded={folded || undefined}
+                                      aria-label={t(folded ? 'assistant.expand' : 'assistant.collapse')}
+                                      aria-expanded={!folded}
+                                      onClick={(event) => {
+                                        event.stopPropagation()
+                                        onToggleAssistant(id)
+                                      }}
+                                    >
+                                      ▸
+                                    </button>
+                                  )
+                                  : <span className={css.rowChevronSpace} />
+                              })()}
                               <span className={css.rowName}>{rowName}</span>
                               {rowTone !== 'ok' && (
                                 <span className={css.rowBadge} data-tone={rowTone}>
@@ -3051,6 +3081,7 @@ export function TrajectoryTable({
         <aside
           className={css.details}
           aria-label={t('details.event')}
+          data-snapping={snapping || undefined}
           style={detailsWidth === null ? undefined : { width: detailsWidth }}
         >
           <div
@@ -3072,6 +3103,7 @@ export function TrajectoryTable({
               const split = details.parentElement
               if (split === null) return
               const splitWidth = split.getBoundingClientRect().width
+              detailsResizeMoved.current = false
               detailsResizeDrag.current = {
                 pointerId: event.pointerId,
                 startX: event.clientX,
@@ -3081,12 +3113,13 @@ export function TrajectoryTable({
                   splitWidth * TOOL_REQUEST_SHARE - defaultToolRequestWidth(splitWidth)
                 ),
               }
-              event.currentTarget.setPointerCapture(event.pointerId)
+              try { event.currentTarget.setPointerCapture(event.pointerId) } catch { /* 合成事件没有真实指针 */ }
               event.preventDefault()
             }}
             onPointerMove={(event) => {
               const drag = detailsResizeDrag.current
               if (drag === null || drag.pointerId !== event.pointerId) return
+              detailsResizeMoved.current = true
               const nextDetailsWidth = clampDetailsWidth(
                 drag.startWidth + drag.startX - event.clientX,
                 drag.splitWidth,
@@ -3098,9 +3131,29 @@ export function TrajectoryTable({
               )
             }}
             onPointerUp={(event) => {
-              if (detailsResizeDrag.current?.pointerId !== event.pointerId) return
+              const drag = detailsResizeDrag.current
+              if (drag === null && !detailsResizeMoved.current) return
               detailsResizeDrag.current = null
-              event.currentTarget.releasePointerCapture(event.pointerId)
+              detailsResizeMoved.current = false
+              try { event.currentTarget.releasePointerCapture(event.pointerId) } catch { /* 指针已释放 */ }
+              const detailsElement = event.currentTarget.parentElement
+              const currentWidth = detailsElement === null
+                ? detailsWidth
+                : detailsElement.getBoundingClientRect().width
+              const splitWidth = drag?.splitWidth ?? detailsElement?.parentElement?.getBoundingClientRect().width ?? 0
+              if (currentWidth !== null) {
+                const targets = [420, 520, 640]
+                const nearest = targets.reduce((best, value) =>
+                  Math.abs(value - currentWidth) < Math.abs(best - currentWidth) ? value : best, targets[0])
+                const snapped = Math.abs(nearest - currentWidth) <= 40
+                  ? clampDetailsWidth(nearest, splitWidth)
+                  : currentWidth
+                if (snapped !== currentWidth) {
+                  setSnapping(true)
+                  setDetailsWidth(snapped)
+                  window.setTimeout(() => setSnapping(false), 220)
+                }
+              }
             }}
             onPointerCancel={() => {
               detailsResizeDrag.current = null

@@ -30,3 +30,58 @@
   /* ConversationRoot publishes the floating composer's live height. */
   --dsh-trajectory-bottom-clearance: calc(var(--dsh-composer-height, 152px) + 16px);
 }
+
+.root {
+  position: relative;
+}
+
+.toast {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--dsh-composer-height, 120px) + 16px);
+  transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 32px;
+  padding: 0 8px 0 12px;
+  border: 1px solid var(--bt-line, #e6e8eb);
+  border-radius: 8px;
+  background: var(--bt-surface, #fff);
+  color: var(--bt-text, #1c2128);
+  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.1);
+  font-size: 11.5px;
+  animation: bt-toast-in var(--bt-dur-4, 160ms) var(--bt-ease-out, ease);
+}
+
+.toastAction {
+  border: 0;
+  background: transparent;
+  color: var(--bt-accent, #2563eb);
+  font-size: 11.5px;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.toastClose {
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--bt-text-3, #9aa1ab);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.toastClose:hover {
+  background: var(--bt-surface-2, #f6f7f9);
+  color: var(--bt-text, #1c2128);
+}
+
+@keyframes bt-toast-in {
+  from { opacity: 0; transform: translate(-50%, 6px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}

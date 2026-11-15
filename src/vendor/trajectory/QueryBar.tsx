@@ -162,7 +162,7 @@ export function QueryBar(props: QueryBarProps) {
               ×
             </button>
           )}
-          {open && suggestions.length > 0 && (
+          {open && query.trim() !== '' && suggestions.length > 0 && (
             <div className={css.menu} role="listbox" aria-label={qt('query.suggestions')}>
               {suggestions.map((suggestion, index) => (
                 <button
