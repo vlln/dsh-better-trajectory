@@ -2499,6 +2499,18 @@ export function TrajectoryTable({
     setActiveTab(tab)
   }
 
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      const target = event.target
+      if (target instanceof HTMLElement
+        && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
+      clearInspectorSelection()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [selectedRecordId, selectedRequest])
+
   const clearInspectorSelection = () => {
     setSelectedRecordId(null)
     setSelectedRequest(null)
@@ -2995,6 +3007,17 @@ export function TrajectoryTable({
                       }}
                       onKeyDown={(event) => {
                         if (isRequestOnly || singleToolNotice) return
+                        if (event.key === 'ArrowDown' || event.key === 'j' || event.key === 'ArrowUp' || event.key === 'k') {
+                          event.preventDefault()
+                          const body = event.currentTarget.parentElement
+                          if (body === null) return
+                          const rows = [...body.querySelectorAll('tr[tabindex="0"]')]
+                          const index = rows.indexOf(event.currentTarget)
+                          const step = event.key === 'ArrowDown' || event.key === 'j' ? 1 : -1
+                          const target = rows[index + step]
+                          if (target instanceof HTMLElement) target.focus()
+                          return
+                        }
                         if (event.key !== 'Enter' && event.key !== ' ') return
                         event.preventDefault()
                         if (isCollapsedSummary) {
