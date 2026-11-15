@@ -208,6 +208,11 @@ export function QueryBar(props: QueryBarProps) {
         </div>
       </div>
 
+      {tokens.some(token => !token.valid) && (
+        <div className={css.invalidHint} role="status">
+          {qt('query.invalid', { tokens: tokens.filter(token => !token.valid).map(token => token.raw).join(' ') })}
+        </div>
+      )}
       {tokens.length > 0 && (
         <div className={css.chips}>
           {tokens.map(token => (

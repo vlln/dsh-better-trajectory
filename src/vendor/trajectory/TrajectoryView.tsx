@@ -614,6 +614,13 @@ export function TrajectoryView({
     setQueryText(next)
   }, [pushToast, qt, queryText])
 
+  const toggleAllTurnsWithUndo = useCallback(() => {
+    const previous = collapsedTurns
+    const collapsed = !allTurnsCollapsed
+    toggleAllTurns()
+    pushToast(qt(collapsed ? 'toast.collapsedAll' : 'toast.expandedAll'), () => setCollapsedTurns(previous))
+  }, [allTurnsCollapsed, collapsedTurns, pushToast, qt, toggleAllTurns])
+
   const loadEarlierHistory = useCallback(async () => {
     if (!hasResidentOlderHistory && !await loadOlder()) return false
     setHistoryNodeLimit(limit => limit + HISTORY_PAGE_NODES)
@@ -648,7 +655,7 @@ export function TrajectoryView({
           setTimelineSelection(null)
         }}
         allTurnsCollapsed={allTurnsCollapsed}
-        onToggleAllTurns={toggleAllTurns}
+        onToggleAllTurns={toggleAllTurnsWithUndo}
         allAssistantsCollapsed={allAssistantsCollapsed}
         onToggleAllAssistants={toggleAllAssistants}
         allSubCallsCollapsed={allSubCallsCollapsed}

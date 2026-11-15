@@ -2781,6 +2781,13 @@ export function TrajectoryTable({
           if (event.target === event.currentTarget) clearAllSelections()
         }}
       >
+        {showInitialLoading && records.length === 0 && (
+          <div className={css.skeletonPane} aria-hidden="true">
+            {[78, 64, 84, 58, 72, 66].map((width, index) => (
+              <span key={index} className={css.skeletonRow} style={{ width: `${width}%` }} />
+            ))}
+          </div>
+        )}
         {showInitialLoading && (
           <div className={css.historyLoading} role="status" aria-live="polite">
             <span className={css.historyLoadingBar}>
@@ -2828,6 +2835,18 @@ export function TrajectoryTable({
                       {olderBusy ? t('history.loadingEarlier') : ''}
                     </span>
                   </button>
+                </td>
+              </tr>
+            )}
+            {!showInitialLoading && records.length === 0 && (
+              <tr className={css.emptyRow}>
+                <td colSpan={2} className={css.emptyCell}>
+                  <span>{queryText.trim() === '' ? qt('empty.none') : qt('empty.noMatch')}</span>
+                  {queryText.trim() !== '' && (
+                    <button type="button" className={css.emptyAction} onClick={onShowAll}>
+                      {qt('query.showAll')}
+                    </button>
+                  )}
                 </td>
               </tr>
             )}
@@ -3221,7 +3240,9 @@ export function TrajectoryTable({
                                   : css[selected.cell.kind]
                       }`}
                       >
-                        {t(KIND_LABEL_KEY[selected.cell.kind])}
+                        {selected.cell.kind === 'tool' || selected.cell.kind === 'subtool'
+                          ? (selected.cell.toolName ?? t(KIND_LABEL_KEY[selected.cell.kind]))
+                          : t(KIND_LABEL_KEY[selected.cell.kind])}
                       </span>
                       <span className={css.detailsLocation}>
                         {selected.cell.kind === 'compacted'
@@ -3291,6 +3312,7 @@ export function TrajectoryTable({
           </div>
           <div
             id="trajectory-detail-panel"
+            key={selectedRecordId ?? 'none'}
             className={activeTab === 'overview'
               ? `${css.detailBody} ${css.detailBodySummary}`
               : selectedProgram !== undefined && activeTab === 'input'

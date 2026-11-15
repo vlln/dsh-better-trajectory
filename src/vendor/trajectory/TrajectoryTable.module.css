@@ -2435,3 +2435,138 @@ tr[data-selected='true'][data-error='true'] {
 .details[data-snapping] {
   transition: width var(--bt-dur-5, 220ms) var(--bt-ease-out, ease);
 }
+
+/* ---------- detail panel spec (design step 3) ---------- */
+.details {
+  width: clamp(420px, 46%, 720px);
+  border-left: 1px solid var(--bt-line, #e6e8eb);
+  background: var(--bt-surface, #fff);
+}
+
+.detailsHeader {
+  height: 36px;
+  padding: 0 10px 0 12px;
+  border-bottom: 1px solid var(--bt-line, #e6e8eb);
+}
+
+.detailsTitle {
+  color: var(--bt-text, #1c2128);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.detailTabs {
+  height: 30px;
+  gap: 14px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--bt-line, #e6e8eb);
+}
+
+.detailTab {
+  padding: 0;
+  color: var(--bt-text-3, #9aa1ab);
+  font-size: 11.5px;
+}
+
+.detailTab:hover {
+  color: var(--bt-text, #1c2128);
+  background: transparent;
+}
+
+.detailTabActive {
+  color: var(--bt-text, #1c2128);
+}
+
+.detailTabActive::after {
+  right: 0;
+  left: 0;
+  height: 2px;
+  background: var(--bt-text, #1c2128);
+}
+
+.detailChips {
+  gap: 4px;
+  padding: 8px 12px 6px;
+}
+
+.detailChip {
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--bt-surface-2, #f6f7f9);
+  color: var(--bt-text, #1c2128);
+  font-size: 10.5px;
+}
+
+.detailChip[data-tone='error'] {
+  background: var(--bt-error-soft, #fef3f2);
+  color: var(--bt-error, #d92d20);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bt-error, #d92d20) 22%, transparent);
+}
+
+.detailChipLabel {
+  color: var(--bt-text-3, #9aa1ab);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.detailChipValue {
+  font-size: 10.5px;
+}
+
+.detailBody {
+  animation: bt-detail-in var(--bt-dur-3, 120ms) var(--bt-ease-out, ease);
+}
+
+@keyframes bt-detail-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.skeletonPane {
+  position: absolute;
+  z-index: 6;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 14px 0 98px;
+  background: var(--bt-surface, #fff);
+  pointer-events: none;
+}
+
+.skeletonRow {
+  height: 10px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--bt-surface-2, #f6f7f9) 25%, var(--bt-surface-3, #eef0f3) 37%, var(--bt-surface-2, #f6f7f9) 63%);
+  background-size: 400% 100%;
+  animation: bt-shimmer 1.6s linear infinite;
+}
+
+@keyframes bt-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: 0 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeletonRow { animation: none; }
+}
+
+/* empty state */
+.emptyRow { background: transparent; }
+.emptyCell {
+  height: 120px;
+  padding-left: 98px !important;
+  color: var(--bt-text-3, #9aa1ab);
+  font-size: 11.5px;
+}
+.emptyAction {
+  margin-left: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--bt-accent, #2563eb);
+  font-size: 11.5px;
+  cursor: pointer;
+}
