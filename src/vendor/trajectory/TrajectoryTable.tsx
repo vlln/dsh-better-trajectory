@@ -3115,67 +3115,40 @@ export function TrajectoryTable({
               setDetailsWidth(null)
               setToolRequestOffset(null)
             }}
-            onPointerDown={(event) => {
+            onMouseDown={(event) => {
               if (event.button !== 0) return
-              const details = event.currentTarget.parentElement
+              const handle = event.currentTarget
+              const details = handle.parentElement
               if (details === null) return
               const split = details.parentElement
               if (split === null) return
+              const startX = event.clientX
+              const startWidth = details.getBoundingClientRect().width
               const splitWidth = split.getBoundingClientRect().width
-              detailsResizeMoved.current = false
-              detailsResizeDrag.current = {
-                pointerId: event.pointerId,
-                startX: event.clientX,
-                startWidth: details.getBoundingClientRect().width,
-                splitWidth,
-                startToolRequestOffset: toolRequestOffset ?? (
-                  splitWidth * TOOL_REQUEST_SHARE - defaultToolRequestWidth(splitWidth)
-                ),
+              const startToolRequestOffset = toolRequestOffset ?? (
+                splitWidth * TOOL_REQUEST_SHARE - defaultToolRequestWidth(splitWidth)
+              )
+              let latest = startWidth
+              let moved = false
+              const onMove = (moveEvent: MouseEvent) => {
+                moved = true
+                latest = clampDetailsWidth(startWidth + startX - moveEvent.clientX, splitWidth)
+                setDetailsWidth(latest)
+                setToolRequestOffset(startToolRequestOffset + (latest - startWidth) * TOOL_REQUEST_SHARE)
               }
-              try { event.currentTarget.setPointerCapture(event.pointerId) } catch { /* 合成事件没有真实指针 */ }
-              event.preventDefault()
-            }}
-            onPointerMove={(event) => {
-              const drag = detailsResizeDrag.current
-              if (drag === null || drag.pointerId !== event.pointerId) return
-              detailsResizeMoved.current = true
-              const nextDetailsWidth = clampDetailsWidth(
-                drag.startWidth + drag.startX - event.clientX,
-                drag.splitWidth,
-              )
-              setDetailsWidth(nextDetailsWidth)
-              setToolRequestOffset(
-                drag.startToolRequestOffset
-                + (nextDetailsWidth - drag.startWidth) * TOOL_REQUEST_SHARE,
-              )
-            }}
-            onPointerUp={(event) => {
-              const drag = detailsResizeDrag.current
-              if (drag === null && !detailsResizeMoved.current) return
-              detailsResizeDrag.current = null
-              detailsResizeMoved.current = false
-              try { event.currentTarget.releasePointerCapture(event.pointerId) } catch { /* 指针已释放 */ }
-              const detailsElement = event.currentTarget.parentElement
-              const currentWidth = detailsElement === null
-                ? detailsWidth
-                : detailsElement.getBoundingClientRect().width
-              const splitWidth = drag?.splitWidth ?? detailsElement?.parentElement?.getBoundingClientRect().width ?? 0
-              if (currentWidth !== null) {
+              const onUp = () => {
+                window.removeEventListener('mousemove', onMove)
+                window.removeEventListener('mouseup', onUp)
+                details.removeAttribute('data-dragging')
+                if (!moved) return
                 const targets = [420, 520, 640]
                 const nearest = targets.reduce((best, value) =>
-                  Math.abs(value - currentWidth) < Math.abs(best - currentWidth) ? value : best, targets[0])
-                const snapped = Math.abs(nearest - currentWidth) <= 40
-                  ? clampDetailsWidth(nearest, splitWidth)
-                  : currentWidth
-                if (snapped !== currentWidth) {
-                  setSnapping(true)
-                  setDetailsWidth(snapped)
-                  window.setTimeout(() => setSnapping(false), 220)
-                }
+                  Math.abs(value - latest) < Math.abs(best - latest) ? value : best, targets[0])
               }
-            }}
-            onPointerCancel={() => {
-              detailsResizeDrag.current = null
+              details.setAttribute('data-dragging', '')
+              window.addEventListener('mousemove', onMove)
+              window.addEventListener('mouseup', onUp)
+              event.preventDefault()
             }}
             onKeyDown={(event) => {
               if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return

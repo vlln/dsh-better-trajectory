@@ -80,6 +80,19 @@ export function QueryBar(props: QueryBarProps) {
   const suggestions = useMemo(() => buildSuggestions(props, lastWord), [props, lastWord])
 
   useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== '/') return
+      const target = event.target
+      if (target instanceof HTMLElement
+        && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
+      event.preventDefault()
+      inputRef.current?.focus()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
+
+  useEffect(() => {
     if (!open) return
     const onDown = (event: MouseEvent) => {
       if (event.target instanceof Node && rootRef.current !== null && !rootRef.current.contains(event.target)) setOpen(false)

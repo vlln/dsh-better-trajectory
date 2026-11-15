@@ -35,3 +35,11 @@
     --bt-dur-5: 0ms;
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .bt-trajectory-root,
+  .bt-trajectory-root * {
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+  }
+}
