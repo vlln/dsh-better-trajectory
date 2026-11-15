@@ -62,7 +62,7 @@
 | **P0 基座** ✅ | vendor 原生 33 文件 + CSS Modules + 宿主 shim（PartialArguments / 首 token 时间） | `轨迹+` 渲染 fork 版 `TrajectoryView`，与原生像素级一致 |
 | **P1 查询条** ✅ | `QueryBar` 替换 toolbar；`matching` 只裁工具 cell，`visibleTurns` 在进入 Table 前过滤 | token/chip/建议/Quick/Flat view；全局「命中 N / M · K 个被过滤」；逐父级「N 个被过滤 · 显示」移到 P3 |
 | **P2 右栏** ✅ | `TrajectoryTable` details 区：记录 chips、工具记录五 tab、`RawDataPanel` | 异常/原始 tab；原始支持搜索、展开全部、复制；面板默认 46%（clamp 360–560） |
-| **P3 行** | `TrajectoryCell` / 行样式 | 时间槽、徽章、耗时条；窄屏与暗色 |
+| **P3 行** ✅ | 行内时间/耗时槽（数据缺失时回退到工具索引）、错误行左轨、逐组「N 个调用被过滤 · 显示全部」、列宽 150/118、暗色与 1200px | 时间槽、错误强调、隐藏提示；耗时依赖 footer 时间戳，mock 站数据缺 `callTime`，仅在真实会话显示 |
 | **P4 收敛** | 用 `entry.component` 覆盖原生页签；删筛选栏 / 调试面板 / 旧 JSON 浮层 | 只留一个「轨迹」页签，旧 UI 全删，版本 0.2.0 |
 
 节奏：每个阶段一次 commit + 一张站内截图；P1 起在 18-turn、长 JSON、图片、4 工具四条会话上回归。

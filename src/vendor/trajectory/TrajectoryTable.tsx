@@ -136,6 +136,8 @@ const KIND_ICON: Record<TrajectoryCellKind, ReactNode> = {
 }
 
 interface TableRecord {
+  /** Number of hidden tool calls in this record's group, rendered as a hint row. */
+  hint?: number
   turn: number | null
   section: number
   group: string
@@ -311,6 +313,15 @@ function formatDurationMs(milliseconds: number, t: TrajectoryTranslate): string 
   return t('unit.seconds', {
     value: (milliseconds / 1_000).toFixed(milliseconds < 10_000 ? 2 : 1),
   })
+}
+
+function formatClock(timestamp: number | null | undefined): string {
+  if (timestamp === null || timestamp === undefined) return ''
+  try {
+    return new Date(timestamp).toLocaleTimeString(undefined, { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  } catch {
+    return ''
+  }
 }
 
 function formatStartedAt(timestamp: number | null, t: TrajectoryTranslate): string {
@@ -2151,6 +2162,9 @@ export function TrajectoryTable({
   timelineFocusIndexes = null,
   searchMatchIndexes = null,
   hiddenIndexes = null,
+  hiddenHints = null,
+  callMeta = null,
+  onShowAll,
   onSelectedIndexChange,
   onRecordSelect,
   recordSelection = null,
@@ -2254,17 +2268,46 @@ export function TrajectoryTable({
     [sessionRequestNumbers],
   )
   const records = useMemo(() => {
-    if (searchMatchIndexes !== null) return filterRecords(allRecords, searchMatchIndexes)
-    const turnRecords = collapsedTurns.size === 0
-      ? allRecords
-      : collapseTurnRecords(allRecords, collapsedTurns, requestGroups, t)
-    const assistantRecords = collapsedAssistants.size === 0
-      ? turnRecords
-      : collapseCallRecords(turnRecords, collapsedAssistants, 'assistant', t)
-    return collapsedTools.size === 0
-      ? assistantRecords
-      : collapseCallRecords(assistantRecords, collapsedTools, 'tool', t)
-  }, [allRecords, collapsedAssistants, collapsedTools, collapsedTurns, requestGroups, searchMatchIndexes, t])
+    const base = (() => {
+      if (searchMatchIndexes !== null) return filterRecords(allRecords, searchMatchIndexes)
+      const turnRecords = collapsedTurns.size === 0
+        ? allRecords
+        : collapseTurnRecords(allRecords, collapsedTurns, requestGroups, t)
+      const assistantRecords = collapsedAssistants.size === 0
+        ? turnRecords
+        : collapseCallRecords(turnRecords, collapsedAssistants, 'assistant', t)
+      return collapsedTools.size === 0
+        ? assistantRecords
+        : collapseCallRecords(assistantRecords, collapsedTools, 'tool', t)
+    })()
+    if (hiddenHints === null || hiddenHints.size === 0) return base
+    const out: TableRecord[] = []
+    let sequence = 0
+    for (const [index, record] of base.entries()) {
+      out.push(record)
+      const count = hiddenHints.get(`${record.turn}\u0000${record.group}`)
+      if (count === undefined || count === 0) continue
+      const next = base[index + 1]
+      if (next !== undefined && next.turn === record.turn && next.group === record.group) continue
+      out.push({
+        turn: record.turn,
+        section: record.section,
+        group: record.group,
+        groupStart: false,
+        turnStart: false,
+        turnEnd: false,
+        hint: count,
+        cell: {
+          index: -(++sequence) - 1,
+          kind: 'context',
+          text: '',
+          recordId: `hint:${record.turn}:${record.group}`,
+          timeSeconds: null,
+        } as TrajectoryCellProps,
+      })
+    }
+    return out
+  }, [allRecords, collapsedAssistants, collapsedTools, collapsedTurns, requestGroups, searchMatchIndexes, hiddenHints, t])
   const projectedVirtualRows = useMemo(
     () => groupTrajectoryVirtualRows(records),
     [records],
@@ -2790,6 +2833,14 @@ export function TrajectoryTable({
               </tr>
             )}
             {renderedRecords.map(({ record, position, terminalRequestBoundary }) => (
+              record.hint !== undefined ? (
+                <tr key={`hint:${record.turn}:${record.group}`} className={css.hiddenHintRow}>
+                  <td colSpan={2} className={css.hiddenHintCell}>
+                    <span className={css.hiddenHintText}>{qt('hint.filtered', { count: record.hint })}</span>
+                    <button type="button" className={css.hiddenHintButton} onClick={onShowAll}>{qt('query.showAll')}</button>
+                  </td>
+                </tr>
+              ) : (
               <RecordPresentation
                 key={trajectoryVirtualRecordKey(record)}
                 cell={record.cell}
@@ -2826,12 +2877,16 @@ export function TrajectoryTable({
                   const sectionActive = record.turn === null
                     ? activeSection === record.section
                     : activeTurn === record.turn
+                  const metaInfo = record.cell.callId === undefined ? undefined : callMeta?.get(record.cell.callId)
+                  const rowDurationMs = record.cell.timeSeconds !== null
+                    ? Math.round(record.cell.timeSeconds * 1000)
+                    : metaInfo?.durationMs
+                  const rowStartedAt = record.cell.startedAt ?? metaInfo?.time
                   const singleToolNotice = record.cell.kind === 'context'
                     && record.cell.sourceBlocks?.length === 1
                     && record.cell.sourceBlocks.every(block => block.type === 'tool-addition' || block.type === 'tool-removal')
                   return (
                     <tr
-                     
                       tabIndex={isRequestOnly || singleToolNotice ? -1 : 0}
                       aria-rowindex={position + 1 + historyRowOffset}
                       aria-label={isCollapsedSummary
@@ -2959,6 +3014,7 @@ export function TrajectoryTable({
                           </span>
                         )}
                         <div className={css.eventInner}>
+                          <div className={css.rowStack}>
                           {!isCollapsedSummary && !isRequestOnly && (
                             <span
                               className={css.kindSlot}
@@ -2995,6 +3051,18 @@ export function TrajectoryTable({
                               </span>
                             </span>
                           )}
+                          {(record.cell.kind === 'tool' || record.cell.kind === 'subtool')
+                            && (rowStartedAt != null || rowDurationMs != null) && (
+                            <span className={css.rowMeta}>
+                              {rowStartedAt != null && (
+                                <span className={css.rowTime}>{formatClock(rowStartedAt)}</span>
+                              )}
+                              {rowDurationMs != null && (
+                                <span className={css.rowDuration}>{formatDurationMs(rowDurationMs, t)}</span>
+                              )}
+                            </span>
+                          )}
+                          </div>
                         </div>
                       </td>
                       <td className={css.content}>
@@ -3040,6 +3108,7 @@ export function TrajectoryTable({
                   )
                 }}
               </RecordPresentation>
+              )
             ))}
             {virtualBottom > 0 && (
               <tr className={css.virtualSpacer} data-virtual-spacer="bottom" aria-hidden="true">

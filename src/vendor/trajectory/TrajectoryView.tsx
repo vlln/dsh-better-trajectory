@@ -401,6 +401,31 @@ export function TrajectoryView({
     }
     return hidden
   }, [timelineTurns, matched, query.active, flat])
+  const callMeta = useMemo(() => {
+    const map = new Map<string, { durationMs?: number; time?: number }>()
+    for (const record of toolIndex.records) {
+      if (!record.callId) continue
+      map.set(record.callId, {
+        ...(typeof record.durationMs === 'number' ? { durationMs: record.durationMs } : {}),
+        ...(typeof record.time === 'number' ? { time: record.time } : {}),
+      })
+    }
+    return map
+  }, [toolIndex])
+  const hiddenHints = useMemo(() => {
+    if (hiddenIndexes === null) return null
+    const map = new Map<string, number>()
+    for (const turn of timelineTurns) {
+      for (const group of turn.groups) {
+        let count = 0
+        for (const cell of group.cells) {
+          if ((cell.kind === 'tool' || cell.kind === 'subtool') && hiddenIndexes.has(cell.index)) count += 1
+        }
+        if (count > 0) map.set(`${turn.turn}\u0000${group.title}`, count)
+      }
+    }
+    return map
+  }, [timelineTurns, hiddenIndexes])
   const visibleTurns = useMemo(() => {
     if (hiddenIndexes === null) return timelineTurns
     return timelineTurns.map(turn => ({
@@ -614,6 +639,9 @@ export function TrajectoryView({
           streamingCells={streamingCells}
           timelineFocusIndexes={timelineFocusIndexes}
           hiddenIndexes={hiddenIndexes}
+          hiddenHints={hiddenHints}
+          callMeta={callMeta}
+          onShowAll={() => setQueryText('')}
           onSelectedIndexChange={setSelectedTimelineIndex}
           onRecordSelect={handleRecordSelect}
           recordSelection={timelineRecordSelection}
