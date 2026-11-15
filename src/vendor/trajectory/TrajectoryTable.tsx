@@ -2171,6 +2171,7 @@ export function TrajectoryTable({
   hiddenHints = null,
   callMeta = null,
   maxDurationMs = 1,
+  initialScrollTop = null,
   onShowAll,
   onSelectedIndexChange,
   onRecordSelect,
@@ -2356,6 +2357,11 @@ export function TrajectoryTable({
   useEffect(() => {
     rowVirtualizer.measure()
   }, [hiddenIndexes, rowVirtualizer])
+
+  useLayoutEffect(() => {
+    const pane = tablePaneRef.current
+    if (pane !== null && initialScrollTop !== null) pane.scrollTop = initialScrollTop
+  }, [])
 
   const virtualItems = virtualizationEnabled ? rowVirtualizer.getVirtualItems() : []
   const virtualTop = Math.max(0, (virtualItems[0]?.start ?? 0) - virtualScrollMargin)

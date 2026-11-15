@@ -162,6 +162,7 @@ export function TrajectoryView({
     }
   }, [queryText, sessionId])
   const [flat, setFlat] = useState(false)
+  const restoreScroll = useRef(0)
   const [toast, setToast] = useState<{ id: number; text: string; undo?: () => void } | null>(null)
   const toastTimer = useRef<number | null>(null)
   const toastSeq = useRef(0)
@@ -376,48 +377,6 @@ export function TrajectoryView({
   )
   const query = useMemo(() => parseQuery(queryText), [queryText])
   const toolIndex = useMemo(() => buildToolIndex(completeInspection), [completeInspection])
-  const matched = useMemo(() => {
-    const callIds = new Set<string>()
-    let count = 0
-    for (const record of toolIndex.records) {
-      if (!matchesQuery(record, query)) continue
-      count += 1
-      if (record.callId) callIds.add(record.callId)
-    }
-    return { callIds, count }
-  }, [toolIndex, query])
-  const toolStats = useMemo(() => {
-    let errors = 0
-    let running = 0
-    for (const record of toolIndex.records) {
-      if (isErrorStatus(record.status)) errors += 1
-      if (record.status === 'running') running += 1
-    }
-    return { total: toolIndex.records.length, errors, running }
-  }, [toolIndex])
-  const queryTurns = useMemo(
-    () => [...toolIndex.turns.entries()]
-      .sort((left, right) => left[0] - right[0])
-      .map(([turn, count]) => ({ turn, count })),
-    [toolIndex],
-  )
-  const hiddenIndexes = useMemo(() => {
-    if (!query.active && !flat) return null
-    const hidden = new Set<number>()
-    for (const turn of timelineTurns) {
-      for (const group of turn.groups) {
-        for (const cell of group.cells) {
-          const toolLike = cell.kind === 'tool' || cell.kind === 'subtool'
-          if (toolLike && cell.callId !== undefined && !matched.callIds.has(cell.callId)) {
-            hidden.add(cell.index)
-            continue
-          }
-          if (flat && !toolLike) hidden.add(cell.index)
-        }
-      }
-    }
-    return hidden
-  }, [timelineTurns, matched, query.active, flat])
   const callMeta = useMemo(() => {
     const map = new Map<string, { durationMs?: number; time?: number }>()
     for (const record of toolIndex.records) {
@@ -429,6 +388,59 @@ export function TrajectoryView({
     }
     return map
   }, [toolIndex])
+  const toolCells = useMemo(() => timelineTurns.flatMap(turn => turn.groups.flatMap(group =>
+    group.cells
+      .filter(cell => cell.kind === 'tool' || cell.kind === 'subtool')
+      .map(cell => ({ cell, turn: turn.turn })))), [timelineTurns])
+  const matchedCells = useMemo(() => {
+    const set = new Set<number>()
+    for (const { cell, turn } of toolCells) {
+      const meta = cell.callId === undefined ? undefined : callMeta.get(cell.callId)
+      const status = cell.isError === true ? 'error' : 'ok'
+      if (matchesQuery({
+        name: cell.toolName ?? '',
+        status,
+        turn,
+        durationMs: meta?.durationMs,
+        args: cell.inputDetail ?? '',
+        result: cell.outputDetail ?? '',
+        errorText: '',
+      }, query)) set.add(cell.index)
+    }
+    return set
+  }, [toolCells, callMeta, query])
+  const toolStats = useMemo(() => {
+    let errors = 0
+    let running = 0
+    for (const { cell } of toolCells) {
+      if (cell.isError === true) errors += 1
+      else if (cell.timeSeconds === null && !cell.isError) running += 1
+    }
+    return { total: toolCells.length, errors, running }
+  }, [toolCells])
+  const queryTurns = useMemo(
+    () => [...toolIndex.turns.entries()]
+      .sort((left, right) => left[0] - right[0])
+      .map(([turn, count]) => ({ turn, count })),
+    [toolIndex],
+  )
+  const hiddenIndexes = useMemo(() => {
+    if (!query.active && !flat) return null
+    const hidden = new Set<number>()
+    for (const { cell } of toolCells) {
+      if (!matchedCells.has(cell.index)) hidden.add(cell.index)
+    }
+    if (flat) {
+      for (const turn of timelineTurns) {
+        for (const group of turn.groups) {
+          for (const cell of group.cells) {
+            if (cell.kind !== 'tool' && cell.kind !== 'subtool') hidden.add(cell.index)
+          }
+        }
+      }
+    }
+    return hidden
+  }, [toolCells, matchedCells, query.active, flat])
   const maxDurationMs = useMemo(() => {
     let max = 0
     for (const record of toolIndex.records) {
@@ -607,6 +619,8 @@ export function TrajectoryView({
   }, [])
 
   const changeQuery = useCallback((next: string) => {
+    const pane = document.querySelector('[data-trajectory-scroll]')
+    if (pane instanceof HTMLElement) restoreScroll.current = pane.scrollTop
     if (next === '' && queryText.trim() !== '') {
       const previous = queryText
       pushToast(qt('toast.cleared'), () => setQueryText(previous))
@@ -635,8 +649,8 @@ export function TrajectoryView({
         tokens={query.tokens}
         stats={{
           total: toolStats.total,
-          matched: matched.count,
-          hidden: query.active ? toolStats.total - matched.count : 0,
+          matched: matchedCells.size,
+          hidden: query.active ? toolStats.total - matchedCells.size : 0,
           errors: toolStats.errors,
           running: toolStats.running,
         }}
@@ -678,6 +692,8 @@ export function TrajectoryView({
       />
       <div className={css.ledger}>
         <TrajectoryTable
+          key={hiddenIndexes === null ? 'all' : `f${[...hiddenIndexes].join(',')}`}
+          initialScrollTop={restoreScroll.current}
           t={t}
           qt={typeof qt === 'function' ? qt : (key: string) => key}
           watchToolResult={watchToolResult}
