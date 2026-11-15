@@ -64,6 +64,22 @@ const KIND_LABEL_KEY: Record<TrajectoryCellKind, TrajectoryKey> = {
   subtool: 'kind.subtool',
 }
 
+function ChevronIcon({ open }: { open: boolean }): ReactNode {
+  return (
+    <svg
+      className={css.chevronIcon}
+      data-open={open || undefined}
+      width="10"
+      height="10"
+      viewBox="0 0 10 10"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path d="M3.2 1.8 6.8 5l-3.6 3.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 function ToolWrenchIcon(): ReactNode {
   return (
     <svg
@@ -3039,9 +3055,26 @@ export function TrajectoryTable({
                       }}
                     >
                       <td className={css.event}>
-                        <span className={css.rowClock}>
-                          {record.turnStart && rowStartedAt != null ? formatClock(rowStartedAt) : ''}
-                        </span>
+                        {record.turnStart && record.turn !== null ? (
+                          <button
+                            type="button"
+                            className={css.turnMarker}
+                            aria-expanded={!collapsedTurns.has(record.turn)}
+                            aria-label={sectionLabel(record.turn, t)}
+                            title={rowStartedAt != null ? formatClock(rowStartedAt) : sectionLabel(record.turn, t)}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              onToggleTurn(record.turn as number)
+                            }}
+                          >
+                            <ChevronIcon open={!collapsedTurns.has(record.turn)} />
+                            <span className={css.turnMarkerLabel}>#{record.turn}</span>
+                          </button>
+                        ) : (
+                          <span className={css.rowClock}>
+                            {rowStartedAt != null && record.turnStart ? formatClock(rowStartedAt) : ''}
+                          </span>
+                        )}
                       </td>
                       <td className={css.content}>
                         {isRequestOnly
@@ -3054,14 +3087,12 @@ export function TrajectoryTable({
                               style={{ paddingLeft: `${record.cell.kind === 'subtool' ? 52 : toolLike ? 26 : 0}px` }}
                             >
                               {(() => {
-                                const next = records[position + 1]
                                 const id = trajectoryRecordId(record.cell)
                                 const collapsedHere = record.collapsedSummary !== undefined
                                   && collapsedAssistants.has(id)
                                 const foldable = record.cell.kind === 'message'
                                   && (collapsedHere
-                                    || (next !== undefined
-                                      && (next.cell.kind === 'tool' || next.cell.kind === 'subtool')))
+                                    || assistantToolCalls(allRecords, record.cell.index).length > 0)
                                 const folded = collapsedHere
                                 return foldable
                                   ? (
@@ -3076,10 +3107,33 @@ export function TrajectoryTable({
                                         onToggleAssistant(id)
                                       }}
                                     >
-                                      ▸
+                                      <ChevronIcon open={!folded} />
                                     </button>
                                   )
                                   : <span className={css.rowChevronSpace} />
+                              })()}
+                              {(() => {
+                                if (!toolLike) return null
+                                const next = records[position + 1]
+                                const foldable = next !== undefined && next.cell.kind === 'subtool'
+                                if (!foldable) return null
+                                const id = trajectoryRecordId(record.cell)
+                                const folded = collapsedTools.has(id)
+                                return (
+                                  <button
+                                    type="button"
+                                    className={css.rowChevron}
+                                    data-folded={folded || undefined}
+                                    aria-label={folded ? t('tool.expandSubCalls') : t('tool.collapseSubCalls')}
+                                    aria-expanded={!folded}
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      onToggleTool(id)
+                                    }}
+                                  >
+                                    <ChevronIcon open={!folded} />
+                                  </button>
+                                )
                               })()}
                               <span className={css.rowName}>{rowName}</span>
                               {rowTone !== 'ok' && (

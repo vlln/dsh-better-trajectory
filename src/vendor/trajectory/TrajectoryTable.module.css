@@ -2736,3 +2736,74 @@ tr[data-kind='user'] .rowLine {
 tr[data-kind='user'] .rowSub {
   font-weight: 500;
 }
+
+/* icon chevrons */
+.rowChevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transform: none;
+}
+
+.rowChevron[data-folded] {
+  transform: none;
+}
+
+.chevronIcon {
+  transform: rotate(0deg);
+  transition: transform var(--bt-dur-2, 90ms) var(--bt-ease-std, ease);
+}
+
+.chevronIcon[data-open] {
+  transform: rotate(90deg);
+}
+
+/* turn marker: the only fold control at turn level */
+.turnMarker {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--bt-text-3, #9aa1ab);
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10px;
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.turnMarker:hover {
+  background: var(--bt-surface-2, #f6f7f9);
+  color: var(--bt-text, #1c2128);
+}
+
+.turnMarkerLabel {
+  font-variant-numeric: tabular-nums;
+}
+
+/* native-inspired identity hues */
+tr[data-kind='tool'] .rowName,
+tr[data-kind='subtool'] .rowName {
+  color: var(--bt-tool, #b45309);
+}
+
+tr[data-kind='message'] .rowName {
+  color: var(--bt-assistant, #7c3aed);
+}
+
+tr[data-kind='user'] .rowName {
+  color: var(--bt-user, #1d4ed8);
+}
+
+tr[data-kind='context'] .rowName,
+tr[data-kind='system'] .rowName {
+  color: var(--bt-context, #047857);
+}
+
+tr[data-kind='tool'] .content::before,
+tr[data-kind='subtool'] .content::before {
+  z-index: 1;
+  background: var(--bt-line, #e6e8eb);
+}

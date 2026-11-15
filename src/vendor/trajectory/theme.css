@@ -43,3 +43,19 @@
     animation-duration: 0ms !important;
   }
 }
+
+.bt-trajectory-root {
+  --bt-tool: #b45309;
+  --bt-assistant: #7c3aed;
+  --bt-user: #1d4ed8;
+  --bt-context: #047857;
+}
+
+@media (prefers-color-scheme: dark) {
+  .bt-trajectory-root {
+    --bt-tool: #f0b35a;
+    --bt-assistant: #b79cff;
+    --bt-user: #7aa7ff;
+    --bt-context: #5ed3a8;
+  }
+}
