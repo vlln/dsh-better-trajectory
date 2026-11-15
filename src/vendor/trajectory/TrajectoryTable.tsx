@@ -2192,6 +2192,7 @@ export function TrajectoryTable({
   callMeta = null,
   maxDurationMs = 1,
   initialScrollTop = null,
+  showTime = true,
   onShowAll,
   onSelectedIndexChange,
   onRecordSelect,
@@ -2219,6 +2220,8 @@ export function TrajectoryTable({
   const [thinkingDisclosure, setThinkingDisclosure] = useState<{ recordId: string; expanded: boolean }>()
   const [detailsWidth, setDetailsWidth] = useState<number | null>(null)
   const [snapping, setSnapping] = useState(false)
+  const [hoverCard, setHoverCard] = useState<{ x: number; y: number; record: TableRecord } | null>(null)
+  const hoverTimer = useRef<number | null>(null)
   const [toolRequestOffset, setToolRequestOffset] = useState<number | null>(null)
   const detailsResizeDrag = useRef<DetailsResizeDrag | null>(null)
   const detailsResizeMoved = useRef(false)
@@ -2802,7 +2805,7 @@ export function TrajectoryTable({
   const historyRowOffset = hasOlderRecords ? 1 : 0
 
   return (
-    <div ref={rootRef} className={css.split} style={splitStyle}>
+    <div ref={rootRef} className={css.split} style={splitStyle} data-show-time={showTime ? undefined : 'false'}>
       <div
         ref={tablePaneRef}
         className={css.tablePane}
@@ -2986,6 +2989,18 @@ export function TrajectoryTable({
                       aria-selected={!isCollapsedSummary && !isRequestOnly && selectedIndex === record.cell.index}
                       data-kind={record.cell.kind}
                       data-group-parity={(record.groupIndex ?? 0) % 2}
+                      onMouseEnter={(event) => {
+                        if (isRequestOnly) return
+                        const x = event.clientX
+                        const y = event.clientY
+                        if (hoverTimer.current !== null) window.clearTimeout(hoverTimer.current)
+                        hoverTimer.current = window.setTimeout(() => setHoverCard({ x, y, record }), 520)
+                      }}
+                      onMouseLeave={() => {
+                        if (hoverTimer.current !== null) window.clearTimeout(hoverTimer.current)
+                        hoverTimer.current = null
+                        setHoverCard(null)
+                      }}
                       data-trajectory-row-key={trajectoryVirtualRecordKey(record)}
                       data-virtual-position={virtualizationEnabled ? position : undefined}
                       data-record-index={!isCollapsedSummary && !isRequestOnly
@@ -3055,26 +3070,9 @@ export function TrajectoryTable({
                       }}
                     >
                       <td className={css.event}>
-                        {record.turnStart && record.turn !== null ? (
-                          <button
-                            type="button"
-                            className={css.turnMarker}
-                            aria-expanded={!collapsedTurns.has(record.turn)}
-                            aria-label={sectionLabel(record.turn, t)}
-                            title={rowStartedAt != null ? formatClock(rowStartedAt) : sectionLabel(record.turn, t)}
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              onToggleTurn(record.turn as number)
-                            }}
-                          >
-                            <ChevronIcon open={!collapsedTurns.has(record.turn)} />
-                            <span className={css.turnMarkerLabel}>#{record.turn}</span>
-                          </button>
-                        ) : (
-                          <span className={css.rowClock}>
-                            {rowStartedAt != null && record.turnStart ? formatClock(rowStartedAt) : ''}
-                          </span>
-                        )}
+                        <span className={css.rowClock}>
+                          {rowStartedAt != null ? formatClock(rowStartedAt) : ''}
+                        </span>
                       </td>
                       <td className={css.content}>
                         {isRequestOnly
@@ -3090,52 +3088,72 @@ export function TrajectoryTable({
                                 const id = trajectoryRecordId(record.cell)
                                 const collapsedHere = record.collapsedSummary !== undefined
                                   && collapsedAssistants.has(id)
-                                const foldable = record.cell.kind === 'message'
-                                  && (collapsedHere
-                                    || assistantToolCalls(allRecords, record.cell.index).length > 0)
-                                const folded = collapsedHere
-                                return foldable
-                                  ? (
+                                const messageFold = record.cell.kind === 'message'
+                                  && (collapsedHere || assistantToolCalls(allRecords, record.cell.index).length > 0)
+                                const next = records[position + 1]
+                                const toolFold = toolLike && next !== undefined && next.cell.kind === 'subtool'
+                                const turnFold = record.turnStart && record.turn !== null && !isCollapsedSummary
+                                if (turnFold) {
+                                  const collapsed = collapsedTurns.has(record.turn as number)
+                                  return (
                                     <button
                                       type="button"
                                       className={css.rowChevron}
-                                      data-folded={folded || undefined}
-                                      aria-label={t(folded ? 'assistant.expand' : 'assistant.collapse')}
-                                      aria-expanded={!folded}
+                                      data-folded={collapsed || undefined}
+                                      aria-label={sectionLabel(record.turn, t)}
+                                      aria-expanded={!collapsed}
+                                      onClick={(event) => {
+                                        event.stopPropagation()
+                                        onToggleTurn(record.turn as number)
+                                      }}
+                                    >
+                                      <ChevronIcon open={!collapsed} />
+                                    </button>
+                                  )
+                                }
+                                if (messageFold) {
+                                  return (
+                                    <button
+                                      type="button"
+                                      className={css.rowChevron}
+                                      data-folded={collapsedHere || undefined}
+                                      aria-label={t(collapsedHere ? 'assistant.expand' : 'assistant.collapse')}
+                                      aria-expanded={!collapsedHere}
                                       onClick={(event) => {
                                         event.stopPropagation()
                                         onToggleAssistant(id)
                                       }}
                                     >
+                                      <ChevronIcon open={!collapsedHere} />
+                                    </button>
+                                  )
+                                }
+                                if (toolFold) {
+                                  const folded = collapsedTools.has(id)
+                                  return (
+                                    <button
+                                      type="button"
+                                      className={css.rowChevron}
+                                      data-folded={folded || undefined}
+                                      aria-label={folded ? t('tool.expandSubCalls') : t('tool.collapseSubCalls')}
+                                      aria-expanded={!folded}
+                                      onClick={(event) => {
+                                        event.stopPropagation()
+                                        onToggleTool(id)
+                                      }}
+                                    >
                                       <ChevronIcon open={!folded} />
                                     </button>
                                   )
-                                  : <span className={css.rowChevronSpace} />
+                                }
+                                return <span className={css.rowChevronSpace} />
                               })()}
-                              {(() => {
-                                if (!toolLike) return null
-                                const next = records[position + 1]
-                                const foldable = next !== undefined && next.cell.kind === 'subtool'
-                                if (!foldable) return null
-                                const id = trajectoryRecordId(record.cell)
-                                const folded = collapsedTools.has(id)
-                                return (
-                                  <button
-                                    type="button"
-                                    className={css.rowChevron}
-                                    data-folded={folded || undefined}
-                                    aria-label={folded ? t('tool.expandSubCalls') : t('tool.collapseSubCalls')}
-                                    aria-expanded={!folded}
-                                    onClick={(event) => {
-                                      event.stopPropagation()
-                                      onToggleTool(id)
-                                    }}
-                                  >
-                                    <ChevronIcon open={!folded} />
-                                  </button>
-                                )
-                              })()}
-                              <span className={css.rowName}>{rowName}</span>
+                              <span className={css.kindPill} data-kind={record.cell.kind}>
+                                {record.cell.kind === 'message' ? 'ASSISTANT'
+                                  : record.cell.kind === 'subtool' ? 'SUBTOOL'
+                                    : record.cell.kind.toUpperCase()}
+                              </span>
+                              {toolLike && <span className={css.rowName}>{rowName}</span>}
                               {rowTone !== 'ok' && (
                                 <span className={css.rowBadge} data-tone={rowTone}>
                                   {rowTone === 'error' ? qt('row.error') : qt('row.running')}
@@ -3855,6 +3873,47 @@ export function TrajectoryTable({
           </div>
         </aside>
       )}
+      {hoverCard !== null && (() => {
+        const { record } = hoverCard
+        const meta = record.cell.callId === undefined ? undefined : callMeta?.get(record.cell.callId)
+        const ms = record.cell.timeSeconds !== null
+          ? Math.round(record.cell.timeSeconds * 1000)
+          : meta?.durationMs
+        const args = String(record.cell.inputDetail ?? '').replace(/\s+/g, ' ').slice(0, 220)
+        const kind = record.cell.kind
+        const left = Math.min(hoverCard.x + 14, window.innerWidth - 320)
+        const top = Math.min(hoverCard.y + 16, window.innerHeight - 220)
+        return (
+          <div className={css.hoverCard} style={{ left, top }} role="tooltip">
+            <div className={css.hoverHead}>
+              <span className={css.kindPill} data-kind={kind}>
+                {kind === 'message' ? 'ASSISTANT' : kind.toUpperCase()}
+              </span>
+              {record.cell.toolName !== undefined && (
+                <span className={css.hoverName}>{record.cell.toolName}</span>
+              )}
+              {record.cell.isError === true && <span className={css.rowBadge} data-tone="error">error</span>}
+            </div>
+            <dl className={css.hoverGrid}>
+              <dt>{qt('chip.turn')}</dt>
+              <dd>#{record.turn ?? '—'} · {record.group}</dd>
+              <dt>{qt('chip.duration')}</dt>
+              <dd>{ms == null ? '—' : compactDuration(ms)}</dd>
+              {meta?.time !== undefined && (
+                <>
+                  <dt>开始</dt>
+                  <dd>{formatClock(meta.time)}</dd>
+                </>
+              )}
+            </dl>
+            {args !== '' && <p className={css.hoverArgs}>{args}</p>}
+            <div className={css.hoverHint}>
+              <span>点击 选中</span>
+              <span>Enter 详情</span>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }

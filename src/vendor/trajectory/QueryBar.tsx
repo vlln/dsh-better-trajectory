@@ -13,6 +13,8 @@ export interface QueryBarProps {
   turns: readonly { turn: number; count: number }[]
   flat: boolean
   onToggleFlat: () => void
+  showTime: boolean
+  onToggleTime: () => void
   tokens: readonly { kind: string; raw: string; valid: boolean; negated: boolean }[]
   actualDuration: boolean
   onActualDurationChange: (value: boolean) => void
@@ -69,7 +71,7 @@ function buildSuggestions(props: QueryBarProps, lastWord: string): Suggestion[] 
  * @returns 工具栏元素。
  */
 export function QueryBar(props: QueryBarProps) {
-  const { query, onQuery, stats, flat, onToggleFlat, tokens, t, qt } = props
+  const { query, onQuery, stats, flat, onToggleFlat, tokens, t, qt, showTime, onToggleTime } = props
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)
   const rootRef = useRef<HTMLDivElement | null>(null)
@@ -142,6 +144,9 @@ export function QueryBar(props: QueryBarProps) {
               <path d="M8 4.75V8l2.25 1.5" />
             </svg>
             {t('toolbar.duration')}
+          </button>
+          <button type="button" className={css.fold} aria-pressed={showTime} title={qt('query.timeHint')} onClick={onToggleTime}>
+            {qt('query.time')}
           </button>
           <button type="button" className={css.fold} aria-pressed={props.allTurnsCollapsed} title={t('toolbar.turns')} onClick={props.onToggleAllTurns}>
             {props.allTurnsCollapsed ? '⊞' : '⊟'} {t('toolbar.turns')}

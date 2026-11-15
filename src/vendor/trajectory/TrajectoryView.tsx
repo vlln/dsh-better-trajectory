@@ -162,6 +162,7 @@ export function TrajectoryView({
     }
   }, [queryText, sessionId])
   const [flat, setFlat] = useState(false)
+  const [showTime, setShowTime] = useState(true)
   const restoreScroll = useRef(0)
   const [toast, setToast] = useState<{ id: number; text: string; undo?: () => void } | null>(null)
   const toastTimer = useRef<number | null>(null)
@@ -658,6 +659,8 @@ export function TrajectoryView({
         turns={queryTurns}
         flat={flat}
         onToggleFlat={() => { setFlat(value => !value) }}
+        showTime={showTime}
+        onToggleTime={() => setShowTime(value => !value)}
         actualDuration={actualDuration}
         onActualDurationChange={(nextActualDuration) => {
           setActualDuration(nextActualDuration)
@@ -694,6 +697,7 @@ export function TrajectoryView({
         <TrajectoryTable
           key={hiddenIndexes === null ? 'all' : `f${[...hiddenIndexes].join(',')}`}
           initialScrollTop={restoreScroll.current}
+          showTime={showTime}
           t={t}
           qt={typeof qt === 'function' ? qt : (key: string) => key}
           watchToolResult={watchToolResult}
