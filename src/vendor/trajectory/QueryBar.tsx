@@ -1,0 +1,236 @@
+// @ts-nocheck
+/** 查询条：Logfire 风格 token + chip + 建议 + Quick 筛选。 */
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { IconSearchOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
+import { toggleToken } from '../../client/query.mjs'
+import css from './QueryBar.module.css'
+
+export interface QueryBarProps {
+  query: string
+  onQuery: (next: string) => void
+  stats: { total: number; matched: number; hidden: number; errors: number; running: number }
+  tools: readonly { name: string; calls?: number; count?: number }[]
+  turns: readonly { turn: number; count: number }[]
+  flat: boolean
+  onToggleFlat: () => void
+  tokens: readonly { kind: string; raw: string; valid: boolean; negated: boolean }[]
+  actualDuration: boolean
+  onActualDurationChange: (value: boolean) => void
+  allTurnsCollapsed: boolean
+  onToggleAllTurns: () => void
+  allAssistantsCollapsed: boolean
+  onToggleAllAssistants: () => void
+  allSubCallsCollapsed: boolean
+  onToggleAllSubCalls: () => void
+  t: (key: string) => string
+  qt: (key: string, params?: Record<string, string | number>) => string
+}
+
+interface Suggestion {
+  insert: string
+  label: string
+  detail?: string
+  group: string
+}
+
+/** 建议列表：工具（带计数）、状态、轮次、耗时。 */
+function buildSuggestions(props: QueryBarProps, lastWord: string): Suggestion[] {
+  const out: Suggestion[] = []
+  const term = lastWord.replace(/^-/, '')
+  const [field, value = ''] = term.includes(':') ? [term.slice(0, term.indexOf(':')), term.slice(term.indexOf(':') + 1)] : ['', '']
+  const match = (text: string) => text.toLowerCase().includes(value.toLowerCase())
+
+  if (field === '' || field === 'tool') {
+    for (const tool of props.tools) {
+      if (match(tool.name)) out.push({ insert: `tool:${tool.name}`, label: tool.name, detail: String(tool.calls ?? tool.count ?? ''), group: props.qt('query.groupTools') })
+    }
+  }
+  if (field === '' || field === 'status') {
+    for (const status of ['error', 'running', 'ok']) {
+      if (match(status)) out.push({ insert: `status:${status}`, label: props.qt(`query.status.${status}`), group: props.qt('query.groupStatus') })
+    }
+  }
+  if (field === '' || field === 'turn') {
+    for (const turn of props.turns.slice(0, 8)) {
+      if (match(String(turn.turn))) out.push({ insert: `turn:${turn.turn}`, label: `#${turn.turn}`, detail: String(turn.count), group: props.qt('query.groupTurn') })
+    }
+  }
+  if (field === '' || field === 'ms') {
+    for (const raw of ['ms:>1000', 'ms:>3000']) {
+      if (match(raw)) out.push({ insert: raw, label: raw, group: props.qt('query.groupSlow') })
+    }
+  }
+  return out.slice(0, 14)
+}
+
+/**
+ * 渲染查询条。
+ * @param props 查询、计数与折叠控制。
+ * @returns 工具栏元素。
+ */
+export function QueryBar(props: QueryBarProps) {
+  const { query, onQuery, stats, flat, onToggleFlat, tokens, t, qt } = props
+  const [open, setOpen] = useState(false)
+  const [active, setActive] = useState(0)
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  const inputRef = useRef<HTMLInputElement | null>(null)
+
+  const words = query.trim() === '' ? [] : query.trim().split(/\s+/)
+  const lastWord = words.at(-1) ?? ''
+  const suggestions = useMemo(() => buildSuggestions(props, lastWord), [props, lastWord])
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (event: MouseEvent) => {
+      if (event.target instanceof Node && rootRef.current !== null && !rootRef.current.contains(event.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open])
+
+  const pick = (suggestion: Suggestion) => {
+    const next = [...words.slice(0, -1), suggestion.insert].join(' ')
+    onQuery(next)
+    setOpen(false)
+    inputRef.current?.focus()
+  }
+
+  const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Escape') {
+      if (query !== '') onQuery('')
+      setOpen(false)
+      return
+    }
+    if (!open) return
+    if (event.key === 'ArrowDown') { event.preventDefault(); setActive(i => Math.min(i + 1, suggestions.length - 1)) }
+    else if (event.key === 'ArrowUp') { event.preventDefault(); setActive(i => Math.max(i - 1, 0)) }
+    else if (event.key === 'Enter') { event.preventDefault(); if (suggestions.length > 0) pick(suggestions[active] ?? suggestions[0]); else setOpen(false) }
+  }
+
+  const quick = [
+    { key: 'error', raw: 'status:error', label: qt('query.quickErrors'), count: stats.errors },
+    { key: 'running', raw: 'status:running', label: qt('query.quickRunning'), count: stats.running },
+    { key: 'slow', raw: 'ms:>1000', label: qt('query.quickSlow'), count: null },
+  ]
+
+  return (
+    <div className={css.root} role="toolbar" aria-label={t('toolbar.aria')}>
+      <div className={css.row} ref={rootRef}>
+        <div className={css.actions}>
+          <button
+            type="button"
+            className={css.toggle}
+            aria-pressed={props.actualDuration}
+            title={t('toolbar.useActualDuration')}
+            onClick={() => props.onActualDurationChange(!props.actualDuration)}
+          >
+            <svg className={css.toggleIcon} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <circle cx="8" cy="8" r="5.25" />
+              <path d="M8 4.75V8l2.25 1.5" />
+            </svg>
+            {t('toolbar.duration')}
+          </button>
+          <button type="button" className={css.fold} aria-pressed={props.allTurnsCollapsed} title={t('toolbar.turns')} onClick={props.onToggleAllTurns}>
+            {props.allTurnsCollapsed ? '⊞' : '⊟'} {t('toolbar.turns')}
+          </button>
+          <button type="button" className={css.fold} aria-pressed={props.allAssistantsCollapsed} title={t('toolbar.calls')} onClick={props.onToggleAllAssistants}>
+            {props.allAssistantsCollapsed ? '⊞' : '⊟'} {t('toolbar.calls')}
+          </button>
+          <button type="button" className={css.fold} aria-pressed={props.allSubCallsCollapsed} title={t('toolbar.subCalls')} onClick={props.onToggleAllSubCalls}>
+            {props.allSubCallsCollapsed ? '⊞' : '⊟'} {t('toolbar.subCalls')}
+          </button>
+        </div>
+
+        <div className={css.search}>
+          <IconSearchOutlineRegular size={12} className={css.searchIcon} />
+          <input
+            ref={inputRef}
+            type="text"
+            className={css.input}
+            aria-label={qt('query.placeholder')}
+            placeholder={qt('query.placeholder')}
+            value={query}
+            spellCheck={false}
+            autoComplete="off"
+            onChange={(event) => { onQuery(event.currentTarget.value); setOpen(true); setActive(0) }}
+            onFocus={() => setOpen(true)}
+            onBlur={() => { window.setTimeout(() => setOpen(false), 120) }}
+            onKeyDown={onKeyDown}
+          />
+          {query !== '' && (
+            <button type="button" className={css.clear} aria-label={qt('query.clear')} title={qt('query.clear')} onClick={() => { onQuery(''); inputRef.current?.focus() }}>
+              ×
+            </button>
+          )}
+          {open && suggestions.length > 0 && (
+            <div className={css.menu} role="listbox" aria-label={qt('query.suggestions')}>
+              {suggestions.map((suggestion, index) => (
+                <button
+                  key={`${suggestion.group}:${suggestion.insert}`}
+                  type="button"
+                  role="option"
+                  aria-selected={index === active}
+                  className={css.option}
+                  data-active={index === active || undefined}
+                  onMouseEnter={() => setActive(index)}
+                  onMouseDown={(event) => { event.preventDefault(); pick(suggestion) }}
+                >
+                  <span className={css.optionGroup}>{suggestion.group}</span>
+                  <span className={css.optionLabel}>{suggestion.label}</span>
+                  {suggestion.detail !== undefined && <span className={css.optionDetail}>{suggestion.detail}</span>}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className={css.quick}>
+          {quick.map(item => {
+            const on = words.includes(item.raw)
+            return (
+              <button
+                key={item.key}
+                type="button"
+                className={css.quickButton}
+                data-on={on || undefined}
+                aria-pressed={on}
+                title={item.raw}
+                onClick={() => onQuery(toggleToken(query, item.raw))}
+              >
+                {item.label}
+                {item.count !== null && <span className={css.quickCount}>{item.count}</span>}
+              </button>
+            )
+          })}
+          <button type="button" className={css.quickButton} data-on={flat || undefined} aria-pressed={flat} onClick={onToggleFlat} title={qt('query.flatHint')}>
+            {qt('query.flat')}
+          </button>
+        </div>
+      </div>
+
+      {tokens.length > 0 && (
+        <div className={css.chips}>
+          {tokens.map(token => (
+            <span key={token.raw} className={css.chip} data-invalid={!token.valid || undefined}>
+              <span className={css.chipKind}>{token.kind === 'text' ? qt('query.text') : token.kind}</span>
+              <span className={css.chipValue}>{token.raw.replace(/^-?[a-z]+:/, '') || token.raw}</span>
+              <button
+                type="button"
+                className={css.chipClose}
+                aria-label={qt('query.removeToken', { token: token.raw })}
+                onClick={() => onQuery(query.split(/\s+/).filter(word => word !== token.raw).join(' '))}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+          <span className={css.summary}>
+            {qt('query.summary', { matched: stats.matched, total: stats.total })}
+            {stats.hidden > 0 && <span className={css.hidden}>· {qt('query.hidden', { count: stats.hidden })}</span>}
+          </span>
+          <button type="button" className={css.showAll} onClick={() => onQuery('')}>{qt('query.showAll')}</button>
+        </div>
+      )}
+    </div>
+  )
+}

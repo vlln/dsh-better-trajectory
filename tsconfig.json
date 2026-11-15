@@ -9,8 +9,19 @@
     "skipLibCheck": true,
     "allowJs": true,
     "checkJs": false,
-    "types": ["react"],
-    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+    "types": [
+      "react"
+    ],
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "allowImportingTsExtensions": true
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.d.ts"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/**/*.d.ts"
+  ]
 }

@@ -47,8 +47,12 @@
     "verify": "npm run test && npm run typecheck && npm run build && npm run check"
   },
   "devDependencies": {
+    "@tanstack/react-virtual": "^3.14.26",
     "@types/react": "^18.3.12",
+    "diff": "^9.0.0",
     "esbuild": "^0.28.2",
+    "postcss": "^8.5.33",
+    "postcss-modules": "^9.0.1",
     "typescript": "^5.9.3"
   },
   "keywords": [

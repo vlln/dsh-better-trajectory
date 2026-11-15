@@ -17,6 +17,7 @@ import {
 import { recordsToJson, recordsToMarkdown } from './export.mjs'
 import { JsonViewer } from './json-viewer'
 import type { BetterTrajectoryKey } from './locales'
+import { TrajectoryView as VendoredTrajectoryView } from '../vendor/trajectory/TrajectoryView.tsx'
 import { IconChevron, IconClose, IconFilter, IconSearch } from './icons'
 
 /** 原生 TrajectoryView 组件句柄。 */
@@ -395,7 +396,7 @@ export function SupersetView({
     )
   }
 
-  const Native = native.component
+  const Native = VendoredTrajectoryView as unknown as React.ComponentType<any>
   const summaryKey: BetterTrajectoryKey = 'filter.summary'
 
   return (
@@ -762,6 +763,7 @@ export function SupersetView({
           useTrajectory={filteredHook}
           renderSlot={renderNativeSlot}
           jsonStringWrapping={jsonStringWrapping}
+          qt={translate}
           viewRequest={focusRequest ?? (rest as any).viewRequest}
           completeViewRequest={() => {
             setFocusRequest(null)
