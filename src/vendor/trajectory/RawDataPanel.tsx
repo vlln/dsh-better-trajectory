@@ -1,0 +1,234 @@
+// @ts-nocheck
+/** Inspector 的「原始」tab：可搜索 JSON 树。 */
+import { useMemo, useState } from 'react'
+import css from './RawDataPanel.module.css'
+
+interface RawDataPanelProps {
+  data: unknown
+  qt: (key: string, params?: Record<string, string | number>) => string
+}
+
+const MAX_PREVIEW = 220
+const ARRAY_PAGE = 50
+
+type Json = unknown
+
+function kindOf(value: Json): 'array' | 'object' | 'string' | 'number' | 'boolean' | 'null' | 'other' {
+  if (value === null) return 'null'
+  if (Array.isArray(value)) return 'array'
+  switch (typeof value) {
+    case 'object': return 'object'
+    case 'string': return 'string'
+    case 'number': return 'number'
+    case 'boolean': return 'boolean'
+    default: return 'other'
+  }
+}
+
+function entriesOf(value: Json): [string, Json][] {
+  if (Array.isArray(value)) return value.map((item, index) => [String(index), item])
+  if (typeof value === 'object' && value !== null) return Object.entries(value as Record<string, Json>)
+  return []
+}
+
+/** 命中查询的路径集合（含所有祖先）。 */
+function matchPaths(value: Json, term: string, path: string, out: Set<string>): boolean {
+  const kind = kindOf(value)
+  let hit = false
+  if (kind === 'array' || kind === 'object') {
+    for (const [key, child] of entriesOf(value)) {
+      const childPath = `${path}/${key}`
+      const childHit = matchPaths(child, term, childPath, out)
+      if (childHit || key.toLowerCase().includes(term)) {
+        out.add(childPath)
+        hit = true
+      }
+    }
+  }
+  if (!hit && (kind === 'string' || kind === 'number' || kind === 'boolean')) {
+    hit = String(value).toLowerCase().includes(term)
+  }
+  if (hit) out.add(path)
+  return hit
+}
+
+function preview(value: Json): string {
+  const kind = kindOf(value)
+  if (kind === 'array') return `[ ${(value as Json[]).length} items ]`
+  if (kind === 'object') return `{ ${Object.keys(value as object).length} items }`
+  return ''
+}
+
+function Leaf({ value, qt }: { value: Json; qt: RawDataPanelProps['qt'] }) {
+  const [open, setOpen] = useState(false)
+  const kind = kindOf(value)
+  if (kind === 'string') {
+    const long = (value as string).length > MAX_PREVIEW
+    const shown = open || !long ? (value as string) : `${(value as string).slice(0, MAX_PREVIEW)}…`
+    return (
+      <span className={css.string}>
+        "{shown}"
+        {long && (
+          <button type="button" className={css.inlineButton} onClick={() => setOpen(v => !v)}>
+            {open ? qt('raw.less') : qt('raw.more')}
+          </button>
+        )}
+      </span>
+    )
+  }
+  if (kind === 'number') return <span className={css.number}>{String(value)}</span>
+  if (kind === 'boolean') return <span className={css.boolean}>{String(value)}</span>
+  if (kind === 'null') return <span className={css.null}>null</span>
+  return <span className={css.other}>{String(value)}</span>
+}
+
+function Node({
+  name, value, path, depth, expanded, toggle, term, qt,
+}: {
+  name: string
+  value: Json
+  path: string
+  depth: number
+  expanded: Set<string>
+  toggle: (path: string) => void
+  term: string
+  qt: RawDataPanelProps['qt']
+}) {
+  const kind = kindOf(value)
+  const branch = kind === 'array' || kind === 'object'
+  const isOpen = expanded.has(path)
+  const [limit, setLimit] = useState(ARRAY_PAGE)
+  const entries = branch ? entriesOf(value) : []
+  const shown = entries.slice(0, limit)
+
+  return (
+    <div className={css.node} data-depth={depth}>
+      <div className={css.line} data-path={path}>
+        {branch ? (
+          <button type="button" className={css.chevron} data-open={isOpen || undefined} onClick={() => toggle(path)} aria-label={isOpen ? qt('raw.collapse') : qt('raw.expand')}>
+            ▸
+          </button>
+        ) : (
+          <span className={css.chevronSpace} />
+        )}
+        <span className={css.key}>{name}</span>
+        <span className={css.colon}>:</span>
+        {branch ? (
+          <span className={css.branch}>
+            {preview(value)}
+            <button
+              type="button"
+              className={css.copy}
+              title={qt('raw.copy')}
+              onClick={() => { void navigator.clipboard?.writeText(JSON.stringify(value, null, 2)) }}
+            >
+              ⧉
+            </button>
+          </span>
+        ) : (
+          <Leaf value={value} qt={qt} />
+        )}
+      </div>
+      {branch && isOpen && (
+        <div className={css.children}>
+          {shown.map(([key, child]) => (
+            <Node
+              key={`${path}/${key}`}
+              name={key}
+              value={child}
+              path={`${path}/${key}`}
+              depth={depth + 1}
+              expanded={expanded}
+              toggle={toggle}
+              term={term}
+              qt={qt}
+            />
+          ))}
+          {entries.length > limit && (
+            <button type="button" className={css.loadMore} onClick={() => setLimit(v => v + ARRAY_PAGE)}>
+              {qt('raw.loadMore', { count: entries.length - limit })}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * JSON 树，带搜索、展开全部与复制。
+ * @param props 数据与翻译函数。
+ * @returns 原始数据面板。
+ */
+export function RawDataPanel({ data, qt }: RawDataPanelProps) {
+  const [term, setTerm] = useState('')
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set(['']))
+  const query = term.trim().toLowerCase()
+
+  const matched = useMemo(() => {
+    if (query === '') return null
+    const set = new Set<string>()
+    matchPaths(data, query, '', set)
+    return set
+  }, [data, query])
+
+  const visible = useMemo(() => {
+    if (matched === null) return expanded
+    const next = new Set(expanded)
+    for (const path of matched) {
+      const parts = path.split('/').filter(Boolean)
+      let prefix = ''
+      for (const part of parts) {
+        prefix = `${prefix}/${part}`
+        next.add(prefix)
+      }
+      next.add('')
+    }
+    return next
+  }, [expanded, matched])
+
+  const toggle = (path: string) => {
+    setExpanded((current) => {
+      const next = new Set(current)
+      if (next.has(path)) next.delete(path)
+      else next.add(path)
+      return next
+    })
+  }
+
+  const expandAll = () => {
+    const next = new Set<string>([''])
+    const walk = (value: Json, path: string) => {
+      for (const [key, child] of entriesOf(value)) {
+        const childPath = `${path}/${key}`
+        if (kindOf(child) === 'object' || kindOf(child) === 'array') {
+          next.add(childPath)
+          walk(child, childPath)
+        }
+      }
+    }
+    walk(data, '')
+    setExpanded(next)
+  }
+
+  return (
+    <div className={css.root}>
+      <div className={css.toolbar}>
+        <input
+          className={css.search}
+          value={term}
+          placeholder={qt('raw.search')}
+          spellCheck={false}
+          onChange={(event) => setTerm(event.currentTarget.value)}
+        />
+        <button type="button" className={css.button} onClick={expandAll}>{qt('raw.expandAll')}</button>
+        <button type="button" className={css.button} onClick={() => setExpanded(new Set(['']))}>{qt('raw.collapseAll')}</button>
+        <button type="button" className={css.button} onClick={() => { void navigator.clipboard?.writeText(JSON.stringify(data, null, 2)) }}>{qt('raw.copyAll')}</button>
+        {matched !== null && <span className={css.count}>{qt('raw.matches', { count: matched.size })}</span>}
+      </div>
+      <div className={css.tree}>
+        <Node name="root" value={data} path="" depth={0} expanded={visible} toggle={toggle} term={query} qt={qt} />
+      </div>
+    </div>
+  )
+}

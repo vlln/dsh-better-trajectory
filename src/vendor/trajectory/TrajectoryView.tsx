@@ -601,6 +601,7 @@ export function TrajectoryView({
         <TrajectoryTable
           key={hiddenIndexes === null ? 'all' : `f${hiddenIndexes.size}:${[...hiddenIndexes].join(',')}`}
           t={t}
+          qt={typeof qt === 'function' ? qt : (key: string) => key}
           watchToolResult={watchToolResult}
           stringWrapping={jsonStringWrapping === undefined ? undefined : {
             ...jsonStringWrapping,

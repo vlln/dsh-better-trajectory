@@ -45,6 +45,7 @@ import type { TrajectoryKey, TrajectoryTranslate } from './locales.ts'
 import { COMPACTION_INTERRUPTED_ERROR } from './copy-codes.ts'
 import { codeProgram, PTC_TOOL_NAME, type CodeProgram } from './code-program.ts'
 import css from './TrajectoryTable.module.css'
+import { RawDataPanel } from './RawDataPanel.tsx'
 
 const BOTTOM_FOLLOW_THRESHOLD_PX = 2
 const OLDER_LOAD_THRESHOLD_PX = 48
@@ -189,12 +190,15 @@ type DetailTab =
   | 'options'
   | 'usage'
   | 'timing'
+  | 'error'
+  | 'data'
   | 'diff'
 type RecordState = 'complete' | 'running' | 'error'
 
 interface DetailTabItem {
   id: DetailTab
   labelKey: TrajectoryKey
+  custom?: boolean
 }
 
 interface ParentRecords {
@@ -220,7 +224,7 @@ interface DetailsResizeDrag {
   startToolRequestOffset: number
 }
 
-const DETAILS_MIN_WIDTH = 320
+const DETAILS_MIN_WIDTH = 360
 const DETAILS_MAX_WIDTH = 720
 const TABLE_MIN_WIDTH = 280
 const DETAILS_RESIZE_STEP = 16
@@ -991,6 +995,32 @@ function markdownSource(record: TableRecord): string | undefined {
   return undefined
 }
 
+function parseMaybeJson(text: string | undefined): unknown {
+  if (text === undefined || text === '') return undefined
+  try { return JSON.parse(text) } catch { return text }
+}
+
+/** 「原始」tab 的结构化视图。 */
+function rawDataFor(record: TableRecord): unknown {
+  const cell = record.cell
+  const data: Record<string, unknown> = {
+    kind: cell.kind,
+    tool: cell.toolName ?? null,
+    callId: cell.callId ?? null,
+    status: cell.isError ? 'error' : 'ok',
+    turn: record.turn,
+    group: record.group,
+    durationMs: cell.timeSeconds === null ? null : Math.round(cell.timeSeconds * 1000),
+  }
+  const args = parseMaybeJson(cell.inputDetail)
+  if (args !== undefined) data.args = args
+  const result = parseMaybeJson(cell.outputDetail ?? cell.result)
+  if (result !== undefined) data.result = result
+  const schema = parseMaybeJson(cell.schemaDetail)
+  if (schema !== undefined) data.schema = schema
+  return data
+}
+
 function detailTabs(record: TableRecord): readonly DetailTabItem[] {
   if (record.cell.kind === 'system') {
     if (record.cell.promptDetail === undefined && record.cell.systemPromptDetail !== undefined) {
@@ -1014,6 +1044,21 @@ function detailTabs(record: TableRecord): readonly DetailTabItem[] {
       ...(record.cell.messageSource === undefined
         ? []
         : [{ id: 'source', labelKey: 'tab.source' } as const]),
+    ]
+  }
+  if (record.cell.kind === 'tool' || record.cell.kind === 'subtool') {
+    return [
+      { id: 'overview', labelKey: 'tab.summary' },
+      ...(record.cell.inputDetail
+        ? [{ id: 'input', labelKey: 'tab.payload' } as const]
+        : []),
+      ...(record.cell.outputDetail || record.cell.result
+        ? [{ id: 'output', labelKey: 'tab.result' } as const]
+        : []),
+      ...(record.cell.isError
+        ? [{ id: 'error', labelKey: 'tab.error', custom: true } as const]
+        : []),
+      { id: 'data', labelKey: 'tab.rawData', custom: true },
     ]
   }
   return [
@@ -2094,6 +2139,7 @@ function OverviewSection({
  * @returns The ledger and an optional local record inspector.
  */
 export function TrajectoryTable({
+  qt = (key: string) => key,
   watchToolResult,
   t,
   stringWrapping,
@@ -3150,6 +3196,39 @@ export function TrajectoryTable({
               <span aria-hidden="true">×</span>
             </button>
           </div>
+          {!promptSelected && selected !== undefined
+            && (selected.cell.kind === 'tool' || selected.cell.kind === 'subtool') && (
+            <div className={css.detailChips}>
+              {selected.cell.toolName !== undefined && (
+                <span className={css.detailChip}>
+                  <span className={css.detailChipLabel}>{qt('chip.tool')}</span>
+                  <span className={css.detailChipValue}>{selected.cell.toolName}</span>
+                </span>
+              )}
+              <span className={css.detailChip} data-tone={selected.cell.isError ? 'error' : undefined}>
+                <span className={css.detailChipLabel}>{qt('chip.status')}</span>
+                <span className={css.detailChipValue}>{statusLabel(stateOf(selected), t)}</span>
+              </span>
+              {selected.turn !== null && (
+                <span className={css.detailChip}>
+                  <span className={css.detailChipLabel}>{qt('chip.turn')}</span>
+                  <span className={css.detailChipValue}>#{selected.turn}</span>
+                </span>
+              )}
+              {selected.cell.timeSeconds !== null && (
+                <span className={css.detailChip}>
+                  <span className={css.detailChipLabel}>{qt('chip.duration')}</span>
+                  <span className={css.detailChipValue}>{formatDurationMs(Math.round(selected.cell.timeSeconds * 1000), t)}</span>
+                </span>
+              )}
+              {selected.cell.callId !== undefined && (
+                <span className={css.detailChip}>
+                  <span className={css.detailChipLabel}>id</span>
+                  <span className={css.detailChipValue}>{selected.cell.callId}</span>
+                </span>
+              )}
+            </div>
+          )}
           <div className={css.detailTabs} role="tablist" aria-label={t('details.event')}>
             {selectedTabs.map(tab => (
               <button
@@ -3162,7 +3241,7 @@ export function TrajectoryTable({
                 className={activeTab === tab.id ? `${css.detailTab} ${css.detailTabActive}` : css.detailTab}
                 onClick={() => { activateTab(tab.id) }}
               >
-                {t(tab.labelKey)}
+                {tab.custom === true ? qt(tab.labelKey) : t(tab.labelKey)}
               </button>
             ))}
           </div>
@@ -3185,7 +3264,7 @@ export function TrajectoryTable({
                   data-summary-scroll-region=""
                 >
                   <div>
-                    <dt>{t('details.status')}</dt>
+                    <dt>{qt('chip.status')}</dt>
                     <dd className={selectedRequestState === 'error' ? css.error : undefined}>
                       {statusLabel(selectedRequestState, t)}
                     </dd>
@@ -3350,7 +3429,7 @@ export function TrajectoryTable({
                   data-summary-scroll-region=""
                 >
                   <div>
-                    <dt>{t('details.status')}</dt>
+                    <dt>{qt('chip.status')}</dt>
                     <dd className={selectedState === 'error' ? css.error : undefined}>
                       {statusLabel(selectedState, t)}
                     </dd>
@@ -3467,7 +3546,7 @@ export function TrajectoryTable({
                     </div>
                   )}
                   <div>
-                    <dt>{t('details.status')}</dt>
+                    <dt>{qt('chip.status')}</dt>
                     <dd className={selectedState === 'error' ? css.error : undefined}>
                       {statusLabel(selectedState, t)}
                     </dd>
@@ -3545,6 +3624,25 @@ export function TrajectoryTable({
                   )}
                 </div>
               </>
+            )}
+            {!promptSelected && selected !== undefined && activeTab === 'error' && (
+              <div className={css.errorPanel}>
+                <div className={css.errorBanner} role="alert">
+                  <span className={css.errorDot} aria-hidden="true" />
+                  <strong>{qt('chip.status')}: {statusLabel(stateOf(selected), t)}</strong>
+                  <button
+                    type="button"
+                    className={css.errorCopy}
+                    onClick={() => { void navigator.clipboard?.writeText(selected.cell.outputDetail ?? selected.cell.result ?? '') }}
+                  >
+                    {qt('error.copy')}
+                  </button>
+                </div>
+                <pre className={css.errorBody}>{selected.cell.outputDetail ?? selected.cell.result ?? ''}</pre>
+              </div>
+            )}
+            {!promptSelected && selected !== undefined && activeTab === 'data' && (
+              <RawDataPanel data={rawDataFor(selected)} qt={qt} />
             )}
             {!promptSelected && selected !== undefined && activeTab === 'rendered' && (
               <MarkdownRecordContent
