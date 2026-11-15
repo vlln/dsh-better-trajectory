@@ -2209,11 +2209,6 @@ export function TrajectoryTable({
   const followsTableTail = useRef(false)
   const tableScrollInitialized = useRef(false)
   const [tableScrollReady, setTableScrollReady] = useState(false)
-  useEffect(() => {
-    if (hiddenIndexes === null) return
-    const pane = tablePaneRef.current
-    if (pane !== null) pane.scrollTop = 0
-  }, [hiddenIndexes])
   const pendingScrollRecordId = useRef<string | null>(null)
   const loadingOlder = useRef(false)
   const [olderLoading, setOlderLoading] = useState(false)
@@ -2358,6 +2353,10 @@ export function TrajectoryTable({
     }
     return indexes
   }, [projectedVirtualRows])
+  useEffect(() => {
+    rowVirtualizer.measure()
+  }, [hiddenIndexes, rowVirtualizer])
+
   const virtualItems = virtualizationEnabled ? rowVirtualizer.getVirtualItems() : []
   const virtualTop = Math.max(0, (virtualItems[0]?.start ?? 0) - virtualScrollMargin)
   const virtualBottom = virtualItems.length === 0
