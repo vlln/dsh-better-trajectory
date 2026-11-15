@@ -2575,3 +2575,164 @@ tr[data-selected='true'][data-error='true'] {
   transition: none;
   user-select: none;
 }
+
+/* ---------- hierarchy: identity + nesting ---------- */
+tr[data-kind='user'] {
+  background: var(--bt-surface-2, #f6f7f9);
+}
+
+tr[data-kind='user'] .rowName {
+  color: var(--bt-accent, #2563eb);
+  font-weight: 600;
+}
+
+tr[data-kind='user'] .rowSub {
+  color: var(--bt-text, #1c2128);
+}
+
+tr[data-kind='message'] .rowName,
+tr[data-kind='system'] .rowName,
+tr[data-kind='context'] .rowName,
+tr[data-kind='compacted'] .rowName {
+  color: var(--bt-text-3, #9aa1ab);
+  font-weight: 400;
+}
+
+tr[data-kind='context'] .rowSub {
+  color: var(--bt-text-3, #9aa1ab);
+  font-size: 10.5px;
+}
+
+tr[data-kind='tool'] .rowName,
+tr[data-kind='subtool'] .rowName {
+  color: var(--bt-text, #1c2128);
+}
+
+tr[data-kind='tool'] .content,
+tr[data-kind='subtool'] .content {
+  position: relative;
+}
+
+tr[data-kind='tool'] .content::before,
+tr[data-kind='subtool'] .content::before {
+  content: '';
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 13px;
+  width: 1px;
+  background: var(--bt-line-soft, #f0f2f4);
+}
+
+tr[data-kind='tool'] .rowLine {
+  border-left: 0;
+}
+
+tr[data-turn-start='true'] {
+  box-shadow: inset 0 1px 0 var(--bt-line-soft, #f0f2f4);
+}
+
+tr[data-kind='message'] .rowSub {
+  color: var(--bt-text-2, #5b6470);
+}
+
+.rowClock {
+  font-weight: 500;
+}
+
+/* second pass: message identity */
+tr[data-kind='message'] .rowSub {
+  color: var(--bt-text, #1c2128);
+  font-size: 12px;
+}
+
+tr[data-kind='message'] .rowName {
+  color: var(--bt-text-3, #9aa1ab);
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+}
+
+tr[data-kind='tool'] .rowName,
+tr[data-kind='subtool'] .rowName {
+  font-weight: 600;
+}
+
+tr[data-kind='tool'] .content::before,
+tr[data-kind='subtool'] .content::before {
+  background: var(--bt-line, #e6e8eb);
+}
+
+tr[data-kind='user'] .rowSub {
+  font-size: 12px;
+}
+
+tr[data-kind='user'] {
+  box-shadow: inset 2px 0 0 var(--bt-accent, #2563eb);
+}
+
+/* group bands: assistant + its tools share one tint */
+tr[data-group-parity='1'] {
+  background: color-mix(in srgb, var(--bt-surface-2, #f6f7f9) 55%, transparent);
+}
+
+tr[data-group-parity='1']:hover,
+tr[data-group-parity='0']:hover {
+  background: var(--bt-surface-3, #eef0f3);
+}
+
+tr[data-kind='user'] {
+  background: color-mix(in srgb, var(--bt-accent, #2563eb) 7%, transparent);
+  box-shadow: inset 2px 0 0 var(--bt-accent, #2563eb);
+}
+
+/* assistant text wraps: the strongest identity cue against one-line tool rows */
+tr[data-kind='message'] .rowLine {
+  height: auto;
+  min-height: 28px;
+  align-items: flex-start;
+  padding: 5px 0;
+  box-sizing: border-box;
+}
+
+tr[data-kind='message'] .rowName {
+  padding-top: 1px;
+}
+
+tr[data-kind='message'] .rowSub {
+  white-space: normal;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  line-height: 1.55;
+}
+
+tr[data-kind='tool'] .rowSub,
+tr[data-kind='subtool'] .rowSub {
+  color: var(--bt-text-3, #9aa1ab);
+  font-size: 10px;
+}
+
+tr[data-kind='tool'] .rowName,
+tr[data-kind='subtool'] .rowName {
+  font-size: 11px;
+}
+
+tr[data-kind='context'] .rowLine,
+tr[data-kind='system'] .rowLine {
+  height: 24px;
+}
+
+tr[data-kind='context'] .rowSub,
+tr[data-kind='system'] .rowSub {
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+tr[data-kind='user'] .rowLine {
+  min-height: 32px;
+}
+
+tr[data-kind='user'] .rowSub {
+  font-weight: 500;
+}

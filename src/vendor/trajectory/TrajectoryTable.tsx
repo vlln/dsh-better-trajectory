@@ -141,6 +141,7 @@ interface TableRecord {
   turn: number | null
   section: number
   group: string
+  groupIndex?: number
   groupStart: boolean
   turnStart: boolean
   cell: TrajectoryCellProps
@@ -524,9 +525,11 @@ export interface TrajectoryUsage {
 }
 
 function flattenRecords(turns: readonly TrajectoryTurnModel[]): TableRecord[] {
+  let groupIndex = -1
   return turns.flatMap((turn, section) => {
     let firstInSection = true
     const records = turn.groups.flatMap((group) => {
+      groupIndex += 1
       return group.cells.map((cell, index) => {
         const turnStart = firstInSection
           && cell.requestOnly !== true
@@ -537,6 +540,7 @@ function flattenRecords(turns: readonly TrajectoryTurnModel[]): TableRecord[] {
           turn: turn.turn,
           section,
           group: group.title,
+          groupIndex,
           groupStart: index === 0,
           turnStart,
           cell,
@@ -2936,7 +2940,8 @@ export function TrajectoryTable({
                   const rawSub = toolLike
                     ? String(record.cell.inputDetail ?? '')
                     : String(displayText ?? '')
-                  const rowSub = rawSub.replace(/\s+/g, ' ').trim()
+                  const flatSub = rawSub.replace(/\s+/g, ' ').trim()
+                  const rowSub = toolLike && flatSub.length > 180 ? `${flatSub.slice(0, 180)}…` : flatSub
                   const rowTone = record.cell.isError
                     ? 'error'
                     : stateOf(record) === 'running' ? 'running' : 'ok'
@@ -2964,6 +2969,7 @@ export function TrajectoryTable({
                           })}
                       aria-selected={!isCollapsedSummary && !isRequestOnly && selectedIndex === record.cell.index}
                       data-kind={record.cell.kind}
+                      data-group-parity={(record.groupIndex ?? 0) % 2}
                       data-trajectory-row-key={trajectoryVirtualRecordKey(record)}
                       data-virtual-position={virtualizationEnabled ? position : undefined}
                       data-record-index={!isCollapsedSummary && !isRequestOnly
@@ -3034,7 +3040,7 @@ export function TrajectoryTable({
                     >
                       <td className={css.event}>
                         <span className={css.rowClock}>
-                          {rowStartedAt != null ? formatClock(rowStartedAt) : ''}
+                          {record.turnStart && rowStartedAt != null ? formatClock(rowStartedAt) : ''}
                         </span>
                       </td>
                       <td className={css.content}>
