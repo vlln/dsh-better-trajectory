@@ -13,6 +13,8 @@ import {
   deriveTrajectoryTimeline,
   formatTimelineOffset,
   type TrajectoryTimelineMode,
+  type TrajectoryTimelineModel,
+  type TrajectoryTimelineSpan,
   type TrajectoryTimeRange,
 } from './timeline.ts'
 import { HoverCard } from './HoverCard.tsx'
@@ -225,6 +227,137 @@ function EarlierHistoryBoundary({ loading, t }: { loading: boolean; t: Trajector
   )
 }
 
+/**
+ * The span layer, memoized by low-frequency props.
+ *
+ * Hovering and dragging update the parent on every pointer move (hover line,
+ * draft range, panning), but a span's geometry only depends on the model, the
+ * domain and the selection. Passing the hovered *index* instead of the whole
+ * hover point means this layer re-renders when the pointer crosses a span, not
+ * on every pixel — with ~700 spans that is the difference between a smooth drag
+ * and a stuttering one.
+ */
+const TimelineLanes = memo(function TimelineLanes({
+  model,
+  fullDuration,
+  domainStart,
+  domainDuration,
+  domainStyle,
+  animateViewport,
+  selectedIndex,
+  hoveredIndex,
+  activeRange,
+  searchMatchIndexes,
+  detailByIndex,
+  mode,
+  onTipEnter,
+  onTipMove,
+  onTipLeave,
+}: {
+  model: TrajectoryTimelineModel
+  fullDuration: number
+  domainStart: number
+  domainDuration: number
+  domainStyle: CSSProperties | undefined
+  animateViewport: boolean
+  selectedIndex: number | null
+  hoveredIndex: number | null
+  activeRange: TrajectoryTimeRange | null
+  searchMatchIndexes: Set<number> | null
+  detailByIndex: Map<number, TimelineRecordDetail | undefined>
+  mode: TrajectoryTimelineMode
+  onTipEnter: (span: TimelineSpan, event: { clientX: number; clientY: number }) => void
+  onTipMove: (event: { clientX: number; clientY: number }) => void
+  onTipLeave: () => void
+}) {
+  return (
+    <>
+      <div
+        className={css.turnBoundaries}
+        data-animate-viewport={animateViewport || undefined}
+        aria-hidden="true"
+        style={domainStyle}
+      >
+        {model.turnBoundaries
+          .filter(boundary =>
+            boundary.time > model.start
+            && boundary.time >= domainStart
+            && boundary.time <= domainStart + domainDuration)
+          .map(boundary => (
+            <span
+              className={css.turnBoundary}
+              data-turn={boundary.turn}
+              key={boundary.turn}
+              style={{
+                '--trajectory-turn-left':
+                  `${(boundary.time - model.start) / fullDuration * 100}%`,
+              } as CSSProperties}
+            />
+          ))}
+      </div>
+      <div
+        className={css.lanes}
+        data-animate-viewport={animateViewport || undefined}
+        data-timeline-domain
+        style={domainStyle}
+      >
+        {model.spans
+          .filter(span =>
+            span.index === selectedIndex
+            || (span.end >= domainStart && span.start <= domainStart + domainDuration))
+          .map((span) => {
+            const left = (span.start - model.start) / fullDuration
+            const width = (span.end - span.start) / fullDuration
+            const widthPercent = width * 100
+            const detail = detailByIndex.get(span.index)
+            const ttftMs = detail?.ttftMs
+            const decodingMs = detail?.decodingMs
+            const ttftFraction = ttftMs === undefined
+              || decodingMs === undefined
+              || ttftMs + decodingMs <= 0
+              ? null
+              : ttftMs / (ttftMs + decodingMs)
+            return (
+              <Fragment key={span.index}>
+                <span
+                  aria-hidden="true"
+                  className={css.span}
+                  onMouseEnter={(event) => { onTipEnter(span, event) }}
+                  onMouseMove={onTipMove}
+                  onMouseLeave={onTipLeave}
+                  data-timeline-span={span.kind}
+                  data-timeline-record-index={span.index}
+                  data-assistant-timing={ttftFraction === null ? undefined : 'true'}
+                  data-error={span.isError || undefined}
+                  data-equal-duration={mode === 'time' || undefined}
+                  data-current={span.index === selectedIndex || undefined}
+                  data-hovered={hoveredIndex === span.index || undefined}
+                  data-search-match={searchMatchIndexes === null
+                    ? undefined
+                    : searchMatchIndexes.has(span.index) ? 'true' : 'false'}
+                  data-selected={activeRange === null
+                    ? undefined
+                    : span.start <= activeRange.end && span.end >= activeRange.start
+                      ? 'true'
+                      : 'false'}
+                  style={{
+                    '--trajectory-span-left': `${left * 100}%`,
+                    '--trajectory-span-width': `${widthPercent}%`,
+                    '--trajectory-span-gap': `min(${widthPercent * 0.08}%, 1px)`,
+                    '--trajectory-span-lane': span.lane,
+                    ...(ttftFraction === null
+                      ? {}
+                      : { '--trajectory-assistant-ttft': `${ttftFraction * 100}%` }),
+                  } as CSSProperties}
+                />
+              </Fragment>
+            )
+          })}
+      </div>
+    </>
+  )
+})
+
 /** Overview renderer with drag ranges, click-sized focus, and Escape reset. */
 export const TrajectoryTimeline = memo(function TrajectoryTimeline({
   t,
@@ -363,13 +496,13 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
     }
     requestEarlier()
   }, [requestEarlier, showsEarlierBoundary])
-  const projectedDomainStyle = model === null
+  const projectedDomainStyle = useMemo(() => (model === null
     ? undefined
     : {
       '--trajectory-domain-left':
         `${-(domainStart - model.start) / domainDuration * 100}%`,
       '--trajectory-domain-width': `${fullDuration / domainDuration * 100}%`,
-    } as CSSProperties
+    } as CSSProperties), [domainDuration, domainStart, fullDuration, model])
   const committed = model === null || range === null
     ? null
     : rangeFraction(range, domainStart, domainDuration, model.start, model.end)
@@ -410,6 +543,21 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
     root.addEventListener('wheel', onWheel, { passive: false })
     return () => { root.removeEventListener('wheel', onWheel) }
   }, [domainDuration, domainStart, fullDuration, mode, model])
+
+  const onTipEnter = useCallback((span: TrajectoryTimelineSpan, event: { clientX: number; clientY: number }) => {
+    setTip({
+      x: event.clientX,
+      y: event.clientY,
+      kind: span.kind,
+      detail: detailByIndex.get(span.index),
+      isError: span.isError,
+    })
+  }, [detailByIndex])
+  const onTipMove = useCallback((event: { clientX: number; clientY: number }) => {
+    setTip(current => current === null ? current : { ...current, x: event.clientX, y: event.clientY })
+  }, [])
+  const onTipLeave = useCallback(() => { setTip(null) }, [])
+
 
   if (model === null) {
     return (
@@ -675,94 +823,25 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
               />
             </>
           )}
-          <div
-            className={css.turnBoundaries}
-            data-animate-viewport={animateViewport || undefined}
-            aria-hidden="true"
-            style={projectedDomainStyle}
-          >
-            {model.turnBoundaries
-              .filter(boundary =>
-                boundary.time > model.start
-                && boundary.time >= domainStart
-                && boundary.time <= domainStart + domainDuration)
-              .map(boundary => (
-                <span
-                  className={css.turnBoundary}
-                  data-turn={boundary.turn}
-                  key={boundary.turn}
-                  style={{
-                    '--trajectory-turn-left':
-                      `${(boundary.time - model.start) / fullDuration * 100}%`,
-                  } as CSSProperties}
-                />
-              ))}
-          </div>
-          <div
-            className={css.lanes}
-            data-animate-viewport={animateViewport || undefined}
-            data-timeline-domain
-            style={projectedDomainStyle}
-          >
-            {model.spans
-              .filter(span =>
-                span.index === selectedIndex
-                || (span.end >= domainStart && span.start <= domainStart + domainDuration))
-              .map((span) => {
-                const left = (span.start - model.start) / fullDuration
-                const width = (span.end - span.start) / fullDuration
-                const widthPercent = width * 100
-                const detail = detailByIndex.get(span.index)
-                const ttftMs = detail?.ttftMs
-                const decodingMs = detail?.decodingMs
-                const ttftFraction = ttftMs === undefined
-                  || decodingMs === undefined
-                  || ttftMs + decodingMs <= 0
-                  ? null
-                  : ttftMs / (ttftMs + decodingMs)
-                return (
-                  <Fragment key={span.index}>
-                    <span
-                      aria-hidden="true"
-                      className={css.span}
-                      onMouseEnter={(event) => {
-                        setTip({ x: event.clientX, y: event.clientY, kind: span.kind, detail, isError: span.isError })
-                      }}
-                      onMouseMove={(event) => {
-                        setTip(current => current === null
-                          ? current
-                          : { ...current, x: event.clientX, y: event.clientY })
-                      }}
-                      onMouseLeave={() => setTip(null)}
-                      data-timeline-span={span.kind}
-                      data-timeline-record-index={span.index}
-                      data-assistant-timing={ttftFraction === null ? undefined : 'true'}
-                      data-error={span.isError || undefined}
-                      data-equal-duration={mode === 'time' || undefined}
-                      data-current={span.index === selectedIndex || undefined}
-                      data-hovered={hover?.recordIndex === span.index || undefined}
-                      data-search-match={searchMatchIndexes === null
-                        ? undefined
-                        : searchMatchIndexes.has(span.index) ? 'true' : 'false'}
-                      data-selected={activeRange === null
-                        ? undefined
-                        : span.start <= activeRange.end && span.end >= activeRange.start
-                          ? 'true'
-                          : 'false'}
-                      style={{
-                        '--trajectory-span-left': `${left * 100}%`,
-                        '--trajectory-span-width': `${widthPercent}%`,
-                        '--trajectory-span-gap': `min(${widthPercent * 0.08}%, 1px)`,
-                        '--trajectory-span-lane': span.lane,
-                        ...(ttftFraction === null
-                          ? {}
-                          : { '--trajectory-assistant-ttft': `${ttftFraction * 100}%` }),
-                      } as CSSProperties}
-                    />
-                  </Fragment>
-                )
-              })}
-          </div>
+          {model !== null && (
+            <TimelineLanes
+              model={model}
+              fullDuration={fullDuration}
+              domainStart={domainStart}
+              domainDuration={domainDuration}
+              domainStyle={projectedDomainStyle}
+              animateViewport={animateViewport}
+              selectedIndex={selectedIndex}
+              hoveredIndex={hover?.recordIndex ?? null}
+              activeRange={activeRange}
+              searchMatchIndexes={searchMatchIndexes}
+              detailByIndex={detailByIndex}
+              mode={mode}
+              onTipEnter={onTipEnter}
+              onTipMove={onTipMove}
+              onTipLeave={onTipLeave}
+            />
+          )}
         </div>
       </div>
     </section>
