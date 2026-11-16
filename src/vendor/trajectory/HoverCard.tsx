@@ -14,11 +14,6 @@ export interface HoverCardRow {
   value: ReactNode
 }
 
-export interface HoverCardHint {
-  key: string
-  text: string
-}
-
 export function HoverCard({
   x,
   y,
@@ -28,7 +23,6 @@ export function HoverCard({
   isError,
   rows,
   extra,
-  hints,
 }: {
   x: number
   y: number
@@ -39,7 +33,6 @@ export function HoverCard({
   isError?: boolean
   rows: HoverCardRow[]
   extra?: string
-  hints?: readonly HoverCardHint[]
 }) {
   const left = Math.max(8, Math.min(x + 14, window.innerWidth - 320))
   const top = Math.max(8, Math.min(y + 16, window.innerHeight - 240))
@@ -64,16 +57,6 @@ export function HoverCard({
         </dl>
       )}
       {extra !== undefined && extra !== '' && <p className={css.extra}>{extra}</p>}
-      {hints !== undefined && hints.length > 0 && (
-        <dl className={css.hints}>
-          {hints.map(hint => (
-            <Fragment key={hint.key}>
-              <dt>{hint.key}</dt>
-              <dd>{hint.text}</dd>
-            </Fragment>
-          ))}
-        </dl>
-      )}
     </div>
   )
 }

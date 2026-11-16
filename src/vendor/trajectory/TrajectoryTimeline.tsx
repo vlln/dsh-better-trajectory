@@ -137,7 +137,7 @@ function formatRecordedTime(timestamp: number): string {
 /** Props for the fixed full-domain overview above the trajectory ledger. */
 export interface TrajectoryTimelineProps {
   t: TrajectoryTranslate
-  /** Plugin-scoped strings (cursor card labels, hints). */
+  /** Plugin-scoped strings (cursor card labels). */
   qt: (key: string, params?: Record<string, string | number>) => string
   turns: readonly TrajectoryTurnModel[]
   mode: TrajectoryTimelineMode
@@ -899,9 +899,15 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
           : model.spans.find(candidate => candidate.index === hover.recordIndex)
         const formatValue = (value: number): string => formatDomainValue(value, mode, model.start)
         const detail = span === undefined ? undefined : detailByIndex.get(span.index)
-        /* the window's own length belongs to the window row: in sequence mode the
-           axis is ordinal, so there is no duration to attach to the cursor */
-        const windowText = `${formatValue(domainStart)} – ${formatValue(domainStart + domainDuration)}`
+        /* the count follows what the user is looking at: a committed or dragged
+           range wins over the visible window, and the window itself is already
+           the whole strip — printing its range again was a constant line */
+        const counted = activeRange === null
+          ? model.spans.filter(candidate =>
+            candidate.end >= domainStart
+            && candidate.start <= domainStart + domainDuration).length
+          : model.spans.filter(candidate =>
+            candidate.start <= activeRange.end && candidate.end >= activeRange.start).length
         const rows = [
           { label: qt('timeline.cursor'), value: formatValue(cursorValue) },
           ...(span === undefined
@@ -918,14 +924,9 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
                 ? qt('timeline.records', { count: Math.round(span.end - span.start) })
                 : formatOffset(detail.durationMs),
             }]),
-          { label: qt('timeline.window'), value: windowText },
           {
-            label: qt('timeline.count'),
-            value: qt('timeline.records', {
-              count: model.spans.filter(candidate =>
-                candidate.end >= domainStart
-                && candidate.start <= domainStart + domainDuration).length,
-            }),
+            label: activeRange === null ? qt('timeline.count') : qt('timeline.selected'),
+            value: qt('timeline.records', { count: counted }),
           },
         ]
         return (
@@ -943,11 +944,6 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
               })}
             isError={span?.isError === true || undefined}
             rows={rows}
-            hints={[
-              { key: qt('timeline.hintClick'), text: qt('timeline.hintClickText') },
-              { key: qt('timeline.hintDrag'), text: qt('timeline.hintDragText') },
-              { key: qt('timeline.hintScroll'), text: qt('timeline.hintScrollText') },
-            ]}
           />
         )
       })()}
