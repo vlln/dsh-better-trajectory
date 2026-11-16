@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- 修折叠：把某个回合折叠后再也展不开。折叠行原先取回合的**第一条记录**，而第一轮的第一条是「初始系统提示词」（`turnStart` 对 system 恒为假），于是摘要行拿不到折叠控件，点不回展开。现在折叠行锚定回合的第一条**内容**记录（非 system / 非 request-only），并显式标上 `turnStart` + `turnEnd`；摘要文案也从「初始系统提示词」变成用户那句请求。
+- 折叠摘要的「N 步」只数**有请求的分组**（`requestGroups`），系统/用户前导分组不再把每轮都算成 `2 步`。
+- 删掉 fork 里被 chips 方案取代的原生折叠函数（`summarizeTurn` / `collapseTurnRecords` / `summarizeCalls` / `collapseCallRecords`，约 120 行死代码）——同一种折叠不该有两套实现。
 - 筛选不再只裁工具调用：工具 / 子调用 / 助手 / 用户 / 上下文 / 压缩点过**同一份判据**（`matchesFilters`），不命中就隐藏。此前 `status:error` 会把不相关的助手消息全留在列表里，反而看不出筛掉了什么。
 - 查询新增 `type:`：`type:call|message|user|system|context|compacted`，支持 `|` 与 `-`，`assistant` 是 `message` 的别名；建议菜单加「类型」组。`tool:` 现在只可能命中调用（不再拿消息的显示名去比）。
 - 查询条右端常驻总统计：`13 条记录 · 5 次调用 · 3 个错误 · 6.3s`（窗口总时长，>24h 显示 `19d18h`）。查询生效时数字降为次级色，命中数留在 chip 行，两处不重复。

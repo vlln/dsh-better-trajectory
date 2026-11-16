@@ -664,64 +664,6 @@ function indexRequestBoundaryRuns(
   return indexes
 }
 
-function summarizeTurn(
-  records: readonly TableRecord[],
-  requestGroups: ReadonlySet<string>,
-  t: TrajectoryTranslate,
-): string {
-  const steps = new Set(
-    records
-      .map(record => requestKey(record.turn, record.group))
-      .filter(key => requestGroups.has(key)),
-  ).size
-  const toolCalls = records.filter(record =>
-    record.cell.kind === 'tool' || record.cell.kind === 'subtool',
-  ).length
-  return [
-    t(steps === 1 ? 'summary.steps.one' : 'summary.steps.other', { count: steps }),
-    t(toolCalls === 1 ? 'summary.toolCalls.one' : 'summary.toolCalls.other', {
-      count: toolCalls,
-    }),
-  ].join(' · ')
-}
-
-function collapseTurnRecords(
-  records: readonly TableRecord[],
-  collapsedTurns: ReadonlySet<number>,
-  requestGroups: ReadonlySet<string>,
-  t: TrajectoryTranslate,
-): TableRecord[] {
-  const recordsByTurn = new Map<number, TableRecord[]>()
-  for (const record of records) {
-    if (record.turn === null) continue
-    const turnRecords = recordsByTurn.get(record.turn) ?? []
-    turnRecords.push(record)
-    recordsByTurn.set(record.turn, turnRecords)
-  }
-  return records.flatMap((record) => {
-    if (record.turn === null || !collapsedTurns.has(record.turn)) return [record]
-    const turnRecords = recordsByTurn.get(record.turn) ?? [record]
-    if (record.cell.requestOnly === true || record.cell.kind === 'system') return [record]
-    const contentRecords = turnRecords.filter(candidate =>
-      candidate.cell.requestOnly !== true && candidate.cell.kind !== 'system')
-    if (contentRecords.length <= 1) return [record]
-    if (record.cell.index !== contentRecords[0]?.cell.index) return []
-    return [
-      { ...record, turnEnd: false },
-      {
-        ...record,
-        groupStart: false,
-        turnStart: false,
-        turnEnd: true,
-        collapsedSummary: summarizeTurn(contentRecords.slice(1), requestGroups, t),
-        collapsedSummaryKind: 'turn',
-      },
-    ]
-  })
-}
-
-/** Message cell indexes that are followed by at least one tool call. One pass, so
- *  the fold pass below does not turn into O(messages x records). */
 function messageIndexesWithCalls(records: readonly TableRecord[]): Set<number> {
   const out = new Set<number>()
   let message: number | null = null
@@ -734,62 +676,6 @@ function messageIndexesWithCalls(records: readonly TableRecord[]): Set<number> {
     } else {
       message = null
     }
-  }
-  return out
-}
-
-function summarizeCalls(
-  records: readonly TableRecord[],
-  t: TrajectoryTranslate,
-): string {
-  const names = [...new Set(records.map((record) => {
-    const separator = record.cell.text.indexOf(' · ')
-    return separator === -1 ? record.cell.text : record.cell.text.slice(0, separator)
-  }).filter(name => name !== ''))]
-  const count = records.length
-  const summary = t(count === 1 ? 'summary.toolCalls.one' : 'summary.toolCalls.other', { count })
-  return names.length > 0 ? `${summary} · ${names.join(', ')}` : summary
-}
-
-function collapseCallRecords(
-  records: readonly TableRecord[],
-  collapsedIds: ReadonlySet<string>,
-  kind: 'assistant' | 'tool',
-  t: TrajectoryTranslate,
-): TableRecord[] {
-  const out: TableRecord[] = []
-  for (let i = 0; i < records.length; i++) {
-    const record = records[i]
-    if (record === undefined) continue
-    out.push(record)
-    if (
-      record.collapsedSummary !== undefined
-      || record.cell.kind !== (kind === 'assistant' ? 'message' : 'tool')
-      || !collapsedIds.has(trajectoryRecordId(record.cell))
-    ) continue
-    const calls: TableRecord[] = []
-    for (let j = i + 1; j < records.length; j++) {
-      const candidate = records[j]
-      if (
-        candidate === undefined
-        || candidate.collapsedSummary !== undefined
-        || (candidate.cell.kind !== 'tool' && candidate.cell.kind !== 'subtool')
-        || (kind === 'tool' && candidate.cell.kind !== 'subtool')
-      ) break
-      calls.push(candidate)
-    }
-    if (calls.length === 0) continue
-    const last = calls.at(-1)
-    out[out.length - 1] = { ...record, turnEnd: false }
-    out.push({
-      ...record,
-      groupStart: false,
-      turnStart: false,
-      turnEnd: last?.turnEnd ?? false,
-      collapsedSummary: summarizeCalls(calls, t),
-      collapsedSummaryKind: kind,
-    })
-    i += calls.length
   }
   return out
 }
@@ -2417,7 +2303,10 @@ export function TrajectoryTable({
         const name = cell.toolName
         if (name !== undefined && !summary.names.includes(name)) summary.names.push(name)
       }
-      summary.steps.add(`${record.turn ?? ''}\u0000${record.group}`)
+      /* a step is a group that carries a request; the system/user preamble is a
+         group too, and counting it made every turn read `2 步` */
+      const stepKey = requestKey(record.turn, record.group)
+      if (requestGroups.has(stepKey)) summary.steps.add(stepKey)
       const meta = cell.callId === undefined ? undefined : callMeta?.get(cell.callId)
       const ms = cell.timeSeconds !== null
         ? Math.round(cell.timeSeconds * 1000)
@@ -2425,11 +2314,18 @@ export function TrajectoryTable({
       if (typeof ms === 'number') summary.durationMs = (summary.durationMs ?? 0) + ms
     }
     const turnSummary = new Map<number, Summary>()
+    /* the collapsed row is built from the turn's first *content* record: the
+       initial system prompt is not a turn start, so anchoring on it produced a
+       summary row without a fold control and the turn could never be expanded */
+    const turnAnchor = new Map<number, TableRecord>()
     for (const record of allRecords) {
       if (record.turn === null) continue
       const summary = turnSummary.get(record.turn) ?? emptySummary()
       addToSummary(summary, record)
       turnSummary.set(record.turn, summary)
+      if (turnAnchor.has(record.turn)) continue
+      if (record.cell.requestOnly === true || record.cell.kind === 'system') continue
+      turnAnchor.set(record.turn, record)
     }
 
     const out: TableRecord[] = []
@@ -2467,8 +2363,13 @@ export function TrajectoryTable({
         flushAssistant()
         flushTool()
         const summary = turnSummary.get(record.turn) ?? emptySummary()
+        const anchor = turnAnchor.get(record.turn) ?? record
         out.push({
-          ...record,
+          ...anchor,
+          /* one row stands for the whole turn, so it is both its start and its
+             end — otherwise the row has no chevron to unfold it again */
+          turnStart: true,
+          turnEnd: true,
           foldSummary: {
             tools: summary.tools,
             steps: summary.steps.size,
@@ -2546,7 +2447,7 @@ export function TrajectoryTable({
       }
     }
     return out
-  }, [allRecords, collapsedAssistants, collapsedTools, collapsedTurns, messagesWithCalls, searchMatchIndexes, callMeta])
+  }, [allRecords, collapsedAssistants, collapsedTools, collapsedTurns, messagesWithCalls, searchMatchIndexes, callMeta, requestGroups])
 
   const projectedVirtualRows = useMemo(
     () => groupTrajectoryVirtualRows(records),

@@ -209,6 +209,18 @@
 - **类型筛选**：`type:call|message|user|system|context|compacted`，支持 `|` 与 `-`；建议菜单有「类型」组。`call` = 工具 + 子调用，`assistant` 是 `message` 的别名。
 - 工具栏右侧不再放任何「快捷筛选」按钮：`错误 / 运行中 / 慢 / 平铺` 已删除，筛选只走查询条 token（`status:error`、`ms:>1000` 等）。
 
+### 6.1.0b 折叠的唯一实现
+
+| 折叠对象 | 一行代表什么 | 行上必须有的东西 |
+|---|---|---|
+| 回合 | 回合的第一条**内容**记录（非 system / 非 request-only） | `第 N 轮` 折叠控件 + `N 步 · N 工具 · 耗时` chips |
+| 助手消息 | 消息本身 | 折叠控件 + `N 工具 · 耗时` chips（工具行收起） |
+| 工具 | 工具本身 | 折叠控件 + `N 工具` chips（子调用收起） |
+
+- 折叠行同时是 `turnStart` 与 `turnEnd`：它就是这一轮的起止，否则没有可点的控件（曾经因为锚在 system 行上，`turnStart` 恒假而无法展开）。
+- 「N 步」= 有请求的分组数，不是分组总数；前导的 system/user/context 分组不算一步。
+- chips 就是摘要，不再另插一行 `collapsedSummary`（原生那套两行折叠已删）。
+
 ### 6.1.1 右栏信息架构（对齐 Logfire live view）
 
 一份数据只有一个入口。页签只切换**表示法**，不切换数据：
