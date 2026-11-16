@@ -3556,8 +3556,9 @@ export function TrajectoryTable({
             && (selected.cell.kind === 'tool' || selected.cell.kind === 'subtool') && (
             <div className={css.detailChips}>
               {selected.cell.toolName !== undefined && (
-                <span className={css.detailChip}>
-                  <span className={css.detailChipLabel}>{qt('chip.tool')}</span>
+                // no "工具" caption: the header tag above already names the tool,
+                // so the caption only repeated it in a second, quieter voice
+                <span className={`${css.detailChip} ${css.detailChipIdentity}`}>
                   <span className={css.detailChipValue}>{selected.cell.toolName}</span>
                 </span>
               )}

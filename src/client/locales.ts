@@ -5,7 +5,6 @@ export const NS = 'better-trajectory'
 export const zh = {
   'tab.error': '异常',
   'tab.rawData': '原始',
-  'chip.tool': '工具',
   'chip.status': '状态',
   'chip.turn': '轮次',
   'chip.duration': '耗时',
@@ -136,7 +135,6 @@ export type BetterTrajectoryKey = keyof typeof zh
 export const en = {
   'tab.error': 'Error',
   'tab.rawData': 'Raw',
-  'chip.tool': 'Tool',
   'chip.status': 'Status',
   'chip.turn': 'Turn',
   'chip.duration': 'Duration',
