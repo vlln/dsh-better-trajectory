@@ -698,7 +698,6 @@ export function TrajectoryView({
           key={hiddenIndexes === null ? 'all' : `f${[...hiddenIndexes].join(',')}`}
           initialScrollTop={restoreScroll.current}
           showTime={showTime}
-          onFilterTool={(name: string) => changeQuery(`tool:${name}`)}
           t={t}
           qt={typeof qt === 'function' ? qt : (key: string) => key}
           watchToolResult={watchToolResult}

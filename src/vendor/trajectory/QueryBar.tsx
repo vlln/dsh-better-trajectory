@@ -136,7 +136,7 @@ export function QueryBar(props: QueryBarProps) {
             type="button"
             className={css.toggle}
             aria-pressed={props.actualDuration}
-            title={t('toolbar.useActualDuration')}
+            data-tip={t('toolbar.useActualDuration')}
             onClick={() => props.onActualDurationChange(!props.actualDuration)}
           >
             <svg className={css.toggleIcon} viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -145,16 +145,16 @@ export function QueryBar(props: QueryBarProps) {
             </svg>
             {t('toolbar.duration')}
           </button>
-          <button type="button" className={css.fold} aria-pressed={showTime} title={qt('query.timeHint')} onClick={onToggleTime}>
+          <button type="button" className={css.fold} aria-pressed={showTime} data-tip={qt('query.timeHint')} onClick={onToggleTime}>
             {qt('query.time')}
           </button>
-          <button type="button" className={css.fold} aria-pressed={props.allTurnsCollapsed} title={t('toolbar.turns')} onClick={props.onToggleAllTurns}>
+          <button type="button" className={css.fold} aria-pressed={props.allTurnsCollapsed} data-tip={t('toolbar.turns')} onClick={props.onToggleAllTurns}>
             {props.allTurnsCollapsed ? '⊞' : '⊟'} {t('toolbar.turns')}
           </button>
-          <button type="button" className={css.fold} aria-pressed={props.allAssistantsCollapsed} title={t('toolbar.calls')} onClick={props.onToggleAllAssistants}>
+          <button type="button" className={css.fold} aria-pressed={props.allAssistantsCollapsed} data-tip={t('toolbar.calls')} onClick={props.onToggleAllAssistants}>
             {props.allAssistantsCollapsed ? '⊞' : '⊟'} {t('toolbar.calls')}
           </button>
-          <button type="button" className={css.fold} aria-pressed={props.allSubCallsCollapsed} title={t('toolbar.subCalls')} onClick={props.onToggleAllSubCalls}>
+          <button type="button" className={css.fold} aria-pressed={props.allSubCallsCollapsed} data-tip={t('toolbar.subCalls')} onClick={props.onToggleAllSubCalls}>
             {props.allSubCallsCollapsed ? '⊞' : '⊟'} {t('toolbar.subCalls')}
           </button>
         </div>
@@ -176,7 +176,7 @@ export function QueryBar(props: QueryBarProps) {
             onKeyDown={onKeyDown}
           />
           {query !== '' && (
-            <button type="button" className={css.clear} aria-label={qt('query.clear')} title={qt('query.clear')} onClick={() => { onQuery(''); inputRef.current?.focus() }}>
+            <button type="button" className={css.clear} aria-label={qt('query.clear')} data-tip={qt('query.clear')} onClick={() => { onQuery(''); inputRef.current?.focus() }}>
               ×
             </button>
           )}
@@ -212,7 +212,7 @@ export function QueryBar(props: QueryBarProps) {
                 className={css.quickButton}
                 data-on={on || undefined}
                 aria-pressed={on}
-                title={item.raw}
+                data-tip={item.raw}
                 onClick={() => onQuery(toggleToken(query, item.raw))}
               >
                 {item.label}
@@ -220,7 +220,7 @@ export function QueryBar(props: QueryBarProps) {
               </button>
             )
           })}
-          <button type="button" className={css.quickButton} data-on={flat || undefined} aria-pressed={flat} onClick={onToggleFlat} title={qt('query.flatHint')}>
+          <button type="button" className={css.quickButton} data-on={flat || undefined} aria-pressed={flat} onClick={onToggleFlat} data-tip={qt('query.flatHint')}>
             {qt('query.flat')}
           </button>
         </div>

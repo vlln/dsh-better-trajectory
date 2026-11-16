@@ -2193,7 +2193,6 @@ export function TrajectoryTable({
   maxDurationMs = 1,
   initialScrollTop = null,
   showTime = true,
-  onFilterTool,
   onShowAll,
   onSelectedIndexChange,
   onRecordSelect,
@@ -2222,7 +2221,6 @@ export function TrajectoryTable({
   const [detailsWidth, setDetailsWidth] = useState<number | null>(null)
   const [snapping, setSnapping] = useState(false)
   const [hoverCard, setHoverCard] = useState<{ x: number; y: number; record: TableRecord } | null>(null)
-  const [pinnedCard, setPinnedCard] = useState<{ x: number; y: number; record: TableRecord } | null>(null)
   const hoverTimer = useRef<number | null>(null)
   const [toolRequestOffset, setToolRequestOffset] = useState<number | null>(null)
   const detailsResizeDrag = useRef<DetailsResizeDrag | null>(null)
@@ -2383,30 +2381,6 @@ export function TrajectoryTable({
     rowVirtualizer.measure()
   }, [hiddenIndexes, rowVirtualizer])
 
-  useEffect(() => {
-    if (hoverCard === null) return
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setHoverCard(null)
-        setPinnedCard(null)
-        return
-      }
-      if (event.key === 'p' || event.key === 'P') {
-        event.preventDefault()
-        setPinnedCard(current => current === null ? hoverCard : null)
-        return
-      }
-      if ((event.key === 'f' || event.key === 'F') && onFilterTool !== undefined) {
-        const name = hoverCard.record.cell.toolName
-        if (name === undefined) return
-        event.preventDefault()
-        onFilterTool(name)
-        setHoverCard(null)
-      }
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [hoverCard, onFilterTool])
 
   useLayoutEffect(() => {
     const pane = tablePaneRef.current
@@ -3021,11 +2995,11 @@ export function TrajectoryTable({
                         const x = event.clientX
                         const y = event.clientY
                         if (hoverTimer.current !== null) window.clearTimeout(hoverTimer.current)
-                        hoverTimer.current = window.setTimeout(() => setHoverCard({ x, y, record }), 520)
+                        setHoverCard({ x, y, record })
                       }}
                       onMouseLeave={() => {
                         if (hoverTimer.current !== null) window.clearTimeout(hoverTimer.current)
-                        hoverTimer.current = window.setTimeout(() => setHoverCard(null), 160)
+                        setHoverCard(null)
                       }}
                       data-trajectory-row-key={trajectoryVirtualRecordKey(record)}
                       data-virtual-position={virtualizationEnabled ? position : undefined}
@@ -3899,8 +3873,8 @@ export function TrajectoryTable({
           </div>
         </aside>
       )}
-      {(hoverCard ?? pinnedCard) !== null && (() => {
-        const card = (hoverCard ?? pinnedCard) as { x: number; y: number; record: TableRecord }
+      {hoverCard !== null && (() => {
+        const card = hoverCard
         const { record } = card
         const meta = record.cell.callId === undefined ? undefined : callMeta?.get(record.cell.callId)
         const ms = record.cell.timeSeconds !== null
@@ -3915,10 +3889,6 @@ export function TrajectoryTable({
             className={css.hoverCard}
             style={{ left, top }}
             role="tooltip"
-            onMouseEnter={() => {
-              if (hoverTimer.current !== null) window.clearTimeout(hoverTimer.current)
-            }}
-            onMouseLeave={() => { if (pinnedCard === null) setHoverCard(null) }}
           >
             <div className={css.hoverHead}>
               <span className={css.kindPill} data-kind={kind}>
@@ -3942,40 +3912,6 @@ export function TrajectoryTable({
               )}
             </dl>
             {args !== '' && <p className={css.hoverArgs}>{args}</p>}
-            <div className={css.hoverActions}>
-              <button
-                type="button"
-                className={css.hoverAction}
-                onClick={() => { selectRecord(record.cell.index); setHoverCard(null) }}
-              >
-                <span className={css.hoverKey}>↵</span> 详情
-              </button>
-              {record.cell.toolName !== undefined && onFilterTool !== undefined && (
-                <button
-                  type="button"
-                  className={css.hoverAction}
-                  onClick={() => { onFilterTool(record.cell.toolName as string); setHoverCard(null) }}
-                >
-                  <span className={css.hoverKey}>F</span> 只看 {record.cell.toolName}
-                </button>
-              )}
-              <button
-                type="button"
-                className={css.hoverAction}
-                data-on={pinnedCard !== null || undefined}
-                onClick={() => { if (pinnedCard !== null) setPinnedCard(null); else setPinnedCard(card) }}
-              >
-                <span className={css.hoverKey}>P</span> {pinnedCard !== null ? '取消钉住' : '钉住'}
-              </button>
-              <button
-                type="button"
-                className={css.hoverClose}
-                aria-label="关闭"
-                onClick={() => { setHoverCard(null); setPinnedCard(null) }}
-              >
-                ×
-              </button>
-            </div>
           </div>
         )
       })()}

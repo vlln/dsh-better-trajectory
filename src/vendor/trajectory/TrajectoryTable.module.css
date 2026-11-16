@@ -3001,3 +3001,7 @@ tr[data-kind='system'] .rowName {
   color: var(--bt-accent, #2563eb);
   background: color-mix(in srgb, var(--bt-accent, #2563eb) 8%, transparent);
 }
+
+.hoverCard {
+  pointer-events: none;
+}
