@@ -2820,6 +2820,10 @@ export function TrajectoryTable({
           followsTableTail.current =
             pane.scrollHeight - pane.clientHeight - pane.scrollTop
               <= BOTTOM_FOLLOW_THRESHOLD_PX
+          /* a row that scrolls out from under the pointer never sends a leave
+             (and the virtual list may unmount it), so its card would freeze over
+             the list: scrolling ends the hover */
+          if (hoverCard !== null) setHoverCard(null)
           if (hiddenIndexes === null) requestOlder(pane, true)
         }}
         onClick={(event) => {
