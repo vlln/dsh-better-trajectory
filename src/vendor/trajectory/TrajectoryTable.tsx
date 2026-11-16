@@ -65,7 +65,18 @@ const KIND_LABEL_KEY: Record<TrajectoryCellKind, TrajectoryKey> = {
 }
 
 function ChevronIcon({ open }: { open: boolean }): ReactNode {
-  return <span className={css.foldDot} data-filled={!open || undefined} aria-hidden="true" />
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false" style={{ display: 'block' }}>
+      <circle
+        cx="8"
+        cy="8"
+        r="4"
+        fill={open ? 'none' : 'currentColor'}
+        stroke="currentColor"
+        strokeWidth="1.6"
+      />
+    </svg>
+  )
 }
 
 function ToolWrenchIcon(): ReactNode {

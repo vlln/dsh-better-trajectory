@@ -3537,3 +3537,54 @@ tr[data-collapsed='true'] .rowSub {
   letter-spacing: 0.04em;
   font-weight: 600;
 }
+
+/* fold target: 24px hit area, SVG dot inside */
+.rowChevron {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  color: var(--bt-text-3, #9aa1ab);
+  cursor: pointer;
+  background: transparent !important;
+  transition: color var(--bt-dur-2, 90ms) var(--bt-ease-std, ease);
+}
+
+.rowChevron:hover {
+  color: var(--bt-text, #1c2128);
+}
+
+.rowChevron:active svg {
+  transform: scale(0.86);
+}
+
+.rowChevron svg {
+  transition: transform var(--bt-dur-2, 90ms) var(--bt-ease-std, ease);
+  transform-origin: center;
+}
+
+.rowChevron:focus-visible {
+  outline: 2px solid var(--bt-accent, #2563eb);
+  outline-offset: 0;
+}
+
+.rowChevronSpace {
+  width: 24px;
+}
+
+/* elbow reaches the dot edge (indent 26 + 12 - 9) */
+tr[data-level='1'][data-has-fold] .rowLine::after,
+tr[data-level='2'][data-has-fold] .rowLine::after,
+tr[data-level='3'][data-has-fold] .rowLine::after {
+  width: 29px;
+}
+
+tr[data-level='1']:not([data-has-fold]) .rowLine::after,
+tr[data-level='2']:not([data-has-fold]) .rowLine::after,
+tr[data-level='3']:not([data-has-fold]) .rowLine::after {
+  width: 41px;
+}
