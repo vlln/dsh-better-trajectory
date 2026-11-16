@@ -432,9 +432,9 @@ export function TrajectoryView({
   const matchedCells = useMemo(() => {
     const set = new Set<number>()
     if (!query.active) return set
-    for (const { cell } of allCells) {
-      const meta = cell.callId === undefined ? undefined : callMeta.get(cell.callId)
-      if (matchesCell(cell, query, meta)) set.add(cell.index)
+    for (const { cell, turn } of allCells) {
+      const indexed = cell.callId === undefined ? undefined : callMeta.get(cell.callId)
+      if (matchesCell(cell, query, { ...indexed, turn })) set.add(cell.index)
     }
     return set
   }, [allCells, callMeta, query])

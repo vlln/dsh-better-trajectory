@@ -171,3 +171,10 @@ test('code: only applies to calls with an error code', () => {
   assert.equal(matchesCell(cell(), query), false)
   assert.equal(matchesCell(cell({ kind: 'tool', outputDetail: 'x' }), query, { errorCode: '401' }), true)
 })
+
+test('the turn of a cell comes from the caller, not the cell', () => {
+  const query = parseQuery('turn:2')
+  const cellWithoutTurn = { kind: 'message', text: 'hi', timeSeconds: 1 }
+  assert.equal(matchesCell(cellWithoutTurn, query, { turn: 2 }), true)
+  assert.equal(matchesCell(cellWithoutTurn, query, { turn: 3 }), false)
+})

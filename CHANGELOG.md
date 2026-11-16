@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- 修「点折叠按钮没反应」的真因：虚拟列表的行 key 只用 `callId`，而同一个 provider（以及 mock 会话）会跨回合复用同一个 tool call id，导致多行 React key 相同——虚拟列表把两套行状态叠在一起渲染（实测 81 行只有 30 个唯一 key），折叠改了状态但画面不动/乱跳。行 key 现在带上记录序号 `cell.index`，同一会话里 48 行 = 48 个唯一 key。
+- 修新筛选的回归：`turn:` 之前匹配不到任何东西——`matchesCell` 从 cell 上取 `turn`，而 cell 不带这个字段。回合号改由调用方（`TrajectoryView` 的 allCells）传入，`turn:14` → 8 行 / 过滤 124。
+- 折叠点只在「折了确实会少东西」的回合上出现（回合内内容行 > 1），不再出现点了没反应的死圆点。
+- 折叠控件吞掉双击，避免双击的第二次点击冒泡到行上的 dblclick 把刚折起来的又展开。
 - 修折叠：把某个回合折叠后再也展不开。折叠行原先取回合的**第一条记录**，而第一轮的第一条是「初始系统提示词」（`turnStart` 对 system 恒为假），于是摘要行拿不到折叠控件，点不回展开。现在折叠行锚定回合的第一条**内容**记录（非 system / 非 request-only），并显式标上 `turnStart` + `turnEnd`；摘要文案也从「初始系统提示词」变成用户那句请求。
 - 折叠摘要的「N 步」只数**有请求的分组**（`requestGroups`），系统/用户前导分组不再把每轮都算成 `2 步`。
 - 删掉 fork 里被 chips 方案取代的原生折叠函数（`summarizeTurn` / `collapseTurnRecords` / `summarizeCalls` / `collapseCallRecords`，约 120 行死代码）——同一种折叠不该有两套实现。

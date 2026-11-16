@@ -36,7 +36,10 @@ export interface TrajectoryVirtualRow<T extends VirtualizableTrajectoryRecord> {
 export function trajectoryVirtualRecordKey(
   record: VirtualizableTrajectoryRecord,
 ): string {
-  const identity = encodeURIComponent(trajectoryRecordId(record.cell))
+  /* the record index is the only per-row unique value: providers (and mocks) may
+     reuse a tool call id across turns, and duplicate React / virtualizer keys
+     make the ledger render rows from two different list states at once */
+  const identity = `${encodeURIComponent(trajectoryRecordId(record.cell))}\u0000${record.cell.index}`
   return record.collapsedSummaryKind === undefined
     ? identity
     : `${identity}\u0000summary\u0000${record.collapsedSummaryKind}`

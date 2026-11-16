@@ -260,7 +260,7 @@ function cellSubject(cell, meta) {
     kind,
     name: isTool ? (cell.toolName ?? '') : kind,
     status,
-    turn: cell.turn,
+    turn: cell.turn ?? meta?.turn,
     durationMs,
     errorCode: cell.errorCode ?? meta?.errorCode,
     text: [
@@ -280,7 +280,8 @@ function cellSubject(cell, meta) {
  * 一条树记录是否命中当前查询——与工具索引共用同一份判据。
  * @param {any} cell `TrajectoryCellProps`。
  * @param {ReturnType<typeof emptyQuery>} query 解析结果。
- * @param {{durationMs?: number}} [meta] 工具索引里的耗时。
+ * @param {{durationMs?: number, errorCode?: string, turn?: number}} [meta]
+ *   工具索引里的耗时 / 错误码，以及记录所属回合（cell 本身不带 turn）。
  * @returns {boolean}
  */
 export function matchesCell(cell, query, meta) {
