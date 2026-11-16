@@ -270,8 +270,10 @@
   font-size: 11px;
 }
 
+/* an ignored token is a warning, not a failure: amber, and it stops there */
 .chip[data-invalid] {
-  background: color-mix(in srgb, #e5484d 14%, transparent);
+  background: color-mix(in srgb, var(--bt-warn, #d97706) 16%, transparent);
+  color: var(--bt-warn, #d97706);
 }
 
 .chipKind {
