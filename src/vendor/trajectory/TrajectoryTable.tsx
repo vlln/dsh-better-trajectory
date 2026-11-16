@@ -160,6 +160,8 @@ interface TableRecord {
   /** The turn has more than one content row, so folding it actually hides something. */
   turnCollapsible?: boolean
   turn: number | null
+  /** Step number of the group, absent for the turn's leading Message group. */
+  step: number | null
   section: number
   group: string
   groupIndex?: number
@@ -558,6 +560,7 @@ function flattenRecords(turns: readonly TrajectoryTurnModel[]): TableRecord[] {
         if (turnStart) firstInSection = false
         return {
           turn: turn.turn,
+          step: group.step ?? null,
           section,
           group: group.title,
           groupIndex,
@@ -809,21 +812,26 @@ function RequestOptions({
   )
 }
 
-function messageSourceLabel(source: unknown, t: TrajectoryTranslate): string {
-  if (typeof source !== 'object' || source === null || Array.isArray(source)) {
-    return t('source.unknown')
-  }
-  const properties = source as Record<string, unknown>
-  const kind = properties.kind
-  if (kind === 'user') return t('source.user')
-  if (kind === 'goal') {
-    const round = properties.round
-    return typeof round === 'number' && round > 0
-      ? t('source.goalRound', { round })
-      : t('source.goal')
-  }
-  if (typeof kind !== 'string' || kind === '') return t('source.unknown')
-  return `${kind[0]?.toUpperCase() ?? ''}${kind.slice(1)}`
+/** Producer-declared context forms this UI knows how to name. */
+const CONTEXT_FORM_KEYS = {
+  instructions: 'context.form.instructions',
+  catalog: 'context.form.catalog',
+  snapshot: 'context.form.snapshot',
+  notice: 'context.form.notice',
+  relay: 'context.form.relay',
+  recall: 'context.form.recall',
+} as const
+
+/** Friendly name for a durable context form; unknown forms stay unnamed. */
+function contextFormLabel(
+  form: string | null | undefined,
+  qt: (key: string) => string,
+): string | undefined {
+  return form === null || form === undefined
+    ? undefined
+    : CONTEXT_FORM_KEYS[form as keyof typeof CONTEXT_FORM_KEYS] === undefined
+      ? undefined
+      : qt(CONTEXT_FORM_KEYS[form as keyof typeof CONTEXT_FORM_KEYS])
 }
 
 function MessageSource({ record, stringWrapping, t }: {
@@ -932,8 +940,10 @@ function rawDataFor(record: TableRecord): unknown {
     kind: cell.kind,
     state: stateOf(record),
     turn: record.turn,
-    group: record.group,
   }
+  /* `step` is the logged field; the localized group title the rows show is a
+     presentation of it, so it never enters the raw view. */
+  if (record.step !== null) data.step = record.step
   const seen = new Set<string>()
   const put = (key: string, value: unknown) => {
     if (value === undefined || value === null || value === '') return
@@ -947,6 +957,8 @@ function rawDataFor(record: TableRecord): unknown {
   put('callId', cell.callId)
   put('sourceSeq', cell.sourceSeq)
   put('source', cell.messageSource)
+  put('producer', cell.contextProducer)
+  put('form', cell.contextForm)
   if (cell.startedAt != null) data.startedAt = new Date(cell.startedAt).toISOString()
   if (cell.timeSeconds !== null) data.durationMs = Math.round(cell.timeSeconds * 1_000)
   put('text', cell.text)
@@ -2507,18 +2519,20 @@ export function TrajectoryTable({
     : parentRecords(allRecords, selected)
   const selectedParentMessage = selectedParents.message
   const selectedParentTool = selectedParents.tool
-  const selectedAssistantRequest = selected?.cell.kind === 'message'
-    ? requestNumbers.get(requestKey(selected.turn, selected.group))
-    : undefined
-  const selectedAssistantRequestInfo = selectedAssistantRequest === undefined
+  /* The provider call that produced this record — a step-scoped fact, so it
+     resolves for calls and messages alike (a turn's leading Message group has
+     no request of its own). */
+  const selectedRecordRequest = selected === undefined
     ? undefined
-    : sessionRequestNumbers?.find(request => request.number === selectedAssistantRequest)
-  const selectedAssistantRequestTarget: SelectedRequest | undefined =
-    selectedAssistantRequestInfo === undefined
+    : requestNumbers.get(requestKey(selected.turn, selected.group))
+  const selectedRecordRequestInfo = selectedRecordRequest === undefined
+    ? undefined
+    : sessionRequestNumbers?.find(request => request.number === selectedRecordRequest)
+  const selectedRecordRequestTarget: SelectedRequest | undefined =
+    selectedRecordRequestInfo === undefined
       ? undefined
-      : { identity: requestIdentity(selectedAssistantRequestInfo) }
-  const hasSelectedHierarchy = selectedAssistantRequestTarget !== undefined
-    || selectedParents.message !== undefined
+      : { identity: requestIdentity(selectedRecordRequestInfo) }
+  const hasSelectedHierarchy = selectedParents.message !== undefined
     || selectedParents.tool !== undefined
   const splitStyle: TrajectorySplitStyle | undefined = toolRequestOffset === null
     ? undefined
@@ -3685,23 +3699,40 @@ export function TrajectoryTable({
                               : '—'}
                           </Field>
                         )}
-                        {cell.messageSource !== undefined && (
-                          <Field label={t('details.source')}>
-                            {messageSourceLabel(cell.messageSource, t)}
+                        {cell.kind === 'context' && cell.contextProducer !== undefined && (
+                          <Field label={t('details.source')} wrap>
+                            <span className={css.sourceRole}>
+                              {qt(cell.contextProducer.role === 'recall'
+                                ? 'context.recall'
+                                : 'context.inject')}
+                            </span>
+                            {cell.contextProducer.label !== null
+                              && cell.contextProducer.label !== '' && (
+                              <span className={css.sourceLabel}>
+                                {cell.contextProducer.label}
+                              </span>
+                            )}
+                          </Field>
+                        )}
+                        {cell.kind === 'context' && contextFormLabel(cell.contextForm, qt) !== undefined && (
+                          <Field label={qt('context.form')}>
+                            {contextFormLabel(cell.contextForm, qt)}
+                          </Field>
+                        )}
+                        {selectedRecordRequestTarget !== undefined && (
+                          <Field label={qt('field.request')}>
+                            <button
+                              type="button"
+                              className={css.metaLink}
+                              onClick={() => { selectRequest(selectedRecordRequestTarget) }}
+                            >
+                              {`#${selectedRecordRequest ?? '—'}`}
+                              <IconChevronRightOutlineRegular size={11} aria-hidden="true" />
+                            </button>
                           </Field>
                         )}
                         {hasSelectedHierarchy && (
                           <Field label={t('details.hierarchy')} wrap>
-                            {selectedAssistantRequestTarget !== undefined && (
-                              <button
-                                type="button"
-                                className={css.metaLink}
-                                onClick={() => { selectRequest(selectedAssistantRequestTarget) }}
-                              >
-                                {t('request.label', { request: selectedAssistantRequest ?? '—' })}
-                                <IconChevronRightOutlineRegular size={11} aria-hidden="true" />
-                              </button>
-                            )}
                             {selectedParentMessage !== undefined && (
                               <button
                                 type="button"

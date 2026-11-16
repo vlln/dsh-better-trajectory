@@ -3,6 +3,16 @@
 export const NS = 'better-trajectory'
 
 export const zh = {
+  'context.inject': '上下文注入',
+  'context.recall': '跨会话召回',
+  'context.form': '形式',
+  'context.form.instructions': '指令',
+  'context.form.catalog': '目录',
+  'context.form.snapshot': '快照',
+  'context.form.notice': '通知',
+  'context.form.relay': '中继',
+  'context.form.recall': '回忆',
+  'field.request': '请求',
   'tab.stats': '统计',
   'tab.raw': '原始',
   'tab.preview': '预览',
@@ -157,6 +167,16 @@ export const zh = {
 export type BetterTrajectoryKey = keyof typeof zh
 
 export const en = {
+  'context.inject': 'Context injection',
+  'context.recall': 'Session recall',
+  'context.form': 'Form',
+  'context.form.instructions': 'Instructions',
+  'context.form.catalog': 'Catalog',
+  'context.form.snapshot': 'Snapshot',
+  'context.form.notice': 'Notice',
+  'context.form.relay': 'Relay',
+  'context.form.recall': 'Recall',
+  'field.request': 'Request',
   'tab.stats': 'Stats',
   'tab.raw': 'Raw',
   'tab.preview': 'Preview',

@@ -26,6 +26,8 @@ import { COMPACTION_INTERRUPTED_ERROR } from './copy-codes.ts'
 /** One Message or Step group inside a turn. */
 export interface TrajectoryGroupModel {
   title: string
+  /** Step number the title renders, absent for the turn's leading Message group. */
+  step?: number
   description?: string
   cells: readonly TrajectoryCellProps[]
 }
@@ -66,6 +68,7 @@ interface LaidCell {
 
 interface LaidGroup {
   title: string
+  step?: number
   laid: LaidCell[]
 }
 
@@ -161,6 +164,9 @@ function inputCellDetail(node: InputNode, t: TrajectoryTranslate): Pick<
     ...(previewMarkdown === undefined ? {} : { previewMarkdown }),
     sourceSeq: node.seq,
     messageSource: node.source,
+    ...(node.kind === 'context'
+      ? { contextProducer: node.producer, contextForm: node.form }
+      : {}),
     inputDetail: detailContent(node.content),
     sourceBlocks: node.content.map(block => sourceBlock(block)),
     timeSeconds: 0,
@@ -230,7 +236,7 @@ export function deriveTrajectoryLayout(
       existing.laid.push(...laid)
       return
     }
-    groups.push({ title, laid: [...laid] })
+    groups.push({ title, step, laid: [...laid] })
   }
   const pushStepInput = (turn: number, step: number, laid: readonly LaidCell[]) => {
     if (laid.length === 0) return
@@ -238,7 +244,7 @@ export function deriveTrajectoryLayout(
     const title = t('group.step', { step })
     const existing = groups.find(group => group.title === title)
     if (existing === undefined) {
-      groups.push({ title, laid: [...laid] })
+      groups.push({ title, step, laid: [...laid] })
       return
     }
     const request = existing.laid.findIndex(entry => entry.cell.requestOnly === true)
@@ -631,10 +637,11 @@ function toTurnModel(
   entry: TurnBucket,
   t: TrajectoryTranslate,
 ): TrajectoryTurnModel {
-  const groups = entry.groups.map(({ title, laid }): TrajectoryGroupModel => {
+  const groups = entry.groups.map(({ title, step, laid }): TrajectoryGroupModel => {
     const description = groupDescription(laid, t)
     return {
       title,
+      ...(step === undefined ? {} : { step }),
       ...(description !== undefined ? { description } : {}),
       cells: laid.map(l => l.cell),
     }

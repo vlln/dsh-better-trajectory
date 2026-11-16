@@ -54,6 +54,10 @@ export interface TrajectoryCellProps extends HTMLAttributes<HTMLDivElement> {
   sourceSeq?: number
   /** Producer role and name from a user-role message or context injection. */
   messageSource?: unknown
+  /** Context-only: which model-facing role this injection plays and its producer name. */
+  contextProducer?: { role: 'inject' | 'recall'; label: string | null }
+  /** Context-only: producer-declared presentation form, null when unknown. */
+  contextForm?: string | null
   /** Producer-owned model-hidden metadata carried beside the message source. */
   /** A separator-only anchor for an auxiliary request with no visible record. */
   requestOnly?: boolean

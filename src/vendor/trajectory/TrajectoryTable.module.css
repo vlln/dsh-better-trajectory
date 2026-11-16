@@ -2892,6 +2892,23 @@ tr[data-turn-start='true'] > td {
   white-space: normal;
 }
 
+/* context 来源: the role word carries the reading, the producer name stays an
+   identifier (mono, quieter) so it never looks like a mistranslation */
+.sourceRole {
+  flex: none;
+  white-space: nowrap;
+}
+
+.sourceLabel {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--bt-text-3, var(--dsw-alias-label-tertiary));
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* 预览: the record's rendered content, edge to edge — the payloads own their inset */
 .recordPreview {
   display: flex;
