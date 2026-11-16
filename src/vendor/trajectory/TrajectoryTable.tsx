@@ -3000,10 +3000,13 @@ export function TrajectoryTable({
           </colgroup>
           <tbody>
             {!showInitialLoading && records.length === 0 && (
+              /* `queryText` was never a prop of this component: any empty result
+                 (a query that matched nothing) threw and took the whole tab down.
+                 A hidden set is exactly "a query is active". */
               <tr className={css.emptyRow}>
                 <td colSpan={2} className={css.emptyCell}>
-                  <span>{queryText.trim() === '' ? qt('empty.none') : qt('empty.noMatch')}</span>
-                  {queryText.trim() !== '' && (
+                  <span>{hiddenIndexes === null ? qt('empty.none') : qt('empty.noMatch')}</span>
+                  {hiddenIndexes !== null && (
                     <button type="button" className={css.emptyAction} onClick={onShowAll}>
                       {qt('query.showAll')}
                     </button>
