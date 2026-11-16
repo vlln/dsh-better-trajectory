@@ -2505,6 +2505,18 @@ tr[data-kind='user'] {
   background: var(--bt-surface, #ffffff);
 }
 
+/* the sticky cells own the paint, so hover/selection need an opaque tint here
+   (an alpha hover token would let the row underneath show through) */
+tr[data-kind='user'][data-selected='true'] > td {
+  background: var(--bt-surface-3, #eef0f3);
+}
+
+@media (hover: hover) {
+  tr[data-kind='user']:not([data-selected='true']):hover > td {
+    background: var(--bt-surface-2, #f6f7f9);
+  }
+}
+
 tr[data-group-parity='1']:hover,
 tr[data-group-parity='0']:hover {
   background: var(--bt-active, rgba(16, 24, 40, 0.1));
