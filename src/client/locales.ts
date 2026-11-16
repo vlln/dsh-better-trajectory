@@ -3,8 +3,10 @@
 export const NS = 'better-trajectory'
 
 export const zh = {
-  'tab.error': '异常',
-  'tab.rawData': '原始',
+  'tab.stats': '统计',
+  'tab.raw': '原始',
+  'tab.preview': '预览',
+  'tab.summary': '概述',
   'chip.status': '状态',
   'chip.callId': 'ID',
   'payload.keys': '{count} 个键',
@@ -15,7 +17,9 @@ export const zh = {
   'history.autoLoadEarlier': '更早的记录在滚动到顶部时自动加载',
   'nav.back': '后退（Alt+←）',
   'nav.forward': '前进（Alt+→）',
-  'head.copy': '复制命令或正文',
+  'head.copyArgs': '复制调用参数',
+  'copied': '已复制',
+  'copy.failed': '复制失败',
   'head.locate': '在列表中定位',
   'chip.turn': '轮次',
   'chip.duration': '耗时',
@@ -153,8 +157,10 @@ export const zh = {
 export type BetterTrajectoryKey = keyof typeof zh
 
 export const en = {
-  'tab.error': 'Error',
-  'tab.rawData': 'Raw',
+  'tab.stats': 'Stats',
+  'tab.raw': 'Raw',
+  'tab.preview': 'Preview',
+  'tab.summary': 'Summary',
   'chip.status': 'Status',
   'chip.callId': 'ID',
   'payload.keys': '{count} keys',
@@ -162,7 +168,9 @@ export const en = {
   'payload.lines': '{count} lines',
   'payload.chars': '{count} chars',
   'payload.empty': 'No content',
-  'head.copy': 'Copy command or text',
+  'head.copyArgs': 'Copy call arguments',
+  'copied': 'Copied',
+  'copy.failed': 'Copy failed',
   'nav.back': 'Back (Alt+←)',
   'history.autoLoadEarlier': 'Earlier records load automatically at the top',
   'nav.forward': 'Forward (Alt+→)',

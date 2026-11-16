@@ -1,8 +1,10 @@
 // @ts-nocheck
 /**
  * Collapsible inspector block: title, optional count badge, optional actions and
- * a body that expands in place. Replaces the old pattern where the overview
- * showed a preview and the full data lived behind a separate tab.
+ * a body that expands in place.
+ *
+ * The header is a row, not a button: the toggle and the actions are siblings so
+ * an action (a copy button) is never nested inside another button.
  */
 
 import { useState, type ReactNode } from 'react'
@@ -26,44 +28,25 @@ export function DetailSection({
   const [open, setOpen] = useState(defaultOpen)
   return (
     <section className={css.section} data-open={open || undefined}>
-      <button
-        type="button"
-        className={css.header}
-        aria-expanded={open}
-        onClick={() => { setOpen(value => !value) }}
-      >
-        <span className={css.chevron} data-open={open || undefined} aria-hidden="true">▸</span>
-        <span className={css.title}>{title}</span>
-        {badge !== undefined && badge !== '' && <span className={css.badge}>{badge}</span>}
+      <div className={css.header} data-copy-reveal>
+        <button
+          type="button"
+          className={css.toggle}
+          aria-expanded={open}
+          onClick={() => { setOpen(value => !value) }}
+        >
+          <span className={css.chevron} data-open={open || undefined} aria-hidden="true">▸</span>
+          <span className={css.title}>{title}</span>
+          {badge !== undefined && badge !== '' && <span className={css.badge}>{badge}</span>}
+        </button>
         {actions !== undefined && <span className={css.actions}>{actions}</span>}
-      </button>
+      </div>
       {open && (
         <div className={css.body} data-bare={bare || undefined}>
           {children}
         </div>
       )}
     </section>
-  )
-}
-
-/** Copy button that lives in a section header. */
-export function SectionCopy({ text, label }: { text: string; label: string }) {
-  const [done, setDone] = useState(false)
-  return (
-    <button
-      type="button"
-      className={css.action}
-      title={label}
-      aria-label={label}
-      onClick={(event) => {
-        event.stopPropagation()
-        void navigator.clipboard?.writeText(text)
-        setDone(true)
-        window.setTimeout(() => { setDone(false) }, 1200)
-      }}
-    >
-      {done ? '✓' : '⧉'}
-    </button>
   )
 }
 

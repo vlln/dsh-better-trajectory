@@ -597,12 +597,6 @@
   background: var(--dsw-alias-bg-module-platform);
 }
 
-.compactedSummary {
-  margin-top: 12px;
-  padding: 0 0 14px;
-  font: var(--dsw-font-xs-13);
-}
-
 .promptDiffSections {
   display: flex;
   max-height: 100%;
@@ -1040,11 +1034,6 @@
   overflow: visible;
 }
 
-.detailBodySummary > .compactedSummary {
-  flex: none;
-  overflow: visible;
-}
-
 .summaryScrollRegion {
   --dsh-scrollbar-thumb: transparent;
   --dsh-scrollbar-thumb-hover: transparent;
@@ -1060,10 +1049,6 @@
     --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
     --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
   }
-}
-
-.compactedSummary .markdownPayload {
-  padding-right: 18px;
 }
 
 .overview {
@@ -1325,14 +1310,14 @@
   background: var(--dsw-alias-bg-layer-1);
 }
 
-.programActions {
-  display: inline-flex;
+.programToolbar {
+  display: flex;
   flex: none;
-  height: 16px;
+  height: 22px;
   align-items: center;
+  justify-content: flex-end;
   gap: 4px;
-  margin-left: auto;
-  padding-right: 14px;
+  padding: 0 12px;
 }
 
 .programLanguage {
@@ -2424,10 +2409,6 @@ tr[data-selected='true'] .event {
 }
 
 /* ---------- hierarchy: identity + nesting ---------- */
-tr[data-kind='user'] {
-  background: var(--bt-surface-2, #f6f7f9);
-}
-
 tr[data-kind='user'] .rowName {
   color: var(--bt-accent, #2563eb);
   font-weight: 600;
@@ -2513,23 +2494,20 @@ tr[data-kind='user'] .rowSub {
   font-size: 12px;
 }
 
-tr[data-kind='user'] {
-  box-shadow: inset 2px 0 0 var(--bt-accent, #2563eb);
+/* group bands: assistant + its tools share one tint */
+tr[data-group-parity='1']:not([data-kind='user']) {
+  background: color-mix(in srgb, var(--bt-surface-2, #f6f7f9) 55%, transparent);
 }
 
-/* group bands: assistant + its tools share one tint */
-tr[data-group-parity='1'] {
-  background: color-mix(in srgb, var(--bt-surface-2, #f6f7f9) 55%, transparent);
+/* A user turn is a boundary, not a highlight: the sticky row keeps the page
+   surface and nothing more (no accent wash, no band tint). */
+tr[data-kind='user'] {
+  background: var(--bt-surface, #ffffff);
 }
 
 tr[data-group-parity='1']:hover,
 tr[data-group-parity='0']:hover {
   background: var(--bt-active, rgba(16, 24, 40, 0.1));
-}
-
-tr[data-kind='user'] {
-  background: color-mix(in srgb, var(--bt-accent, #2563eb) 7%, transparent);
-  box-shadow: inset 2px 0 0 var(--bt-accent, #2563eb);
 }
 
 tr[data-kind='tool'] .rowSub,
@@ -2698,17 +2676,9 @@ tr[data-turn-start='true'] {
   background: var(--bt-surface, #ffffff);
 }
 
-tr[data-turn-start='true'][data-kind='user'] {
-  background: color-mix(in srgb, var(--bt-accent, #2563eb) 7%, var(--bt-surface, #ffffff));
-}
-
 /* border-collapse tables ignore tr background; paint the sticky row on cells */
 tr[data-turn-start='true'] > td {
   background: var(--bt-surface, #ffffff);
-}
-
-tr[data-turn-start='true'][data-kind='user'] > td {
-  background: color-mix(in srgb, var(--bt-accent, #2563eb) 7%, var(--bt-surface, #ffffff));
 }
 
 /* canonical sticky: cells, not rows */
@@ -2722,10 +2692,6 @@ tr[data-turn-start='true'] > td {
   top: 0;
   z-index: 5;
   background: var(--bt-surface, #ffffff);
-}
-
-tr[data-turn-start='true'][data-kind='user'] > td {
-  background: color-mix(in srgb, var(--bt-accent, #2563eb) 7%, var(--bt-surface, #ffffff));
 }
 
 /* fold summary chips: distinct tints instead of one flat string */
@@ -2790,6 +2756,8 @@ tr[data-turn-start='true'][data-kind='user'] > td {
 }
 
 .detailsSubjectText {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   color: var(--bt-text-2, #5b6470);
   font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
@@ -2830,80 +2798,6 @@ tr[data-turn-start='true'][data-kind='user'] > td {
   outline-offset: 0;
 }
 
-/* tool overview: one attribute row, then collapsible sections */
-.toolOverview {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.toolSections {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.sectionJump {
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--bt-text-3, #9aa1ab);
-  cursor: pointer;
-  font-size: 13px;
-  line-height: 1;
-}
-
-.sectionJump:hover {
-  background: var(--bt-hover, rgba(16, 24, 40, 0.06));
-  color: var(--bt-text, #1c2128);
-}
-
-.metaRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 16px;
-  padding: 10px 12px 11px;
-}
-
-.metaItem {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.metaItemWide {
-  flex: 1;
-  min-width: 0;
-}
-
-.metaLabel {
-  flex: none;
-  color: var(--bt-text-3, #9aa1ab);
-  font-size: 10px;
-  letter-spacing: 0.04em;
-}
-
-.metaValue {
-  overflow: hidden;
-  color: var(--bt-text, #1c2128);
-  font-size: 11.5px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.metaValue[data-tone='error'] {
-  color: var(--bt-error, #d92d20);
-}
-
-.metaValue[data-tone='warn'] {
-  color: var(--bt-warn, #d97706);
-}
-
 /* inline link inside a meta row (来源 / 层级): same weight as its value, with an
    affordance that says it navigates */
 .metaLink {
@@ -2933,6 +2827,65 @@ tr[data-turn-start='true'][data-kind='user'] > td {
 .metaValueMono {
   font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 10.5px;
+}
+
+/* ---------- 概述: one field per line, the same grid as a request summary ---------- */
+.recordSummary {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.recordFields > div {
+  grid-template-columns: 76px minmax(0, 1fr);
+  min-height: 26px;
+  padding: 0 12px;
+}
+
+.recordFields dd {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.fieldValue {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recordFields dd[data-mono] .fieldValue {
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10.5px;
+}
+
+.recordFields dd[data-tone='error'] .fieldValue {
+  color: var(--bt-error, var(--dsw-alias-state-error-primary, #d92d20));
+}
+
+.recordFields dd[data-tone='warn'] .fieldValue {
+  color: var(--bt-warn, var(--dsw-alias-state-warning-primary, #d97706));
+}
+
+.recordFields dd[data-wrap] {
+  padding: 3px 0;
+}
+
+.recordFields dd[data-wrap] .fieldValue {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  overflow: visible;
+  white-space: normal;
+}
+
+/* 预览: the record's rendered content, edge to edge — the payloads own their inset */
+.recordPreview {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
 }
 
 /* ===================== tree connectors: one formula for every level =====================

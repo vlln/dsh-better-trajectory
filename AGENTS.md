@@ -33,7 +33,7 @@ fork 的 `TrajectoryView` 渲染。只有一个「轨迹」页签，没有第二
 |---|---|
 | `TrajectoryToolbar.tsx` → `QueryBar.tsx` | token 查询条、建议菜单、chip、常驻总统计、前进/后退 |
 | `TrajectoryTimeline.tsx` | 两端对称的贴边动作、虚线光标 + 光标卡片、右端标记点 |
-| `TrajectoryTable.tsx` | 属性行（`MetaItem`）、工具/消息共用的折叠块、行内 `→ Error`、右端定位 |
+| `TrajectoryTable.tsx` | 四页签（概述/预览/统计/原始）、字段行（`Field`）、工具/消息共用的折叠块、行内 `→ Error`、右端定位 |
 | `TrajectoryView.tsx` | 查询解析、`visibleTurns` 过滤（全类型）、`callMeta`、Table 按隐藏集换 key |
 
 `RawDataPanel.tsx` 是可搜索 JSON 树，只被「原始」tab 使用。
@@ -76,8 +76,9 @@ fork 里有三个宿主内部值导入，原生包会打包它们，这里用 `s
 - 查询：`tool:bash` → 36/100（只有调用行，助手/用户/上下文同时隐藏）；`type:system` → 1/13；
   `type:` 建议菜单有「类型」组；chip 删除、Esc 清空。
 - toolbar 右端常驻总统计：`13 条记录 · 5 次调用 · 3 个错误 · 6.3s`（窗口总时长超 24h 显示 `NdNNh`）。
-- 右栏：工具 `概述/计时/原始`，消息 `概述/原始内容(/来源)`；两者共用 `MetaItem` 属性行与
-  `DetailSection` 折叠块；失败调用行内 `→ Error: …`，右栏红色 payload（原生处理，无自造横幅）。
+- 右栏：所有记录都是 `概述/预览/统计/原始`（请求是 `概述/选项/用量/统计`），四页共用一个
+  `DetailSection` 折叠块与一套 `Field` 字段行；复制只有 `CopyButton` 一处实现（悬浮显形）。
+  失败调用行内 `→ Error: …`，右栏红色 payload（原生处理，无自造横幅）。
 - 导轨两端对称：左端 20px 内取历史，右端 20px 内把缩放窗口推到最新（到端即停、点消失）；
   悬停虚线光标 + 光标卡片（光标/区间/耗时/可见窗口/记录 + 三条按键提示）。
 - 暗色（`prefers-color-scheme`）与 1200px 窄屏无横向滚动。

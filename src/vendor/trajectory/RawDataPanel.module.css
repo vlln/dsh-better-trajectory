@@ -156,35 +156,6 @@
   color: var(--bt-text-3, #9aa1ab);
 }
 
-.copy {
-  flex: none;
-  margin-left: auto;
-  padding: 0 2px;
-  border: 0;
-  border-radius: 3px;
-  background: transparent;
-  color: var(--dsw-alias-label-tertiary, #bbb);
-  font-size: 10px;
-  line-height: 1;
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity var(--bt-dur-2, 90ms) var(--bt-ease-std, ease);
-}
-
-.copy:focus-visible {
-  opacity: 1;
-  outline: 2px solid var(--bt-accent, #2563eb);
-  outline-offset: 0;
-}
-
-.line:hover .copy {
-  opacity: 1;
-}
-
-.copy:hover {
-  color: var(--bt-text, #1c2128);
-}
-
 .loadMore {
   margin: 2px 0 2px 14px;
   border: 0;

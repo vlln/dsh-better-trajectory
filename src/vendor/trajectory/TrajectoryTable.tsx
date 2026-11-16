@@ -5,7 +5,8 @@ import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useSta
 import type { CSSProperties, ReactNode } from 'react'
 import { assertNever, type JsonValue } from '../host/util-values.ts'
 import { KindTag } from './KindTag.tsx'
-import { DetailSection, DetailText, DetailEmpty, SectionCopy } from './DetailSection.tsx'
+import { DetailSection, DetailText } from './DetailSection.tsx'
+import { CopyButton } from './CopyButton.tsx'
 import { HoverCard } from './HoverCard.tsx'
 import type { WatchToolResult } from './watch-tool-result.ts'
 import { useVirtualizer } from '@tanstack/react-virtual'
@@ -14,18 +15,15 @@ import {
   FileTypeIcon,
   fileExtension,
   fileSizeText,
-  IconCheckOutlineRegular,
   IconChevronRightOutlineRegular,
   IconCodeOutlineRegular,
   IconWrapLinesOutlineRegular,
-  IconCopyOutlineRegular,
   IconSettingsOutlineRegular,
   IconSparkleRegular,
   IconUserOutlineRegular,
   JsonTree,
   MarkdownText,
   StateDot,
-  Tooltip,
   writeClipboard,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { JsonTreeLabels, JsonTreeProps, MarkdownLabels } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -203,27 +201,18 @@ function useStableVirtualRowStructure(
   return structure
 }
 
-type DetailTab =
-  | 'system-prompt'
-  | 'tools'
-  | 'overview'
-  | 'rendered'
-  | 'raw'
-  | 'source'
-  | 'input'
-  | 'output'
-  | 'schema'
-  | 'options'
-  | 'usage'
-  | 'timing'
-  | 'error'
-  | 'data'
-  | 'diff'
+/**
+ * One record inspector has exactly four faces: what it is, what it rendered,
+ * what it cost, what it literally is. Request rows keep their own four, because
+ * a request is not a record.
+ */
+type DetailTab = 'overview' | 'preview' | 'timing' | 'raw' | 'options' | 'usage'
 type RecordState = 'complete' | 'running' | 'error'
 
 interface DetailTabItem {
   id: DetailTab
   labelKey: TrajectoryKey
+  /** Read the label from this plugin's namespace instead of the host one. */
   custom?: boolean
 }
 
@@ -259,19 +248,17 @@ const TOOL_REQUEST_MIN_WIDTH = 180
 const TOOL_REQUEST_MAX_WIDTH = 480
 const DEFAULT_TOOL_REQUEST_SHARE = 0.36
 const DEFAULT_TOOL_REQUEST_OFFSET = 56
-const SYSTEM_PROMPT_TABS: readonly DetailTabItem[] = [
-  { id: 'system-prompt', labelKey: 'tab.systemPrompt' },
-  { id: 'tools', labelKey: 'tab.tools' },
-]
-const SYSTEM_UPDATE_TABS: readonly DetailTabItem[] = [
-  { id: 'diff', labelKey: 'tab.diff' },
-  ...SYSTEM_PROMPT_TABS,
+const RECORD_TABS: readonly DetailTabItem[] = [
+  { id: 'overview', labelKey: 'tab.summary', custom: true },
+  { id: 'preview', labelKey: 'tab.preview', custom: true },
+  { id: 'timing', labelKey: 'tab.stats', custom: true },
+  { id: 'raw', labelKey: 'tab.raw', custom: true },
 ]
 const REQUEST_TABS: readonly DetailTabItem[] = [
   { id: 'overview', labelKey: 'tab.summary' },
   { id: 'options', labelKey: 'tab.options' },
   { id: 'usage', labelKey: 'tab.usage' },
-  { id: 'timing', labelKey: 'tab.timing' },
+  { id: 'timing', labelKey: 'tab.stats', custom: true },
 ]
 
 function jsonTreeLabels(t: TrajectoryTranslate): JsonTreeLabels {
@@ -427,8 +414,9 @@ function throughput(metrics: AssistantMetricDetail, t: TrajectoryTranslate): str
 
 function AssistantTimingPanel({
   metrics,
+  extra,
   t,
-}: { metrics: AssistantMetricDetail; t: TrajectoryTranslate }) {
+}: { metrics: AssistantMetricDetail; extra?: ReactNode; t: TrajectoryTranslate }) {
   return (
     <dl className={css.overview}>
       <div><dt>{t('timing.started')}</dt><StartedAtValue timestamp={metrics.stepStartTime} t={t} /></div>
@@ -436,6 +424,7 @@ function AssistantTimingPanel({
       <div><dt>{t('timing.ttft')}</dt><dd>{ttft(metrics, t)}</dd></div>
       <div><dt>{t('timing.generation')}</dt><dd>{generationTime(metrics, t)}</dd></div>
       <div><dt>{t('timing.throughput')}</dt><dd>{throughput(metrics, t)}</dd></div>
+      {extra}
     </dl>
   )
 }
@@ -932,72 +921,54 @@ function primarySubject(record: TableRecord): string {
   return String(cell.text ?? '').replace(/\s+/g, ' ').trim()
 }
 
-/** 「原始」tab 的结构化视图。 */
+/**
+ * 「原始」：这一条记录的全部字段，原样。Payloads are parsed so the tree can be
+ * walked, and a payload that already appeared under another key is stored once.
+ */
 function rawDataFor(record: TableRecord): unknown {
   const cell = record.cell
   const data: Record<string, unknown> = {
+    index: cell.index,
     kind: cell.kind,
-    tool: cell.toolName ?? null,
-    callId: cell.callId ?? null,
-    status: cell.isError ? 'error' : 'ok',
+    state: stateOf(record),
     turn: record.turn,
     group: record.group,
-    durationMs: cell.timeSeconds === null ? null : Math.round(cell.timeSeconds * 1000),
   }
-  const args = parseMaybeJson(cell.inputDetail)
-  if (args !== undefined) data.args = args
-  const result = parseMaybeJson(cell.outputDetail ?? cell.result)
-  if (result !== undefined) data.result = result
-  const schema = parseMaybeJson(cell.schemaDetail)
-  if (schema !== undefined) data.schema = schema
-  return data
-}
-
-function detailTabs(record: TableRecord): readonly DetailTabItem[] {
-  if (record.cell.kind === 'system') {
-    if (record.cell.promptDetail === undefined && record.cell.systemPromptDetail !== undefined) {
-      return SYSTEM_PROMPT_TABS.filter(tab => tab.id === 'system-prompt')
+  const seen = new Set<string>()
+  const put = (key: string, value: unknown) => {
+    if (value === undefined || value === null || value === '') return
+    if (typeof value === 'string') {
+      if (seen.has(value)) return
+      seen.add(value)
     }
-    return record.cell.previousPromptDetail === undefined
-      ? SYSTEM_PROMPT_TABS
-      : SYSTEM_UPDATE_TABS
+    data[key] = value
   }
-  if (record.cell.kind === 'compacted') {
-    return [
-      { id: 'overview', labelKey: 'tab.summary' },
-      { id: 'raw', labelKey: 'tab.rawOutput' },
-    ]
-  }
-  if (isMarkdownRecord(record)) {
-    /* the rendered content is a collapsible section of 概述; only the raw text
-       needs its own tab, because it is a different representation */
-    return [
-      { id: 'overview', labelKey: 'tab.summary' },
-      { id: 'raw', labelKey: 'tab.raw' },
-      ...(record.cell.messageSource === undefined
-        ? []
-        : [{ id: 'source', labelKey: 'tab.source' } as const]),
-    ]
-  }
-  if (record.cell.kind === 'tool' || record.cell.kind === 'subtool') {
-    /* params / result / error live in collapsible sections of 概述 now; the tabs
-       only switch representation (rendered document, timing, raw JSON) */
-    return [
-      { id: 'overview', labelKey: 'tab.summary' },
-      { id: 'timing', labelKey: 'tab.timing' },
-      { id: 'data', labelKey: 'tab.rawData', custom: true },
-    ]
-  }
-  return [
-    { id: 'overview', labelKey: 'tab.summary' },
-    ...(record.cell.inputDetail ? [{
-      id: 'input', labelKey: codeProgram(record.cell) === undefined ? 'tab.payload' : 'code.source',
-    } as const] : []),
-    ...(record.cell.outputDetail || codeProgram(record.cell) !== undefined
-      ? [{ id: 'output', labelKey: 'tab.result' } as const] : []),
-    { id: 'schema', labelKey: 'tab.schema' },
-    { id: 'timing', labelKey: 'tab.timing' },
-  ]
+  put('tool', cell.toolName)
+  put('callId', cell.callId)
+  put('sourceSeq', cell.sourceSeq)
+  put('source', cell.messageSource)
+  if (cell.startedAt != null) data.startedAt = new Date(cell.startedAt).toISOString()
+  if (cell.timeSeconds !== null) data.durationMs = Math.round(cell.timeSeconds * 1_000)
+  put('text', cell.text)
+  put('markdown', markdownSource(record))
+  put('thinking', cell.thinkingDetail)
+  put('args', parseMaybeJson(cell.inputDetail))
+  put('result', parseMaybeJson(cell.outputDetail ?? cell.result))
+  put('schema', parseMaybeJson(cell.schemaDetail))
+  put('prompt', cell.promptDetail)
+  put('systemPrompt', cell.systemPromptDetail)
+  put('previousPrompt', cell.previousPromptDetail)
+  put('sourceBlocks', cell.sourceBlocks)
+  put('outputBlocks', cell.outputBlocks)
+  put('metrics', cell.assistantMetrics)
+  const tokens: Record<string, number> = {}
+  if (cell.input !== undefined) tokens.input = cell.input
+  if (cell.cacheRead !== undefined) tokens.cacheRead = cell.cacheRead
+  if (cell.cacheWrite !== undefined) tokens.cacheWrite = cell.cacheWrite
+  if (cell.output !== undefined) tokens.output = cell.output
+  if (cell.think !== undefined) tokens.reasoning = cell.think
+  if (Object.keys(tokens).length > 0) data.tokens = tokens
+  return data
 }
 
 function recordDisplayText(cell: TrajectoryCellProps, t: TrajectoryTranslate): string {
@@ -1632,114 +1603,32 @@ function MarkdownRecordContent({
 }
 
 /**
- * 工具记录的概述：属性一行（状态 · 时长 · ID），下面是可折叠的参数 / 结果 / Schema。
- * 参数与结果在这里就地展开，不再各占一个页签——一份数据只有一个入口。
+ * One field of 概述: caption, value, optional trailing action, one field per
+ * line. Same grid as the request overview, so a record and a request read the
+ * same way.
  */
-/** One attribute in an inspector meta row: caption, value, optional trailing action. */
-function MetaItem({
+function Field({
   label,
   tone,
-  wide = false,
   mono = false,
-  extra,
-  title,
+  wrap = false,
+  actions,
   children,
 }: {
   label: string
   tone?: 'error' | 'warn'
-  wide?: boolean
   mono?: boolean
-  extra?: ReactNode
-  title?: string
+  wrap?: boolean
+  actions?: ReactNode
   children: ReactNode
 }) {
   return (
-    <span className={`${css.metaItem}${wide ? ` ${css.metaItemWide}` : ''}`} title={title}>
-      <span className={css.metaLabel}>{label}</span>
-      <span className={`${css.metaValue}${mono ? ` ${css.metaValueMono}` : ''}`} data-tone={tone}>
-        {children}
-      </span>
-      {extra}
-    </span>
-  )
-}
-
-function ToolOverview({
-  record,
-  state,
-  qt,
-  t,
-}: {
-  record: TableRecord
-  state: RecordState
-  qt: (key: string, params?: Record<string, string | number>) => string
-  t: TrajectoryTranslate
-}) {
-  const cell = record.cell
-  const argsText = cell.inputDetail ?? ''
-  const resultText = cell.outputDetail ?? (cell.result ?? '')
-  const args = parseMaybeJson(cell.inputDetail)
-  const result = parseMaybeJson(resultText === '' ? undefined : resultText)
-  const schema = parseMaybeJson(cell.schemaDetail)
-  const isBranch = (value: unknown): boolean => value !== null && typeof value === 'object'
-  const ms = cell.timeSeconds === null ? null : Math.round(cell.timeSeconds * 1000)
-
-  return (
-    <div className={css.toolOverview}>
-      <div className={css.metaRow}>
-        <MetaItem
-          label={qt('chip.status')}
-          tone={state === 'error' ? 'error' : state === 'running' ? 'warn' : undefined}
-        >
-          {statusLabel(state, t)}
-        </MetaItem>
-        {ms !== null && <MetaItem label={qt('chip.duration')}>{compactDuration(ms)}</MetaItem>}
-        {cell.callId !== undefined && (
-          <MetaItem
-            label={qt('chip.callId')}
-            wide
-            mono
-            extra={<InspectorCopyButton text={cell.callId} label={qt('chip.callId')} t={t} />}
-          >
-            {cell.callId}
-          </MetaItem>
-        )}
-      </div>
-      {argsText !== '' && (
-        <DetailSection
-          title={t('tab.payload')}
-          badge={payloadBadge(isBranch(args) ? args : argsText, qt)}
-          defaultOpen={false}
-          bare={isBranch(args)}
-        >
-          {isBranch(args)
-            ? <RawDataPanel data={args} qt={qt} bare />
-            : <DetailText text={argsText} full />}
-        </DetailSection>
-      )}
-      <DetailSection
-        title={t('tab.result')}
-        badge={resultText === '' ? '' : payloadBadge(isBranch(result) ? result : resultText, qt)}
-        defaultOpen
-        bare={isBranch(result) && !cell.isError}
-        actions={resultText === '' ? undefined : <SectionCopy text={resultText} label={qt('raw.copyAll')} />}
-      >
-        {resultText === ''
-          ? <DetailEmpty>{state === 'running' ? t('code.running') : qt('payload.empty')}</DetailEmpty>
-          : isBranch(result) && !cell.isError
-            ? <RawDataPanel data={result} qt={qt} bare />
-            : <DetailText text={resultText} full tone={cell.isError ? 'error' : undefined} />}
-      </DetailSection>
-      {isBranch(schema) && (
-        <DetailSection
-          title={t('tab.schema')}
-          badge={payloadBadge(schema, qt)}
-          defaultOpen={false}
-          bare
-        >
-          <RawDataPanel data={schema} qt={qt} bare />
-        </DetailSection>
-      )}
+    <div data-copy-reveal={actions === undefined ? undefined : ''}>
+      <dt>{label}</dt>
+      <dd data-tone={tone} data-mono={mono || undefined} data-wrap={wrap || undefined}>
+        <span className={css.fieldValue}>{children}</span>
+        {actions}
+      </dd>
     </div>
   )
 }
@@ -1747,10 +1636,17 @@ function ToolOverview({
 function RecordTiming({
   record,
   preview = false,
+  extra,
   t,
-}: { record: TableRecord; preview?: boolean; t: TrajectoryTranslate }) {
+}: {
+  record: TableRecord
+  preview?: boolean
+  /** More statistics, rendered in the same field list. */
+  extra?: ReactNode
+  t: TrajectoryTranslate
+}) {
   return record.cell.kind === 'message' && record.cell.assistantMetrics !== undefined
-    ? <AssistantTimingPanel metrics={record.cell.assistantMetrics} t={t} />
+    ? <AssistantTimingPanel metrics={record.cell.assistantMetrics} extra={extra} t={t} />
     : (
       <dl className={css.overview}>
         <div><dt>{t('timing.started')}</dt><StartedAtValue timestamp={record.cell.startedAt ?? null} t={t} /></div>
@@ -1758,6 +1654,7 @@ function RecordTiming({
         {!preview && (
           <div><dt>{t('timing.source')}</dt><dd>{record.cell.timeSeconds === null ? t('timing.notAvailable') : t('timing.sessionTimestamps')}</dd></div>
         )}
+        {extra}
       </dl>
     )
 }
@@ -1986,65 +1883,42 @@ function parseJsonContainer(value: string): object | undefined {
   }
 }
 
-function InspectorCopyButton({ text, label, t }: {
-  text: string
-  label: string
-  t: TrajectoryTranslate
-}) {
-  const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle')
-  useEffect(() => {
-    if (state === 'idle') return
-    const timer = setTimeout(() => { setState('idle') }, 1_500)
-    return () => { clearTimeout(timer) }
-  }, [state])
-  const title = state === 'idle' ? label : t(state === 'copied' ? 'copied' : 'copy.failed')
-  return (
-    <button
-      type="button"
-      className={css.programAction}
-      data-state={state}
-      aria-label={title}
-      title={title}
-      onClick={() => { void writeClipboard(text).then((ok) => { setState(ok ? 'copied' : 'failed') }) }}
-    >
-      {state === 'copied' ? <IconCheckOutlineRegular size={12} /> : <IconCopyOutlineRegular size={12} />}
-    </button>
-  )
-}
-
-function ProgramInput({ program, initialWrapped, stringWrapping, onOpen, t }: {
+/**
+ * 参数 of a code-tool call: the program itself. The control strip belongs to the
+ * content (wrap, original JSON, copy), the section above owns the title.
+ */
+function ProgramInput({ program, initialWrapped, stringWrapping, t }: {
   program: CodeProgram
   initialWrapped: boolean
   stringWrapping: JsonTreeProps['stringWrapping']
-  onOpen?: () => void
   t: TrajectoryTranslate
 }) {
   const contentsId = useId()
   const [wrapped, setWrapped] = useState(initialWrapped)
   const [showJson, setShowJson] = useState(false)
-  const actions = (
-    <span className={css.programActions}>
-      {!showJson && program.language !== undefined && (
-        <span className={css.programLanguage}>{program.language}</span>
-      )}
-      {!showJson && (
-        <button
-          type="button"
-          className={css.programAction}
-          aria-label={t('record.wrapLines')}
-          title={t('record.wrapLines')}
-          aria-pressed={wrapped}
-          aria-controls={contentsId}
-          onClick={() => {
-            const next = !wrapped
-            setWrapped(next)
-            stringWrapping?.setDefault(next)
-          }}
-        >
-          <IconWrapLinesOutlineRegular size={12} />
-        </button>
-      )}
-      {onOpen === undefined && (
+  return (
+    <div className={css.programPanel}>
+      <div className={css.programToolbar}>
+        {!showJson && program.language !== undefined && (
+          <span className={css.programLanguage}>{program.language}</span>
+        )}
+        {!showJson && (
+          <button
+            type="button"
+            className={css.programAction}
+            aria-label={t('record.wrapLines')}
+            title={t('record.wrapLines')}
+            aria-pressed={wrapped}
+            aria-controls={contentsId}
+            onClick={() => {
+              const next = !wrapped
+              setWrapped(next)
+              stringWrapping?.setDefault(next)
+            }}
+          >
+            <IconWrapLinesOutlineRegular size={12} />
+          </button>
+        )}
         <button
           type="button"
           className={css.programAction}
@@ -2060,62 +1934,43 @@ function ProgramInput({ program, initialWrapped, stringWrapping, onOpen, t }: {
             <path d="M10 2h1a2 2 0 0 1 2 2v2a2 2 0 0 0 2 2 2 2 0 0 0-2 2v2a2 2 0 0 1-2 2h-1" />
           </svg>
         </button>
-      )}
-      <InspectorCopyButton
-        text={showJson ? program.rawInput : program.source}
-        label={t(showJson ? 'copy.json' : 'code.copySource')}
-        t={t}
-      />
-    </span>
-  )
-  const body = (
-    <div id={contentsId} className={css.programContent} data-wrap={wrapped}>
-      {showJson
-        ? <JsonTree data={program.arguments} label={t('record.parametersJson')}
-          labels={jsonTreeLabels(t)} stringWrapping={stringWrapping} />
-        : <CodeBlock code={program.source} lang={program.language} lineNumbers showHeader={false}
-          className={css.programSource} copyLabel={t('code.copySource')} copiedLabel={t('copied')} />}
+        <CopyButton
+          text={showJson ? program.rawInput : program.source}
+          label={t(showJson ? 'copy.json' : 'code.copySource')}
+          copiedLabel={t('copied')}
+          failedLabel={t('copy.failed')}
+          reveal="always"
+        />
+      </div>
+      <div id={contentsId} className={css.programContent} data-wrap={wrapped}>
+        {showJson
+          ? <JsonTree data={program.arguments} label={t('record.parametersJson')}
+            labels={jsonTreeLabels(t)} stringWrapping={stringWrapping} />
+          : <CodeBlock code={program.source} lang={program.language} lineNumbers showHeader={false}
+            className={css.programSource} copyLabel={t('code.copySource')} copiedLabel={t('copied')} />}
+      </div>
     </div>
   )
-  return onOpen === undefined
-    ? (
-      <section className={css.programPanel}>
-        <header className={css.overviewHeading}>
-          <span>{t('code.source')}</span>
-          {actions}
-        </header>
-        {body}
-      </section>
-    )
-    : <OverviewSection label={t('code.source')} onOpen={onOpen} actions={actions}>{body}</OverviewSection>
 }
 
-function ProgramOutput({ record, stringWrapping, onOpen, t }: {
+/** The code-tool result: terminal text, or a JSON document. */
+function ProgramOutput({ record, stringWrapping, t }: {
   record: TableRecord
   stringWrapping: JsonTreeProps['stringWrapping']
-  onOpen?: () => void
   t: TrajectoryTranslate
 }) {
   const output = record.cell.outputDetail
   const json = output === undefined || record.cell.isError === true ? undefined : parseJsonContainer(output)
-  const actions = output === undefined ? undefined : (
-    <span className={css.programActions}>
-      <InspectorCopyButton text={output} label={t('code.copyOutput')} t={t} />
-    </span>
-  )
-  const body = (
+  return (
     <div className={css.programContent}>
       {output === undefined || output === ''
         ? <p className={css.noPayload}>{t(stateOf(record) === 'running' ? 'code.running' : 'record.noOutput')}</p>
         : json !== undefined
           ? <JsonTree data={json} label={t('record.outputJson')} labels={jsonTreeLabels(t)}
-            stringWrapping={stringWrapping} collapsedStringLines={onOpen === undefined ? 12 : 3} />
+            stringWrapping={stringWrapping} collapsedStringLines={12} />
           : <pre className={`${css.programOutput} ${record.cell.isError === true ? css.programError : ''}`}>{output}</pre>}
     </div>
   )
-  return onOpen === undefined
-    ? body
-    : <OverviewSection label={t('code.output')} onOpen={onOpen} actions={actions}>{body}</OverviewSection>
 }
 
 function OverviewSection({
@@ -2224,7 +2079,6 @@ export function TrajectoryTable({
   const [detailsWidth, setDetailsWidth] = useState<number | null>(null)
   const [snapping, setSnapping] = useState(false)
   const [hoverCard, setHoverCard] = useState<{ x: number; y: number; record: TableRecord } | null>(null)
-  const [subjectHover, setSubjectHover] = useState<{ x: number; y: number } | null>(null)
   const hoverTimer = useRef<number | null>(null)
   const [toolRequestOffset, setToolRequestOffset] = useState<number | null>(null)
   const detailsResizeDrag = useRef<DetailsResizeDrag | null>(null)
@@ -2262,7 +2116,7 @@ export function TrajectoryTable({
   const selected = selectedTemplate === undefined
     ? undefined
     : currentRecord(selectedTemplate)
-  const resultSeq = activeTab === 'output' ? selected?.cell.resultSeq : undefined
+  const resultSeq = activeTab === 'preview' ? selected?.cell.resultSeq : undefined
   const [liveResult, setLiveResult] = useState<{ seq: number; owner: WatchToolResult; value: JsonValue | undefined }>()
   useEffect(() => {
     setLiveResult(undefined)
@@ -2573,8 +2427,6 @@ export function TrajectoryTable({
   const selectedPreviousPrompt = selected?.cell.kind === 'system'
     ? selected.cell.previousPromptDetail
     : undefined
-  const selectedSystemPrompt = selectedPrompt?.system ?? selected?.cell.systemPromptDetail
-  const promptSelected = selectedSystemPrompt !== undefined
   const selectedState = selected === undefined ? undefined : stateOf(selected)
   const selectedRequestInfo = selectedRequest === null
     ? undefined
@@ -2643,7 +2495,7 @@ export function TrajectoryTable({
     : selectedRequestRecords[0]?.section
   const selectedTabs = selectedRequestInfo !== undefined
     ? REQUEST_TABS.filter(tab => tab.id !== 'options' || selectedRequestOptions !== undefined)
-    : selected === undefined ? [] : detailTabs(selected)
+    : selected === undefined ? [] : RECORD_TABS
   /* switching to a record whose tabs no longer include the active one must not
      leave an empty panel (tabs differ per record kind) */
   useEffect(() => {
@@ -2710,10 +2562,10 @@ export function TrajectoryTable({
     setSelectedRequest(null)
     setSelectedRecordId(record === undefined ? null : trajectoryRecordId(record.cell))
     if (record === undefined) return
-    const tabs = detailTabs(record)
-    const available = new Set(tabs.map(tab => tab.id))
-    const recent = [...tabHistory.current].reverse().find(tab => available.has(tab))
-    setActiveTab(recent ?? tabs[0]?.id ?? 'overview')
+    /* every record has the same four faces, so the last used face is always
+       still there — switching records never throws the reading position away */
+    const recent = [...tabHistory.current].reverse()[0]
+    setActiveTab(recent ?? 'overview')
   }, [allRecords, onRecordSelect, stringWrapping])
   useEffect(() => {
     if (
@@ -3434,7 +3286,6 @@ export function TrajectoryTable({
         </table>
       </div>
       {(selectedRequestInfo !== undefined
-        || promptSelected
         || (selected !== undefined && selectedState !== undefined)) && (
         <aside
           className={css.details}
@@ -3544,14 +3395,7 @@ export function TrajectoryTable({
                     </span>
                   </>
                 )
-                : promptSelected
-                  ? (
-                    <>
-                      <span className={`${css.kindTag} ${css.systemNeutral}`}>{t('kind.system')}</span>
-                      <span className={css.detailsLocation}>{selected?.cell.text}</span>
-                    </>
-                  )
-                  : selected !== undefined && (
+                : selected !== undefined && (
                     <>
                       <span className={`${css.kindTag} ${
                         selected.cell.kind === 'context'
@@ -3579,31 +3423,19 @@ export function TrajectoryTable({
                     </>
                   )}
             </div>
-            {selected !== undefined && selectedRequestInfo === undefined && !promptSelected && (() => {
-              const subject = primarySubject(selected)
-              return (
-                <span className={css.headActions}>
-                  <button
-                    type="button"
-                    className={css.headAction}
-                    title={qt('head.copy')}
-                    aria-label={qt('head.copy')}
-                    onClick={() => { void navigator.clipboard?.writeText(subject) }}
-                  >
-                    ⧉
-                  </button>
-                  <button
-                    type="button"
-                    className={css.headAction}
-                    title={qt('head.locate')}
-                    aria-label={qt('head.locate')}
-                    onClick={() => { locateSelected(selected) }}
-                  >
-                    ⌖
-                  </button>
-                </span>
-              )
-            })()}
+            {selected !== undefined && selectedRequestInfo === undefined && (() => (
+              <span className={css.headActions}>
+                <button
+                  type="button"
+                  className={css.headAction}
+                  title={qt('head.locate')}
+                  aria-label={qt('head.locate')}
+                  onClick={() => { locateSelected(selected) }}
+                >
+                  ⌖
+                </button>
+              </span>
+            ))()}
             <button
               type="button"
               className={css.close}
@@ -3613,14 +3445,20 @@ export function TrajectoryTable({
               <span aria-hidden="true">×</span>
             </button>
           </div>
-          {selected !== undefined && selectedRequestInfo === undefined && !promptSelected
+          {selected !== undefined && selectedRequestInfo === undefined
             && primarySubject(selected) !== '' && (
-            <div
-              className={css.detailsSubject}
-              onMouseEnter={(event) => { setSubjectHover({ x: event.clientX, y: event.clientY }) }}
-              onMouseLeave={() => { setSubjectHover(null) }}
-            >
+            <div className={css.detailsSubject} data-copy-reveal>
               <span className={css.detailsSubjectText}>{primarySubject(selected)}</span>
+              {(selected.cell.kind === 'tool' || selected.cell.kind === 'subtool')
+                && selected.cell.inputDetail !== undefined
+                && selected.cell.inputDetail !== '' && (
+                <CopyButton
+                  text={selected.cell.inputDetail}
+                  label={qt('head.copyArgs')}
+                  copiedLabel={qt('copied')}
+                  failedLabel={qt('copy.failed')}
+                />
+              )}
             </div>
           )}
           <div className={css.detailTabs} role="tablist" aria-label={t('details.event')}>
@@ -3642,9 +3480,9 @@ export function TrajectoryTable({
           <div
             id="trajectory-detail-panel"
             key={selectedRecordId ?? 'none'}
-            className={activeTab === 'overview'
+            className={activeTab === 'overview' || activeTab === 'timing'
               ? `${css.detailBody} ${css.detailBodySummary}`
-              : selectedProgram !== undefined && activeTab === 'input'
+              : selectedProgram !== undefined && activeTab === 'preview'
                 ? `${css.detailBody} ${css.detailBodyProgram}`
                 : css.detailBody}
             role="tabpanel"
@@ -3763,7 +3601,7 @@ export function TrajectoryTable({
                   <OverviewSection label={t('tab.usage')} onOpen={() => { activateTab('usage') }}>
                     <UsageRows usage={selectedRequestUsage} t={t} />
                   </OverviewSection>
-                  <OverviewSection label={t('tab.timing')} onOpen={() => { activateTab('timing') }}>
+                  <OverviewSection label={qt('tab.stats')} onOpen={() => { activateTab('timing') }}>
                     <RequestTiming
                       assistant={selectedRequestAssistant}
                       anchor={selectedRequestAnchor}
@@ -3793,342 +3631,238 @@ export function TrajectoryTable({
                 t={t}
               />
             )}
-            {selectedPrompt !== undefined
-              && selectedPreviousPrompt !== undefined
-              && activeTab === 'diff' && (
-              <SystemPromptDiff
-                before={selectedPreviousPrompt}
-                after={selectedPrompt}
-                t={t}
-              />
-            )}
-            {promptSelected && activeTab === 'system-prompt' && (
-              selectedSystemPrompt === ''
-                ? <p className={css.noPayload}>{t('record.systemPromptMissing')}</p>
-                : (
-                  <div className={`${css.markdownPayload} ${css.systemPrompt}`}>
-                    <MarkdownText text={selectedSystemPrompt} labels={markdownLabels(t)} />
-                  </div>
-                )
-            )}
-            {selectedPrompt !== undefined && activeTab === 'tools' && (
-              <ToolCatalog tools={selectedPrompt.tools} stringWrapping={stringWrapping} t={t} />
-            )}
-            {!promptSelected
-              && selected?.cell.kind === 'compacted'
-              && selectedState !== undefined
-              && activeTab === 'overview' && (
-              <div className={css.toolOverview}>
-                <div className={css.metaRow}>
-                  <MetaItem
-                    label={qt('chip.status')}
-                    tone={selectedState === 'error' ? 'error' : selectedState === 'running' ? 'warn' : undefined}
-                  >
-                    {statusLabel(selectedState, t)}
-                  </MetaItem>
-                  {selected.cell.timeSeconds !== null && (
-                    <MetaItem label={qt('chip.duration')}>
-                      {compactDuration(Math.round(selected.cell.timeSeconds * 1_000))}
-                    </MetaItem>
-                  )}
-                </div>
-                {selected.cell.outputDetail !== undefined && (
-                  <DetailSection title={t('tab.summary')} defaultOpen>
-                    <div className={css.compactedSummary}>
-                      <MarkdownRecordContent
-                        record={selected}
-                        renderSlot={renderSlot}
-                        loadImage={loadImage}
-                        rendered
-                        thinkingExpanded={thinkingExpanded}
-                        onThinkingExpandedChange={setThinkingExpanded}
-                        onOpenCall={openCallSummary}
-                        t={t}
-                      />
-                    </div>
-                  </DetailSection>
-                )}
-              </div>
-            )}
-            {!promptSelected
-              && selected !== undefined
-              && (selected.cell.kind === 'tool' || selected.cell.kind === 'subtool')
-              && selectedState !== undefined
-              && activeTab === 'overview' && (
-              <ToolOverview record={selected} state={selectedState} qt={qt} t={t} />
-            )}
-            {!promptSelected
-              && selected !== undefined
-              && selected.cell.kind !== 'compacted'
-              && selected.cell.kind !== 'tool'
-              && selected.cell.kind !== 'subtool'
-              && selectedState !== undefined
-              && activeTab === 'overview' && (
-              <div className={css.toolOverview}>
-                {selectedProgram !== undefined && selectedProgram.description !== '' && (
-                  <p className={css.programDescription}>{selectedProgram.description}</p>
-                )}
-                <div className={css.metaRow}>
-                  <MetaItem
-                    label={qt('chip.status')}
-                    tone={selectedState === 'error' ? 'error' : selectedState === 'running' ? 'warn' : undefined}
-                  >
-                    {statusLabel(selectedState, t)}
-                  </MetaItem>
-                  {selected.cell.kind === 'message' && selected.cell.output !== undefined && (
-                    <MetaItem label={t('usage.tokens')}>
-                      {t('unit.tokens', { value: selected.cell.output })}
-                    </MetaItem>
-                  )}
-                  {selected.cell.kind === 'message' && selected.cell.think !== undefined && (
-                    <MetaItem label={t('usage.reasoning')}>
-                      {t('unit.tokens', { value: selected.cell.think })}
-                    </MetaItem>
-                  )}
-                  {selected.cell.startedAt != null && (
-                    <MetaItem label={t('timing.started')}>{formatClock(selected.cell.startedAt)}</MetaItem>
-                  )}
-                  {selected.cell.timeSeconds !== null
-                    && selected.cell.kind !== 'message' && (
-                    <MetaItem label={qt('chip.duration')}>
-                      {compactDuration(Math.round(selected.cell.timeSeconds * 1_000))}
-                    </MetaItem>
-                  )}
-                  {selected.cell.messageSource !== undefined && (
-                    <MetaItem label={t('details.source')}>
-                      <button
-                        type="button"
-                        className={css.metaLink}
-                        onClick={() => { activateTab('source') }}
-                      >
-                        {messageSourceLabel(selected.cell.messageSource, t)}
-                        <IconChevronRightOutlineRegular size={11} aria-hidden="true" />
-                      </button>
-                    </MetaItem>
-                  )}
-                  {hasSelectedHierarchy && (
-                    /* 层级 keeps its own caption: the row above may already be 来源,
-                       and two rows with the same caption read as one broken entry */
-                    <MetaItem label={t('details.hierarchy')} wide>
-                      {selectedAssistantRequestTarget !== undefined && (
-                        <button
-                          type="button"
-                          className={css.metaLink}
-                          onClick={() => { selectRequest(selectedAssistantRequestTarget) }}
+            {selectedRequestInfo === undefined && selected !== undefined
+              && selectedState !== undefined && (() => {
+                const cell = selected.cell
+                const toolLike = cell.kind === 'tool' || cell.kind === 'subtool'
+                const argsText = cell.inputDetail ?? ''
+                const args = parseMaybeJson(cell.inputDetail)
+                const isBranch = (value: unknown): boolean => value !== null && typeof value === 'object'
+                const schema = parseMaybeJson(cell.schemaDetail)
+                const systemPrompt = selectedPrompt?.system ?? cell.systemPromptDetail
+                const tokens: { label: string; value: number }[] = []
+                if (cell.input !== undefined) tokens.push({ label: t('usage.input'), value: cell.input })
+                if (cell.cacheRead !== undefined) tokens.push({ label: t('usage.cached'), value: cell.cacheRead })
+                if (cell.cacheWrite !== undefined) tokens.push({ label: t('usage.cacheCreated'), value: cell.cacheWrite })
+                if (cell.output !== undefined) tokens.push({ label: t('usage.output'), value: cell.output })
+                if (cell.think !== undefined) tokens.push({ label: t('usage.reasoning'), value: cell.think })
+
+                if (activeTab === 'overview') {
+                  return (
+                    <div className={css.recordSummary}>
+                      <dl className={`${css.overview} ${css.recordFields}`}>
+                        <Field
+                          label={qt('chip.status')}
+                          tone={selectedState === 'error'
+                            ? 'error'
+                            : selectedState === 'running' ? 'warn' : undefined}
                         >
-                          {t('request.label', { request: selectedAssistantRequest ?? '—' })}
-                          <IconChevronRightOutlineRegular size={11} aria-hidden="true" />
-                        </button>
-                      )}
-                      {selectedParentMessage !== undefined && (
-                        <button
-                          type="button"
-                          className={css.metaLink}
-                          onClick={() => { openRecordSummary(selectedParentMessage) }}
-                        >
-                          {t('details.assistantMessage')}
-                          <IconChevronRightOutlineRegular size={11} aria-hidden="true" />
-                        </button>
-                      )}
-                      {selectedParentTool !== undefined && (
-                        <button
-                          type="button"
-                          className={css.metaLink}
-                          onClick={() => { openRecordSummary(selectedParentTool) }}
-                        >
-                          {t('details.toolCall')}
-                          <IconChevronRightOutlineRegular size={11} aria-hidden="true" />
-                        </button>
-                      )}
-                    </MetaItem>
-                  )}
-                  {selected.cell.callId !== undefined && (
-                    <MetaItem
-                      label={qt('chip.callId')}
-                      wide
-                      mono
-                      extra={(
-                        <InspectorCopyButton
-                          text={selected.cell.callId}
-                          label={qt('chip.callId')}
-                          t={t}
-                        />
-                      )}
-                    >
-                      {selected.cell.callId}
-                    </MetaItem>
-                  )}
-                </div>
-                {/* same collapsible sections as the tool inspector: one header
-                    style, one copy affordance, no native `dl` left in the panel */}
-                <div className={css.toolSections}>
-                  {selectedProgram !== undefined
-                    ? (
-                      <>
-                        <ProgramInput key={`preview:${selectedRecordId}`} program={selectedProgram}
-                          initialWrapped={codeWrappingOnOpen}
-                          stringWrapping={stringWrapping} onOpen={() => { activateTab('input') }} t={t} />
-                        <ProgramOutput record={selected} stringWrapping={stringWrapping}
-                          onOpen={() => { activateTab('output') }} t={t} />
-                      </>
-                    )
-                    : isMarkdownRecord(selected)
-                      ? (
+                          {statusLabel(selectedState, t)}
+                        </Field>
+                        {cell.kind === 'message' && cell.output !== undefined && (
+                          <Field label={t('usage.tokens')}>
+                            {t('unit.tokens', { value: cell.output })}
+                          </Field>
+                        )}
+                        {cell.kind === 'message' && cell.think !== undefined && (
+                          <Field label={t('usage.reasoning')}>
+                            {t('unit.tokens', { value: cell.think })}
+                          </Field>
+                        )}
+                        {cell.startedAt != null && (
+                          <Field label={t('timing.started')}>
+                            {formatClock(cell.startedAt)}
+                          </Field>
+                        )}
+                        {cell.timeSeconds !== null && (
+                          <Field label={qt('chip.duration')}>
+                            {cell.timeSeconds > 0
+                              ? compactDuration(Math.round(cell.timeSeconds * 1_000))
+                              : '—'}
+                          </Field>
+                        )}
+                        {cell.messageSource !== undefined && (
+                          <Field label={t('details.source')}>
+                            {messageSourceLabel(cell.messageSource, t)}
+                          </Field>
+                        )}
+                        {hasSelectedHierarchy && (
+                          <Field label={t('details.hierarchy')} wrap>
+                            {selectedAssistantRequestTarget !== undefined && (
+                              <button
+                                type="button"
+                                className={css.metaLink}
+                                onClick={() => { selectRequest(selectedAssistantRequestTarget) }}
+                              >
+                                {t('request.label', { request: selectedAssistantRequest ?? '—' })}
+                                <IconChevronRightOutlineRegular size={11} aria-hidden="true" />
+                              </button>
+                            )}
+                            {selectedParentMessage !== undefined && (
+                              <button
+                                type="button"
+                                className={css.metaLink}
+                                onClick={() => { openRecordSummary(selectedParentMessage) }}
+                              >
+                                {t('details.assistantMessage')}
+                                <IconChevronRightOutlineRegular size={11} aria-hidden="true" />
+                              </button>
+                            )}
+                            {selectedParentTool !== undefined && (
+                              <button
+                                type="button"
+                                className={css.metaLink}
+                                onClick={() => { openRecordSummary(selectedParentTool) }}
+                              >
+                                {t('details.toolCall')}
+                                <IconChevronRightOutlineRegular size={11} aria-hidden="true" />
+                              </button>
+                            )}
+                          </Field>
+                        )}
+                        {cell.callId !== undefined && (
+                          <Field
+                            label={qt('chip.callId')}
+                            mono
+                            actions={(
+                              <CopyButton
+                                text={cell.callId}
+                                label={qt('chip.callId')}
+                                copiedLabel={qt('copied')}
+                                failedLabel={qt('copy.failed')}
+                              />
+                            )}
+                          >
+                            {cell.callId}
+                          </Field>
+                        )}
+                      </dl>
+                      {toolLike && argsText !== '' && (
                         <DetailSection
-                          title={t('tab.preview')}
-                          badge={payloadBadge(markdownSource(selected) ?? '', qt)}
+                          title={t('tab.payload')}
+                          badge={payloadBadge(isBranch(args) ? args : argsText, qt)}
                           defaultOpen
+                          bare={selectedProgram === undefined && isBranch(args)}
                         >
-                          <MarkdownRecordContent
-                            record={selected}
-                            renderSlot={renderSlot}
-                            loadImage={loadImage}
-                            rendered
-                            preview
-                            thinkingExpanded={thinkingExpanded}
-                            onThinkingExpandedChange={setThinkingExpanded}
-                            onOpenCall={openCallSummary}
+                          {selectedProgram !== undefined
+                            ? (
+                              <ProgramInput
+                                key={`args:${selectedRecordId}`}
+                                program={selectedProgram}
+                                initialWrapped={codeWrappingOnOpen}
+                                stringWrapping={stringWrapping}
+                                t={t}
+                              />
+                            )
+                            : isBranch(args)
+                              ? <RawDataPanel data={args} qt={qt} bare />
+                              : <DetailText text={argsText} full />}
+                        </DetailSection>
+                      )}
+                      {toolLike && isBranch(schema) && (
+                        <DetailSection
+                          title={t('tab.schema')}
+                          badge={payloadBadge(schema, qt)}
+                          defaultOpen={false}
+                          bare
+                        >
+                          <RawDataPanel data={schema} qt={qt} bare />
+                        </DetailSection>
+                      )}
+                      {cell.kind === 'system' && selectedPrompt !== undefined && (
+                        <DetailSection
+                          title={t('tab.tools')}
+                          badge={payloadBadge(selectedPrompt.tools, qt)}
+                          defaultOpen={false}
+                        >
+                          <ToolCatalog
+                            tools={selectedPrompt.tools}
+                            stringWrapping={stringWrapping}
                             t={t}
                           />
                         </DetailSection>
-                      )
-                      : (
-                        <>
-                          {selected.cell.inputDetail && (
-                            <DetailSection
-                              title={t('tab.payload')}
-                              badge={payloadBadge(parseMaybeJson(selected.cell.inputDetail) ?? selected.cell.inputDetail, qt)}
-                              defaultOpen={false}
-                            >
-                              <RecordPayload record={selected} direction="input" preview renderSlot={renderSlot} loadImage={loadImage} stringWrapping={stringWrapping} t={t} />
-                            </DetailSection>
-                          )}
-                          {selected.cell.outputDetail && (
-                            <DetailSection
-                              title={t('tab.result')}
-                              badge={payloadBadge(parseMaybeJson(selected.cell.outputDetail) ?? selected.cell.outputDetail, qt)}
-                              defaultOpen
-                            >
-                              <RecordPayload record={selected} direction="output" preview renderSlot={renderSlot} loadImage={loadImage} stringWrapping={stringWrapping} t={t} />
-                            </DetailSection>
-                          )}
-                          <DetailSection title={t('tab.schema')} defaultOpen={false}>
-                            <RecordSchema record={selected} preview stringWrapping={stringWrapping} t={t} />
-                          </DetailSection>
-                        </>
                       )}
-                  {selectedAssistantRequestTarget !== undefined && (
-                    <DetailSection
-                      title={t('timing.request')}
-                      defaultOpen={false}
-                      actions={(
-                        <button
-                          type="button"
-                          className={css.sectionJump}
-                          title={t('timing.request')}
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            selectRequest(selectedAssistantRequestTarget, 'timing')
-                          }}
-                        >
-                          ›
-                        </button>
+                    </div>
+                  )
+                }
+                if (activeTab === 'preview') {
+                  return (
+                    <div className={css.recordPreview}>
+                      {cell.kind === 'system' && (
+                        systemPrompt === undefined || systemPrompt === ''
+                          ? <p className={css.noPayload}>{t('record.systemPromptMissing')}</p>
+                          : (
+                            <div className={`${css.markdownPayload} ${css.systemPrompt}`}>
+                              <MarkdownText text={systemPrompt} labels={markdownLabels(t)} />
+                            </div>
+                          )
                       )}
-                    >
-                      <RecordTiming record={selected} preview t={t} />
-                    </DetailSection>
-                  )}
-                </div>
-              </div>
-            )}
-            {!promptSelected && selected !== undefined && activeTab === 'data' && (
-              <RawDataPanel data={rawDataFor(selected)} qt={qt} />
-            )}
-            {!promptSelected && selected !== undefined && activeTab === 'rendered' && (
-              <MarkdownRecordContent
-                record={selected}
-                renderSlot={renderSlot}
-                loadImage={loadImage}
-                rendered
-                thinkingExpanded={thinkingExpanded}
-                onThinkingExpandedChange={setThinkingExpanded}
-                onOpenCall={openCallSummary}
-                t={t}
-              />
-            )}
-            {!promptSelected && selected !== undefined && activeTab === 'raw' && (
-              <MarkdownRecordContent
-                record={selected}
-                renderSlot={renderSlot}
-                loadImage={loadImage}
-                rendered={false}
-                thinkingExpanded={thinkingExpanded}
-                onThinkingExpandedChange={setThinkingExpanded}
-                onOpenCall={openCallSummary}
-                t={t}
-              />
-            )}
-            {!promptSelected && selected !== undefined && activeTab === 'source' && (
-              <MessageSource record={selected} stringWrapping={stringWrapping} t={t} />
-            )}
-            {!promptSelected && selected !== undefined && activeTab === 'input' && (
-              selectedProgram === undefined
-                ? <RecordPayload record={selected} direction="input" renderSlot={renderSlot} loadImage={loadImage} stringWrapping={stringWrapping} t={t} />
-                : <ProgramInput key={`input:${selectedRecordId}`} program={selectedProgram}
-                  initialWrapped={codeWrappingOnOpen}
-                  stringWrapping={stringWrapping} t={t} />
-            )}
-            {!promptSelected && selected !== undefined && activeTab === 'output' && (
-              selected.cell.kind === 'tool' || selected.cell.kind === 'subtool'
-                ? <div className={css.resultSections}>
-                  <section className={css.resultSection} aria-label={t('record.rawResult')}>
-                    <header className={css.overviewHeading}>
-                      <h3 className={css.resultTitle}>{t('record.rawResult')}</h3>
-                    </header>
-                    {resultValue === undefined
-                      ? <p className={css.noPayload}>{t(stateOf(selected) === 'running' ? 'code.running' : 'record.rawResultUnavailable')}</p>
-                      : resultValue !== null && typeof resultValue === 'object'
-                        ? <JsonTree data={resultValue} label={t('record.resultJson')}
-                          labels={jsonTreeLabels(t)} stringWrapping={stringWrapping}
-                          collapsedStringLines={12} className={css.jsonPayload} />
-                        : <pre className={css.programOutput}>{JSON.stringify(resultValue)}</pre>}
-                  </section>
-                  <section className={css.resultSection} aria-label={t('record.renderedResult')}>
-                    <header className={css.overviewHeading}>
-                      <h3 className={css.resultTitle}>{t('record.renderedResult')}</h3>
-                    </header>
-                    {selectedProgram === undefined
-                      ? <RecordPayload record={selected} direction="output" renderSlot={renderSlot} loadImage={loadImage} stringWrapping={stringWrapping} t={t} />
-                      : <ProgramOutput record={selected} stringWrapping={stringWrapping} t={t} />}
-                  </section>
-                </div>
-                : <RecordPayload record={selected} direction="output" renderSlot={renderSlot} loadImage={loadImage} stringWrapping={stringWrapping} t={t} />
-            )}
-            {!promptSelected && selected !== undefined && activeTab === 'schema' && (
-              <RecordSchema record={selected} stringWrapping={stringWrapping} t={t} />
-            )}
-            {!promptSelected && selected !== undefined && activeTab === 'timing' && (
-              <RecordTiming record={selected} t={t} />
-            )}
+                      {cell.kind === 'system' && selectedPreviousPrompt !== undefined
+                        && selectedPrompt !== undefined && (
+                        <DetailSection title={t('tab.diff')} defaultOpen={false}>
+                          <SystemPromptDiff
+                            before={selectedPreviousPrompt}
+                            after={selectedPrompt}
+                            t={t}
+                          />
+                        </DetailSection>
+                      )}
+                      {toolLike && (
+                        selectedProgram !== undefined
+                          ? <ProgramOutput record={selected} stringWrapping={stringWrapping} t={t} />
+                          : (
+                            <div className={css.resultSections}>
+                              <RecordPayload
+                                record={selected}
+                                direction="output"
+                                renderSlot={renderSlot}
+                                loadImage={loadImage}
+                                stringWrapping={stringWrapping}
+                                t={t}
+                              />
+                            </div>
+                          )
+                      )}
+                      {!toolLike && cell.kind !== 'system' && (
+                        <MarkdownRecordContent
+                          record={selected}
+                          renderSlot={renderSlot}
+                          loadImage={loadImage}
+                          rendered
+                          thinkingExpanded={thinkingExpanded}
+                          onThinkingExpandedChange={setThinkingExpanded}
+                          onOpenCall={openCallSummary}
+                          t={t}
+                        />
+                      )}
+                    </div>
+                  )
+                }
+                if (activeTab === 'timing') {
+                  return (
+                    <div className={css.recordSummary}>
+                      <RecordTiming
+                        record={selected}
+                        t={t}
+                        extra={tokens.length === 0 ? undefined : (
+                          <>
+                            {tokens.map(token => (
+                              <div key={token.label}>
+                                <dt>{token.label}</dt>
+                                <dd>{t('unit.tokens', { value: token.value })}</dd>
+                              </div>
+                            ))}
+                          </>
+                        )}
+                      />
+                    </div>
+                  )
+                }
+                return <RawDataPanel data={rawDataFor(selected)} qt={qt} />
+              })()}
           </div>
         </aside>
       )}
-      {subjectHover !== null && selected !== undefined && !promptSelected && (() => {
-        const subject = primarySubject(selected)
-        const kind = selected.cell.kind
-        return (
-          <HoverCard
-            x={subjectHover.x}
-            y={subjectHover.y}
-            kind={kind}
-            label={selected.cell.kind === 'tool' || selected.cell.kind === 'subtool'
-              ? (selected.cell.toolName ?? t(KIND_LABEL_KEY[kind]))
-              : t(KIND_LABEL_KEY[kind])}
-            rows={[]}
-            extra={subject}
-          />
-        )
-      })()}
       {hoverCard !== null && (() => {
         const card = hoverCard
         const { record } = card

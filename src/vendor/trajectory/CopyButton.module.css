@@ -1,0 +1,47 @@
+/* The one copy button: same box, same icon, same reveal everywhere. */
+.button {
+  all: unset;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  color: var(--bt-text-3, var(--dsw-alias-label-tertiary));
+  cursor: pointer;
+  transition: opacity 120ms ease, background-color 120ms ease, color 120ms ease;
+}
+
+.button:hover {
+  background: var(--bt-hover, var(--dsw-alias-interactive-bg-hover));
+  color: var(--bt-text, var(--dsw-alias-label-primary));
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--bt-accent, var(--dsw-alias-brand-primary));
+  outline-offset: 0;
+}
+
+.button[data-state='failed'] {
+  color: var(--bt-error, var(--dsw-alias-state-error-primary, #d92d20));
+}
+
+/* Hover reveal. The host marks itself with `data-copy-reveal`; attribute
+   selectors are not scoped by CSS modules, so any host can opt in. */
+.button[data-reveal='hover'] {
+  opacity: 0;
+}
+
+[data-copy-reveal]:hover .button[data-reveal='hover'],
+[data-copy-reveal]:focus-within .button[data-reveal='hover'],
+.button[data-reveal='hover']:focus-visible {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .button {
+    transition: none;
+  }
+}

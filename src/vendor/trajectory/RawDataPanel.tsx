@@ -1,6 +1,7 @@
 // @ts-nocheck
 /** Inspector 的「原始」tab：可搜索 JSON 树。 */
 import { useMemo, useState, type ReactNode } from 'react'
+import { CopyButton } from './CopyButton.tsx'
 import css from './RawDataPanel.module.css'
 
 interface RawDataPanelProps {
@@ -131,6 +132,7 @@ function Node({
         data-branch={branch || undefined}
         data-open={branch ? isOpen || undefined : undefined}
         data-hit={term !== '' && String(name).toLowerCase().includes(term) ? 'key' : undefined}
+        data-copy-reveal
         onClick={branch ? () => toggle(path) : undefined}
       >
         {branch ? (
@@ -141,18 +143,12 @@ function Node({
         <span className={css.key}><Highlight text={name} term={term} /></span>
         <span className={css.colon}>:</span>
         {branch ? <span className={css.branch}>{preview(value)}</span> : <Leaf value={value} term={term} />}
-        <button
-          type="button"
-          className={css.copy}
-          title={qt('raw.copy')}
-          aria-label={qt('raw.copy')}
-          onClick={(event) => {
-            event.stopPropagation()
-            void navigator.clipboard?.writeText(copyTextFor(value))
-          }}
-        >
-          ⧉
-        </button>
+        <CopyButton
+          text={copyTextFor(value)}
+          label={qt('raw.copy')}
+          copiedLabel={qt('copied')}
+          failedLabel={qt('copy.failed')}
+        />
       </div>
       {branch && isOpen && (
         <div className={css.children}>

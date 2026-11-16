@@ -22,7 +22,7 @@ test('zh and en dictionaries have identical keys', () => {
 })
 
 test('every query / inspector key is translated', () => {
-  for (const key of ['query.placeholder', 'query.showAll', 'tab.error', 'tab.rawData', 'chip.status', 'raw.search', 'hint.filtered']) {
+  for (const key of ['query.placeholder', 'query.showAll', 'head.copyArgs', 'copied', 'chip.status', 'raw.search', 'hint.filtered']) {
     assert.ok(keysOf('zh').has(key), `zh missing ${key}`)
     assert.ok(keysOf('en').has(key), `en missing ${key}`)
   }
