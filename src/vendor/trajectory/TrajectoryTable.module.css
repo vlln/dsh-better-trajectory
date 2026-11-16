@@ -3384,3 +3384,82 @@ tr[data-has-children][data-level='1'] .rowLine::after {
   text-transform: none;
   letter-spacing: 0.02em;
 }
+
+/* fold affordance: hollow when expanded, filled when collapsed */
+.rowChevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 20px;
+  border-radius: 50%;
+  transform: none;
+}
+
+.rowChevron[data-folded] {
+  transform: none;
+}
+
+.foldDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1.5px solid var(--bt-text-3, #9aa1ab);
+  background: transparent;
+  box-sizing: border-box;
+  transition:
+    background-color var(--bt-dur-2, 90ms) var(--bt-ease-std, ease),
+    border-color var(--bt-dur-2, 90ms) var(--bt-ease-std, ease);
+}
+
+.foldDot[data-filled] {
+  background: var(--bt-text-2, #5b6470);
+  border-color: var(--bt-text-2, #5b6470);
+}
+
+.rowChevron:hover .foldDot {
+  border-color: var(--bt-text, #1c2128);
+}
+
+.rowChevron:hover .foldDot[data-filled] {
+  background: var(--bt-text, #1c2128);
+}
+
+/* elbow ends on the dot centre */
+tr[data-level='1'][data-has-fold] .rowLine::after,
+tr[data-level='2'][data-has-fold] .rowLine::after,
+tr[data-level='3'][data-has-fold] .rowLine::after {
+  width: 26px;
+}
+
+/* strip UA button chrome from the fold affordance */
+.rowChevron {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  color: inherit;
+  padding: 0;
+}
+
+.rowChevron:focus {
+  outline: none;
+}
+
+.rowChevron:focus-visible {
+  outline: 2px solid var(--bt-accent, #2563eb);
+  outline-offset: -2px;
+}
+
+.rowChevron {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 18px;
+  height: 20px;
+  border-radius: 50%;
+  cursor: pointer;
+}
