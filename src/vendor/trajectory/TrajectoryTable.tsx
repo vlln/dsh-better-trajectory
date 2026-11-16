@@ -3552,30 +3552,6 @@ export function TrajectoryTable({
               <span aria-hidden="true">×</span>
             </button>
           </div>
-          {!promptSelected && selected !== undefined
-            && (selected.cell.kind === 'tool' || selected.cell.kind === 'subtool') && (
-            <div className={css.detailChips}>
-              {/* the tool name and the turn already sit in the panel header tag and
-                  its "第 N 轮" label, so the chip row only carries what the header
-                  cannot: state, duration and the call id */}
-              <span className={css.detailChip} data-tone={selected.cell.isError ? 'error' : undefined}>
-                <span className={css.detailChipLabel}>{qt('chip.status')}</span>
-                <span className={css.detailChipValue}>{statusLabel(stateOf(selected), t)}</span>
-              </span>
-              {selected.cell.timeSeconds !== null && (
-                <span className={css.detailChip}>
-                  <span className={css.detailChipLabel}>{qt('chip.duration')}</span>
-                  <span className={css.detailChipValue}>{formatDurationMs(Math.round(selected.cell.timeSeconds * 1000), t)}</span>
-                </span>
-              )}
-              {selected.cell.callId !== undefined && (
-                <span className={css.detailChip}>
-                  <span className={css.detailChipLabel}>id</span>
-                  <span className={css.detailChipValue}>{selected.cell.callId}</span>
-                </span>
-              )}
-            </div>
-          )}
           <div className={css.detailTabs} role="tablist" aria-label={t('details.event')}>
             {selectedTabs.map(tab => (
               <button
@@ -3843,11 +3819,9 @@ export function TrajectoryTable({
                   )}
                   {hasSelectedHierarchy && (
                     <div>
-                      <dt>
-                        {selectedAssistantRequestTarget !== undefined
-                          ? t('details.source')
-                          : t('details.hierarchy')}
-                      </dt>
+                      {/* always 层级: the row above may already be 来源, and two rows
+                          with the same caption read as one broken entry */}
+                      <dt>{t('details.hierarchy')}</dt>
                       <dd className={css.overviewParentLinks}>
                         {selectedAssistantRequestTarget !== undefined && (
                           <button
@@ -3902,10 +3876,20 @@ export function TrajectoryTable({
                   {selected.cell.kind === 'message' && (
                     <TokenRows cell={selected.cell} t={t} />
                   )}
-                  {(selected.cell.kind === 'user' || selected.cell.kind === 'context') && (
+                  {selected.cell.timeSeconds !== null
+                    && (selected.cell.kind === 'user'
+                      || selected.cell.kind === 'context'
+                      || selected.cell.kind === 'tool'
+                      || selected.cell.kind === 'subtool') && (
                     <div>
                       <dt>{t('timing.duration')}</dt>
                       <dd>{formatElapsedSeconds(selected.cell.timeSeconds, t)}</dd>
+                    </div>
+                  )}
+                  {selected.cell.callId !== undefined && (
+                    <div>
+                      <dt>{qt('chip.callId')}</dt>
+                      <dd className={css.overviewCode}>{selected.cell.callId}</dd>
                     </div>
                   )}
                 </dl>
