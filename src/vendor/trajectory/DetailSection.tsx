@@ -68,8 +68,21 @@ export function SectionCopy({ text, label }: { text: string; label: string }) {
 }
 
 /** Plain-text payload with a collapsed height cap. */
-export function DetailText({ text, full = false }: { text: string; full?: boolean }) {
-  return <pre className={css.text} data-full={full || undefined}>{text}</pre>
+export function DetailText({
+  text,
+  full = false,
+  tone,
+}: {
+  text: string
+  full?: boolean
+  /** `error` renders the native red payload treatment. */
+  tone?: 'error'
+}) {
+  return (
+    <pre className={css.text} data-full={full || undefined} data-tone={tone}>
+      {text}
+    </pre>
+  )
 }
 
 export function DetailEmpty({ children }: { children: ReactNode }) {

@@ -193,7 +193,9 @@ export function payloadBadge(
   const text = value === null || value === undefined ? '' : String(value)
   if (text === '') return ''
   if (text.length > 120) return qt('payload.chars', { count: text.length })
-  return qt('payload.lines', { count: text.split('\n').length })
+  const lines = text.split('\n').length
+  /* one short line says nothing a badge could add (`1 行` on a sentence) */
+  return lines === 1 ? '' : qt('payload.lines', { count: lines })
 }
 
 /**

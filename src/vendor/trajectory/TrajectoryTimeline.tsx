@@ -5,31 +5,29 @@ import {
   Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties,
   type KeyboardEvent, type PointerEvent,
 } from 'react'
-import { Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TrajectoryTurnModel } from './layout.ts'
 import type { TrajectoryTranslate } from './locales.ts'
 import type { AssistantMetricDetail, TrajectoryCellKind, TrajectoryCellProps } from './trajectory-record.ts'
 import {
   deriveTrajectoryTimeline,
-  formatTimelineOffset,
   type TrajectoryTimelineMode,
   type TrajectoryTimelineModel,
-  type TrajectoryTimelineSpan,
   type TrajectoryTimeRange,
 } from './timeline.ts'
 import { HoverCard } from './HoverCard.tsx'
 import css from './TrajectoryTimeline.module.css'
 
 const MINIMUM_DRAG_PX = 3
-/** Pressing/dragging this close to the left edge pulls in the previous page. */
-const EARLIER_TRIGGER_PX = 20
-/** Extra distance the pointer must travel out of the zone before it can load again. */
-const EARLIER_LEAVE_PX = 8
+/** Pressing/dragging this close to either end of the track acts on that end. */
+const EDGE_TRIGGER_PX = 20
+/** Extra distance the pointer must travel out of the zone before it acts again. */
+const EDGE_LEAVE_PX = 8
+/** One right-end step reveals this share of the visible window. */
+const LATER_STEP_FRACTION = 0.5
 const MINIMUM_ZOOM_OPERATIONS = 4
 const EDGE_PAN_ZONE_FRACTION = 0.08
 const EDGE_PAN_STEP_FRACTION = 0.025
 const MAXIMUM_EDGE_PAN_PX = 32
-const TIMELINE_TOOLTIP_DELAY_MS = 500
 
 interface TimelineRecordDetail {
   decodingMs?: number
@@ -46,6 +44,8 @@ interface FractionRange {
 interface HoverPoint {
   fraction: number
   recordIndex: number | null
+  x: number
+  y: number
 }
 
 interface PanGesture {
@@ -90,6 +90,29 @@ function timelineRecordDetail(cell: TrajectoryCellProps): TimelineRecordDetail {
   }
 }
 
+/** Compact offset for the cursor card: `56ms` / `2.5s` / `1m05s` / `1h02m`. */
+function formatOffset(milliseconds: number): string {
+  const ms = Math.max(0, milliseconds)
+  if (ms < 1_000) return `${Math.round(ms)}ms`
+  const seconds = ms / 1_000
+  if (seconds < 10) return `${seconds.toFixed(1)}s`
+  if (seconds < 60) return `${Math.round(seconds)}s`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m${String(Math.round(seconds % 60)).padStart(2, '0')}s`
+  return `${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, '0')}m`
+}
+
+/** Domain value in the active projection: an ordinal, a compressed offset or a clock time. */
+function formatDomainValue(
+  value: number,
+  mode: TrajectoryTimelineMode,
+  origin: number,
+): string {
+  if (mode === 'sequence') return `#${Math.round(value)}`
+  if (mode === 'duration') return formatOffset(Math.max(0, value - origin))
+  return formatRecordedTime(value)
+}
+
 function timelineKindLabel(kind: TrajectoryCellKind, t: TrajectoryTranslate): string {
   switch (kind) {
     case 'system': return t('kind.system')
@@ -111,36 +134,11 @@ function formatRecordedTime(timestamp: number): string {
   })
 }
 
-function timelineTooltipLabel(
-  kind: TrajectoryCellKind,
-  detail: TimelineRecordDetail | undefined,
-  t: TrajectoryTranslate,
-): string {
-  const heading = timelineKindLabel(kind, t)
-  if (detail === undefined) return heading
-  const duration = detail.durationMs === undefined
-    ? null
-    : t('timeline.total', { duration: formatTimelineOffset(detail.durationMs, t) })
-  const range = detail.startedAt === undefined
-    ? null
-    : detail.durationMs === undefined
-      ? t('timeline.started', { time: formatRecordedTime(detail.startedAt) })
-      : `${formatRecordedTime(detail.startedAt)} → ${formatRecordedTime(
-        detail.startedAt + detail.durationMs,
-      )}`
-  const segments = detail.ttftMs === undefined || detail.decodingMs === undefined
-    ? null
-    : t('timeline.ttftDecoding', {
-      ttft: formatTimelineOffset(detail.ttftMs, t),
-      decoding: formatTimelineOffset(detail.decodingMs, t),
-    })
-  const timing = [duration, segments].filter(value => value !== null).join(' · ')
-  return [heading, range, timing].filter(value => value !== null && value !== '').join('\n')
-}
-
 /** Props for the fixed full-domain overview above the trajectory ledger. */
 export interface TrajectoryTimelineProps {
   t: TrajectoryTranslate
+  /** Plugin-scoped strings (cursor card labels, hints). */
+  qt: (key: string, params?: Record<string, string | number>) => string
   turns: readonly TrajectoryTurnModel[]
   mode: TrajectoryTimelineMode
   range: TrajectoryTimeRange | null
@@ -228,6 +226,24 @@ function EarlierHistoryBoundary({ loading, t }: { loading: boolean; t: Trajector
 }
 
 /**
+ * Passive marker for "more recent content is off-screen to the right". The left
+ * end of the track pulls in history; this is its mirror, with no fetch behind it.
+ */
+function LaterHistoryBoundary({ qt }: { qt: (key: string) => string }) {
+  return (
+    <span
+      className={css.laterHistory}
+      data-later-history
+      role="status"
+      aria-live="polite"
+      title={qt('timeline.moreRecent')}
+    >
+      <span className={css.laterDot} aria-hidden="true" />
+    </span>
+  )
+}
+
+/**
  * The span layer, memoized by low-frequency props.
  *
  * Hovering and dragging update the parent on every pointer move (hover line,
@@ -250,9 +266,6 @@ const TimelineLanes = memo(function TimelineLanes({
   searchMatchIndexes,
   detailByIndex,
   mode,
-  onTipEnter,
-  onTipMove,
-  onTipLeave,
 }: {
   model: TrajectoryTimelineModel
   fullDuration: number
@@ -266,9 +279,6 @@ const TimelineLanes = memo(function TimelineLanes({
   searchMatchIndexes: Set<number> | null
   detailByIndex: Map<number, TimelineRecordDetail | undefined>
   mode: TrajectoryTimelineMode
-  onTipEnter: (span: TimelineSpan, event: { clientX: number; clientY: number }) => void
-  onTipMove: (event: { clientX: number; clientY: number }) => void
-  onTipLeave: () => void
 }) {
   return (
     <>
@@ -322,9 +332,6 @@ const TimelineLanes = memo(function TimelineLanes({
                 <span
                   aria-hidden="true"
                   className={css.span}
-                  onMouseEnter={(event) => { onTipEnter(span, event) }}
-                  onMouseMove={onTipMove}
-                  onMouseLeave={onTipLeave}
                   data-timeline-span={span.kind}
                   data-timeline-record-index={span.index}
                   data-assistant-timing={ttftFraction === null ? undefined : 'true'}
@@ -361,6 +368,7 @@ const TimelineLanes = memo(function TimelineLanes({
 /** Overview renderer with drag ranges, click-sized focus, and Escape reset. */
 export const TrajectoryTimeline = memo(function TrajectoryTimeline({
   t,
+  qt,
   turns,
   mode,
   range,
@@ -393,13 +401,6 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
   const [draft, setDraft] = useState<TrajectoryTimeRange | null>(null)
   const [hover, setHover] = useState<HoverPoint | null>(null)
   const [loadingEarlier, setLoadingEarlier] = useState(false)
-  const [tip, setTip] = useState<{
-    x: number
-    y: number
-    kind: TrajectoryCellKind
-    detail: TimelineRecordDetail | undefined
-    isError: boolean | undefined
-  } | null>(null)
   const [panning, setPanning] = useState(false)
   const [viewport, setViewport] = useState<TrajectoryTimeRange | null>(null)
   const [animateViewport, setAnimateViewport] = useState(false)
@@ -509,6 +510,32 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
     markerArmed.current = false
     requestEarlier('marker')
   }, [requestEarlier, showsEarlierBoundary])
+  /* The right end mirrors the left one. There is nothing newer to fetch, so the
+     action reveals what is already loaded; zone, hysteresis, chain and dot are
+     shared with the left end so neither side feels dead. */
+  const laterPointer = useRef(false)
+  const visibleEnd = domainStart + domainDuration
+  const showsLaterBoundary = model !== null
+    && viewport !== null
+    && visibleEnd < model.end - Math.max(1e-9, fullDuration * 1e-6)
+  const requestLater = useCallback(() => {
+    if (model === null || viewport === null) return
+    if (visibleEnd >= model.end - Math.max(1e-9, fullDuration * 1e-6)) return
+    const step = Math.max(1, domainDuration * LATER_STEP_FRACTION)
+    const nextEnd = Math.min(model.end, visibleEnd + step)
+    const nextStart = Math.max(model.start, nextEnd - domainDuration)
+    setAnimateViewport(false)
+    setViewport({ start: nextStart, end: nextEnd })
+  }, [domainDuration, fullDuration, model, viewport, visibleEnd])
+  /* still parked at the right edge after a step → take the next one */
+  useEffect(() => {
+    if (!laterPointer.current) return
+    if (!showsLaterBoundary) {
+      laterPointer.current = false
+      return
+    }
+    requestLater()
+  }, [requestLater, showsLaterBoundary])
   const projectedDomainStyle = useMemo(() => (model === null
     ? undefined
     : {
@@ -561,21 +588,6 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
     return () => { root.removeEventListener('wheel', onWheel) }
   }, [domainDuration, domainStart, fullDuration, mode, model])
 
-  const onTipEnter = useCallback((span: TrajectoryTimelineSpan, event: { clientX: number; clientY: number }) => {
-    setTip({
-      x: event.clientX,
-      y: event.clientY,
-      kind: span.kind,
-      detail: detailByIndex.get(span.index),
-      isError: span.isError,
-    })
-  }, [detailByIndex])
-  const onTipMove = useCallback((event: { clientX: number; clientY: number }) => {
-    setTip(current => current === null ? current : { ...current, x: event.clientX, y: event.clientY })
-  }, [])
-  const onTipLeave = useCallback(() => { setTip(null) }, [])
-
-
   if (model === null) {
     return (
       <section ref={rootRef} className={css.root} aria-label={t('timeline.aria')}>
@@ -615,6 +627,29 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
     onRangeChange(nextRange)
   }
 
+  /* Both ends of the track take the pointer the same way; only the payload of
+     the action differs (pull history vs. reveal what is loaded). */
+  const parkAtEdge = (clientX: number) => {
+    const rect = trackRef.current?.getBoundingClientRect()
+    if (rect === undefined || rect === null) return
+    const fromLeft = clientX - rect.left
+    if (fromLeft > EDGE_TRIGGER_PX + EDGE_LEAVE_PX) {
+      /* clearing must not depend on hasEarlierRecords: once every page is in,
+         that flag goes false and the parked state would stick forever */
+      edgePointer.current = false
+    } else if (hasEarlierRecords && fromLeft <= EDGE_TRIGGER_PX) {
+      edgePointer.current = true
+      requestEarlier('edge')
+    }
+    const fromRight = rect.right - clientX
+    if (fromRight > EDGE_TRIGGER_PX + EDGE_LEAVE_PX) {
+      laterPointer.current = false
+    } else if (viewport !== null && fromRight <= EDGE_TRIGGER_PX) {
+      laterPointer.current = true
+      requestLater()
+    }
+  }
+
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (event.button === 2) {
       panRef.current = {
@@ -632,23 +667,12 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
       return
     }
     if (event.button !== 0) return
-    const trackRect = trackRef.current?.getBoundingClientRect()
-    if (trackRect !== undefined && trackRect !== null) {
-      const distance = event.clientX - trackRect.left
-      if (distance > EARLIER_TRIGGER_PX + EARLIER_LEAVE_PX) {
-        /* clearing must not depend on hasEarlierRecords: once every page is in,
-           that flag goes false and the parked state would stick forever */
-        edgePointer.current = false
-      } else if (hasEarlierRecords && distance <= EARLIER_TRIGGER_PX) {
-        /* pressing on the edge counts as "parked here" and starts the chain */
-        edgePointer.current = true
-        requestEarlier('edge')
-      }
-    }
+    /* pressing on an edge counts as "parked here" and starts that side's chain */
+    parkAtEdge(event.clientX)
     const anchor = fractionAt(event)
     const anchorTime = domainStart + anchor * domainDuration
     const recordIndex = recordIndexAt(event)
-    setHover({ fraction: anchor, recordIndex })
+    setHover({ fraction: anchor, recordIndex, x: event.clientX, y: event.clientY })
     dragRef.current = {
       pointerId: event.pointerId,
       anchorTime,
@@ -664,19 +688,8 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
     const fraction = fractionAt(event)
-    const trackRect = trackRef.current?.getBoundingClientRect()
-    if (trackRect !== undefined && trackRect !== null) {
-      const distance = event.clientX - trackRect.left
-      if (distance > EARLIER_TRIGGER_PX + EARLIER_LEAVE_PX) {
-        /* clearing must not depend on hasEarlierRecords: once every page is in,
-           that flag goes false and the parked state would stick forever */
-        edgePointer.current = false
-      } else if (hasEarlierRecords && distance <= EARLIER_TRIGGER_PX) {
-        edgePointer.current = true
-        requestEarlier('edge')
-      }
-    }
-    setHover({ fraction, recordIndex: recordIndexAt(event) })
+    parkAtEdge(event.clientX)
+    setHover({ fraction, recordIndex: recordIndexAt(event), x: event.clientX, y: event.clientY })
     const pan = panRef.current
     if (pan !== null && pan.pointerId === event.pointerId) {
       if (Math.abs(event.clientX - pan.anchorClientX) >= MINIMUM_DRAG_PX) {
@@ -743,7 +756,7 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
     const pointFraction = fractionAt(event)
     const pointTime = domainStart + pointFraction * domainDuration
     const selected = orderedRange(drag.anchorTime, pointTime)
-    setHover({ fraction: pointFraction, recordIndex: recordIndexAt(event) })
+    setHover({ fraction: pointFraction, recordIndex: recordIndexAt(event), x: event.clientX, y: event.clientY })
     dragRef.current = null
     setDraft(null)
     const click = Math.abs(event.clientX - drag.anchorClientX) < MINIMUM_DRAG_PX
@@ -811,6 +824,7 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
           onPointerCancel={onPointerCancel}
           onPointerLeave={() => {
             edgePointer.current = false
+            laterPointer.current = false
             if (dragRef.current === null && panRef.current === null) setHover(null)
           }}
           onDoubleClick={(event) => {
@@ -824,7 +838,10 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
           {showsEarlierBoundary && (
             <EarlierHistoryBoundary loading={loadingEarlier} t={t} />
           )}
-          {hover !== null && hover.recordIndex === null && draft === null && (
+          {showsLaterBoundary && (
+            <LaterHistoryBoundary qt={qt} />
+          )}
+          {hover !== null && (
             <div
               className={css.hoverLine}
               data-timeline-hover-line
@@ -870,38 +887,67 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
               searchMatchIndexes={searchMatchIndexes}
               detailByIndex={detailByIndex}
               mode={mode}
-              onTipEnter={onTipEnter}
-              onTipMove={onTipMove}
-              onTipLeave={onTipLeave}
             />
           )}
         </div>
       </div>
     </section>
-      {tip !== null && (() => {
-        const detail = tip.detail
-        const seconds = detail?.durationMs
-        const rows = []
-        if (detail?.startedAt !== undefined) rows.push({ label: '开始', value: formatRecordedTime(detail.startedAt) })
-        if (detail?.startedAt !== undefined && detail?.durationMs !== undefined) {
-          rows.push({ label: '结束', value: formatRecordedTime(detail.startedAt + detail.durationMs) })
-        }
-        if (seconds !== undefined) {
-          rows.push({
-            label: '耗时',
-            value: seconds < 1000
-              ? `${Math.round(seconds)}ms`
-              : `${(seconds / 1000).toFixed(seconds < 10000 ? 1 : 0)}s`,
-          })
-        }
+      {hover !== null && !panning && (() => {
+        const cursorValue = domainStart + hover.fraction * domainDuration
+        const span = hover.recordIndex === null
+          ? undefined
+          : model.spans.find(candidate => candidate.index === hover.recordIndex)
+        const formatValue = (value: number): string => formatDomainValue(value, mode, model.start)
+        const detail = span === undefined ? undefined : detailByIndex.get(span.index)
+        /* the window's own length belongs to the window row: in sequence mode the
+           axis is ordinal, so there is no duration to attach to the cursor */
+        const windowText = `${formatValue(domainStart)} – ${formatValue(domainStart + domainDuration)}`
+        const rows = [
+          { label: qt('timeline.cursor'), value: formatValue(cursorValue) },
+          ...(span === undefined
+            ? []
+            : [{
+              label: qt('timeline.period'),
+              value: `${formatValue(span.start)} – ${formatValue(span.end)}`,
+            }]),
+          ...(detail?.durationMs === undefined
+            ? []
+            : [{
+              label: qt('chip.duration'),
+              value: mode === 'sequence'
+                ? qt('timeline.records', { count: Math.round(span.end - span.start) })
+                : formatOffset(detail.durationMs),
+            }]),
+          { label: qt('timeline.window'), value: windowText },
+          {
+            label: qt('timeline.count'),
+            value: qt('timeline.records', {
+              count: model.spans.filter(candidate =>
+                candidate.end >= domainStart
+                && candidate.start <= domainStart + domainDuration).length,
+            }),
+          },
+        ]
         return (
           <HoverCard
-            x={tip.x}
-            y={tip.y}
-            kind={tip.kind}
-            label={timelineKindLabel(tip.kind, t)}
-            isError={tip.isError}
+            x={hover.x}
+            y={hover.y}
+            /* no bar under the cursor → no head at all: the rows already say
+               where the cursor is, and a head repeating `#7` reads as a bug */
+            {...(span === undefined
+              ? {}
+              : {
+                kind: span.kind,
+                label: timelineKindLabel(span.kind, t),
+                ...(span.label === '' ? {} : { name: span.label }),
+              })}
+            isError={span?.isError === true || undefined}
             rows={rows}
+            hints={[
+              { key: qt('timeline.hintClick'), text: qt('timeline.hintClickText') },
+              { key: qt('timeline.hintDrag'), text: qt('timeline.hintDragText') },
+              { key: qt('timeline.hintScroll'), text: qt('timeline.hintScrollText') },
+            ]}
           />
         )
       })()}

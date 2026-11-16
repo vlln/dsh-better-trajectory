@@ -820,32 +820,6 @@ function requestErrorMessage(
   return request.error
 }
 
-function TokenRows({ cell, t }: { cell: TrajectoryCellProps; t: TrajectoryTranslate }) {
-  const content = cell.output !== undefined && cell.think !== undefined
-    ? Math.max(0, cell.output - cell.think)
-    : undefined
-  return (
-    <>
-      <div>
-        <dt>{t('usage.tokens')}</dt>
-        <dd>{cell.output === undefined ? '—' : t('unit.tokens', { value: cell.output })}</dd>
-      </div>
-      {cell.think !== undefined && (
-        <div className={css.requestTokenDetail}>
-          <dt>{t('usage.reasoning')}</dt>
-          <dd>{t('unit.tokens', { value: cell.think })}</dd>
-        </div>
-      )}
-      {content !== undefined && (
-        <div className={css.requestTokenDetail}>
-          <dt>{t('usage.content')}</dt>
-          <dd>{t('unit.tokens', { value: content })}</dd>
-        </div>
-      )}
-    </>
-  )
-}
-
 function inputTotal(usage: TrajectoryUsage): number | undefined {
   if (
     usage.input === undefined
@@ -1767,6 +1741,35 @@ function MarkdownRecordContent({
  * 工具记录的概述：属性一行（状态 · 时长 · ID），下面是可折叠的参数 / 结果 / Schema。
  * 参数与结果在这里就地展开，不再各占一个页签——一份数据只有一个入口。
  */
+/** One attribute in an inspector meta row: caption, value, optional trailing action. */
+function MetaItem({
+  label,
+  tone,
+  wide = false,
+  mono = false,
+  extra,
+  title,
+  children,
+}: {
+  label: string
+  tone?: 'error' | 'warn'
+  wide?: boolean
+  mono?: boolean
+  extra?: ReactNode
+  title?: string
+  children: ReactNode
+}) {
+  return (
+    <span className={`${css.metaItem}${wide ? ` ${css.metaItemWide}` : ''}`} title={title}>
+      <span className={css.metaLabel}>{label}</span>
+      <span className={`${css.metaValue}${mono ? ` ${css.metaValueMono}` : ''}`} data-tone={tone}>
+        {children}
+      </span>
+      {extra}
+    </span>
+  )
+}
+
 function ToolOverview({
   record,
   state,
@@ -1790,24 +1793,22 @@ function ToolOverview({
   return (
     <div className={css.toolOverview}>
       <div className={css.metaRow}>
-        <span className={css.metaItem}>
-          <span className={css.metaLabel}>{qt('chip.status')}</span>
-          <span className={css.metaValue} data-tone={state === 'error' ? 'error' : state === 'running' ? 'warn' : undefined}>
-            {statusLabel(state, t)}
-          </span>
-        </span>
-        {ms !== null && (
-          <span className={css.metaItem}>
-            <span className={css.metaLabel}>{qt('chip.duration')}</span>
-            <span className={css.metaValue}>{compactDuration(ms)}</span>
-          </span>
-        )}
+        <MetaItem
+          label={qt('chip.status')}
+          tone={state === 'error' ? 'error' : state === 'running' ? 'warn' : undefined}
+        >
+          {statusLabel(state, t)}
+        </MetaItem>
+        {ms !== null && <MetaItem label={qt('chip.duration')}>{compactDuration(ms)}</MetaItem>}
         {cell.callId !== undefined && (
-          <span className={`${css.metaItem} ${css.metaItemWide}`}>
-            <span className={css.metaLabel}>{qt('chip.callId')}</span>
-            <span className={`${css.metaValue} ${css.metaValueMono}`}>{cell.callId}</span>
-            <InspectorCopyButton text={cell.callId} label={qt('chip.callId')} t={t} />
-          </span>
+          <MetaItem
+            label={qt('chip.callId')}
+            wide
+            mono
+            extra={<InspectorCopyButton text={cell.callId} label={qt('chip.callId')} t={t} />}
+          >
+            {cell.callId}
+          </MetaItem>
         )}
       </div>
       {argsText !== '' && (
@@ -1829,17 +1830,11 @@ function ToolOverview({
         bare={isBranch(result) && !cell.isError}
         actions={resultText === '' ? undefined : <SectionCopy text={resultText} label={qt('raw.copyAll')} />}
       >
-        {cell.isError && (
-          <div className={css.errorBanner} role="alert">
-            <span className={css.errorDot} aria-hidden="true" />
-            <strong>{statusLabel(state, t)}</strong>
-          </div>
-        )}
         {resultText === ''
           ? <DetailEmpty>{state === 'running' ? t('code.running') : qt('payload.empty')}</DetailEmpty>
           : isBranch(result) && !cell.isError
             ? <RawDataPanel data={result} qt={qt} bare />
-            : <DetailText text={resultText} full={!cell.isError} />}
+            : <DetailText text={resultText} full tone={cell.isError ? 'error' : undefined} />}
       </DetailSection>
       {isBranch(schema) && (
         <DetailSection
@@ -2302,7 +2297,6 @@ export function TrajectoryTable({
   timelineFocusIndexes = null,
   searchMatchIndexes = null,
   hiddenIndexes = null,
-  hiddenHints = null,
   callMeta = null,
   maxDurationMs = 1,
   initialScrollTop = null,
@@ -3120,14 +3114,6 @@ export function TrajectoryTable({
               </tr>
             )}
             {renderedRecords.map(({ record, position, terminalRequestBoundary }) => (
-              record.hint !== undefined ? (
-                <tr key={`hint:${record.turn}:${record.group}`} className={css.hiddenHintRow}>
-                  <td colSpan={2} className={css.hiddenHintCell}>
-                    <span className={css.hiddenHintText}>{qt('hint.filtered', { count: record.hint })}</span>
-                    <button type="button" className={css.hiddenHintButton} onClick={onShowAll}>{qt('query.showAll')}</button>
-                  </td>
-                </tr>
-              ) : (
               <RecordPresentation
                 key={trajectoryVirtualRecordKey(record)}
                 cell={record.cell}
@@ -3187,6 +3173,12 @@ export function TrajectoryTable({
                   const rowTone = record.cell.isError
                     ? 'error'
                     : stateOf(record) === 'running' ? 'running' : 'ok'
+                  /* a failed call says why, in the row: the native ledger shows
+                     `→ <error>` after the arguments and so does this one */
+                  const rowErrorText = record.cell.isError === true && toolLike
+                    ? String(record.cell.outputDetail ?? record.cell.result ?? '')
+                      .replace(/\s+/g, ' ').trim()
+                    : ''
                   const rowBarWidth = rowDurationMs == null
                     ? 0
                     : Math.max(2, Math.round((rowDurationMs / Math.max(1, maxDurationMs)) * 64))
@@ -3473,6 +3465,12 @@ export function TrajectoryTable({
                               <span className={css.rowSub}>
                                 {record.collapsedSummary !== undefined ? record.collapsedSummary : rowSub}
                               </span>
+                              {rowErrorText !== '' && (
+                                <span className={css.rowResult} title={rowErrorText}>
+                                  <span className={css.rowResultArrow} aria-hidden="true">→</span>
+                                  <span className={css.rowResultText}>{rowErrorText}</span>
+                                </span>
+                              )}
                               <span className={css.rowBarWrap}>
                                 {rowBarWidth > 0 && (
                                   <span
@@ -3493,7 +3491,6 @@ export function TrajectoryTable({
                   )
                 }}
               </RecordPresentation>
-              )
             ))}
             {virtualBottom > 0 && (
               <tr className={css.virtualSpacer} data-virtual-spacer="bottom" aria-hidden="true">
@@ -3893,44 +3890,37 @@ export function TrajectoryTable({
               && selected?.cell.kind === 'compacted'
               && selectedState !== undefined
               && activeTab === 'overview' && (
-              <>
-                <dl
-                  className={`${css.overview} ${css.summaryScrollRegion}`}
-                  data-summary-scroll-region=""
-                >
-                  <div>
-                    <dt>{qt('chip.status')}</dt>
-                    <dd className={selectedState === 'error' ? css.error : undefined}>
-                      {statusLabel(selectedState, t)}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>{t('timing.duration')}</dt>
-                    <dd>{formatElapsedSeconds(selected.cell.timeSeconds, t)}</dd>
-                  </div>
-                  <div>
-                    <dt>{t('usage.tokens')}</dt>
-                    <dd>—</dd>
-                  </div>
-                </dl>
-                {selected.cell.outputDetail !== undefined && (
-                  <div
-                    className={`${css.compactedSummary} ${css.summaryScrollRegion}`}
-                    data-summary-scroll-region=""
+              <div className={css.toolOverview}>
+                <div className={css.metaRow}>
+                  <MetaItem
+                    label={qt('chip.status')}
+                    tone={selectedState === 'error' ? 'error' : selectedState === 'running' ? 'warn' : undefined}
                   >
-                    <MarkdownRecordContent
-                      record={selected}
-                      renderSlot={renderSlot}
-                      loadImage={loadImage}
-                      rendered
-                      thinkingExpanded={thinkingExpanded}
-                      onThinkingExpandedChange={setThinkingExpanded}
-                      onOpenCall={openCallSummary}
-                      t={t}
-                    />
-                  </div>
+                    {statusLabel(selectedState, t)}
+                  </MetaItem>
+                  {selected.cell.timeSeconds !== null && (
+                    <MetaItem label={qt('chip.duration')}>
+                      {compactDuration(Math.round(selected.cell.timeSeconds * 1_000))}
+                    </MetaItem>
+                  )}
+                </div>
+                {selected.cell.outputDetail !== undefined && (
+                  <DetailSection title={t('tab.summary')} defaultOpen>
+                    <div className={css.compactedSummary}>
+                      <MarkdownRecordContent
+                        record={selected}
+                        renderSlot={renderSlot}
+                        loadImage={loadImage}
+                        rendered
+                        thinkingExpanded={thinkingExpanded}
+                        onThinkingExpandedChange={setThinkingExpanded}
+                        onOpenCall={openCallSummary}
+                        t={t}
+                      />
+                    </div>
+                  </DetailSection>
                 )}
-              </>
+              </div>
             )}
             {!promptSelected
               && selected !== undefined
@@ -3946,109 +3936,104 @@ export function TrajectoryTable({
               && selected.cell.kind !== 'subtool'
               && selectedState !== undefined
               && activeTab === 'overview' && (
-              <>
+              <div className={css.toolOverview}>
                 {selectedProgram !== undefined && selectedProgram.description !== '' && (
                   <p className={css.programDescription}>{selectedProgram.description}</p>
                 )}
-                <dl
-                  className={`${css.overview} ${css.summaryScrollRegion}`}
-                  data-summary-scroll-region=""
-                >
-                  {selected.cell.messageSource !== undefined && (
-                    <div>
-                      <dt>{t('details.source')}</dt>
-                      <dd className={css.overviewParentLinks}>
-                        <button
-                          type="button"
-                          className={css.overviewHierarchyNavLink}
-                          onClick={() => { activateTab('source') }}
-                        >
-                          <span>{messageSourceLabel(selected.cell.messageSource, t)}</span>
-                          <IconChevronRightOutlineRegular
-                            className={css.overviewHierarchyJumpIconTight}
-                            size={11}
-                          />
-                        </button>
-                      </dd>
-                    </div>
+                <div className={css.metaRow}>
+                  <MetaItem
+                    label={qt('chip.status')}
+                    tone={selectedState === 'error' ? 'error' : selectedState === 'running' ? 'warn' : undefined}
+                  >
+                    {statusLabel(selectedState, t)}
+                  </MetaItem>
+                  {selected.cell.kind === 'message' && selected.cell.output !== undefined && (
+                    <MetaItem label={t('usage.tokens')}>
+                      {t('unit.tokens', { value: selected.cell.output })}
+                    </MetaItem>
                   )}
-                  {hasSelectedHierarchy && (
-                    <div>
-                      {/* always 层级: the row above may already be 来源, and two rows
-                          with the same caption read as one broken entry */}
-                      <dt>{t('details.hierarchy')}</dt>
-                      <dd className={css.overviewParentLinks}>
-                        {selectedAssistantRequestTarget !== undefined && (
-                          <button
-                            type="button"
-                            className={css.overviewHierarchyNavLink}
-                            onClick={() => {
-                              selectRequest(selectedAssistantRequestTarget)
-                            }}
-                          >
-                            <span>{t('request.label', { request: selectedAssistantRequest ?? '—' })}</span>
-                            <IconChevronRightOutlineRegular
-                              className={css.overviewHierarchyJumpIconTight}
-                              size={11}
-                            />
-                          </button>
-                        )}
-                        {selectedParentMessage !== undefined && (
-                          <button
-                            type="button"
-                            className={css.overviewHierarchyNavLink}
-                            onClick={() => { openRecordSummary(selectedParentMessage) }}
-                          >
-                            <span>{t('details.assistantMessage')}</span>
-                            <IconChevronRightOutlineRegular
-                              className={css.overviewHierarchyJumpIconTight}
-                              size={11}
-                            />
-                          </button>
-                        )}
-                        {selectedParentTool !== undefined && (
-                          <button
-                            type="button"
-                            className={css.overviewHierarchyNavLink}
-                            onClick={() => { openRecordSummary(selectedParentTool) }}
-                          >
-                            <span>{t('details.toolCall')}</span>
-                            <IconChevronRightOutlineRegular
-                              className={css.overviewHierarchyJumpIconTight}
-                              size={11}
-                            />
-                          </button>
-                        )}
-                      </dd>
-                    </div>
+                  {selected.cell.kind === 'message' && selected.cell.think !== undefined && (
+                    <MetaItem label={t('usage.reasoning')}>
+                      {t('unit.tokens', { value: selected.cell.think })}
+                    </MetaItem>
                   )}
-                  <div>
-                    <dt>{qt('chip.status')}</dt>
-                    <dd className={selectedState === 'error' ? css.error : undefined}>
-                      {statusLabel(selectedState, t)}
-                    </dd>
-                  </div>
-                  {selected.cell.kind === 'message' && (
-                    <TokenRows cell={selected.cell} t={t} />
+                  {selected.cell.startedAt != null && (
+                    <MetaItem label={t('timing.started')}>{formatClock(selected.cell.startedAt)}</MetaItem>
                   )}
                   {selected.cell.timeSeconds !== null
-                    && (selected.cell.kind === 'user'
-                      || selected.cell.kind === 'context'
-                      || selected.cell.kind === 'tool'
-                      || selected.cell.kind === 'subtool') && (
-                    <div>
-                      <dt>{t('timing.duration')}</dt>
-                      <dd>{formatElapsedSeconds(selected.cell.timeSeconds, t)}</dd>
-                    </div>
+                    && selected.cell.kind !== 'message' && (
+                    <MetaItem label={qt('chip.duration')}>
+                      {compactDuration(Math.round(selected.cell.timeSeconds * 1_000))}
+                    </MetaItem>
+                  )}
+                  {selected.cell.messageSource !== undefined && (
+                    <MetaItem label={t('details.source')}>
+                      <button
+                        type="button"
+                        className={css.metaLink}
+                        onClick={() => { activateTab('source') }}
+                      >
+                        {messageSourceLabel(selected.cell.messageSource, t)}
+                        <IconChevronRightOutlineRegular size={11} aria-hidden="true" />
+                      </button>
+                    </MetaItem>
+                  )}
+                  {hasSelectedHierarchy && (
+                    /* 层级 keeps its own caption: the row above may already be 来源,
+                       and two rows with the same caption read as one broken entry */
+                    <MetaItem label={t('details.hierarchy')} wide>
+                      {selectedAssistantRequestTarget !== undefined && (
+                        <button
+                          type="button"
+                          className={css.metaLink}
+                          onClick={() => { selectRequest(selectedAssistantRequestTarget) }}
+                        >
+                          {t('request.label', { request: selectedAssistantRequest ?? '—' })}
+                          <IconChevronRightOutlineRegular size={11} aria-hidden="true" />
+                        </button>
+                      )}
+                      {selectedParentMessage !== undefined && (
+                        <button
+                          type="button"
+                          className={css.metaLink}
+                          onClick={() => { openRecordSummary(selectedParentMessage) }}
+                        >
+                          {t('details.assistantMessage')}
+                          <IconChevronRightOutlineRegular size={11} aria-hidden="true" />
+                        </button>
+                      )}
+                      {selectedParentTool !== undefined && (
+                        <button
+                          type="button"
+                          className={css.metaLink}
+                          onClick={() => { openRecordSummary(selectedParentTool) }}
+                        >
+                          {t('details.toolCall')}
+                          <IconChevronRightOutlineRegular size={11} aria-hidden="true" />
+                        </button>
+                      )}
+                    </MetaItem>
                   )}
                   {selected.cell.callId !== undefined && (
-                    <div>
-                      <dt>{qt('chip.callId')}</dt>
-                      <dd className={css.overviewCode}>{selected.cell.callId}</dd>
-                    </div>
+                    <MetaItem
+                      label={qt('chip.callId')}
+                      wide
+                      mono
+                      extra={(
+                        <InspectorCopyButton
+                          text={selected.cell.callId}
+                          label={qt('chip.callId')}
+                          t={t}
+                        />
+                      )}
+                    >
+                      {selected.cell.callId}
+                    </MetaItem>
                   )}
-                </dl>
-                <div className={css.overviewSections}>
+                </div>
+                {/* same collapsible sections as the tool inspector: one header
+                    style, one copy affordance, no native `dl` left in the panel */}
+                <div className={css.toolSections}>
                   {selectedProgram !== undefined
                     ? (
                       <>
@@ -4061,7 +4046,11 @@ export function TrajectoryTable({
                     )
                     : isMarkdownRecord(selected)
                       ? (
-                        <DetailSection title={t('tab.preview')} defaultOpen>
+                        <DetailSection
+                          title={t('tab.preview')}
+                          badge={payloadBadge(markdownSource(selected) ?? '', qt)}
+                          defaultOpen
+                        >
                           <MarkdownRecordContent
                             record={selected}
                             renderSlot={renderSlot}
@@ -4078,32 +4067,51 @@ export function TrajectoryTable({
                       : (
                         <>
                           {selected.cell.inputDetail && (
-                            <OverviewSection label={t('tab.payload')} onOpen={() => { activateTab('input') }}>
+                            <DetailSection
+                              title={t('tab.payload')}
+                              badge={payloadBadge(parseMaybeJson(selected.cell.inputDetail) ?? selected.cell.inputDetail, qt)}
+                              defaultOpen={false}
+                            >
                               <RecordPayload record={selected} direction="input" preview renderSlot={renderSlot} loadImage={loadImage} stringWrapping={stringWrapping} t={t} />
-                            </OverviewSection>
+                            </DetailSection>
                           )}
                           {selected.cell.outputDetail && (
-                            <OverviewSection label={t('tab.result')} onOpen={() => { activateTab('output') }}>
+                            <DetailSection
+                              title={t('tab.result')}
+                              badge={payloadBadge(parseMaybeJson(selected.cell.outputDetail) ?? selected.cell.outputDetail, qt)}
+                              defaultOpen
+                            >
                               <RecordPayload record={selected} direction="output" preview renderSlot={renderSlot} loadImage={loadImage} stringWrapping={stringWrapping} t={t} />
-                            </OverviewSection>
+                            </DetailSection>
                           )}
-                          <OverviewSection label={t('tab.schema')} onOpen={() => { activateTab('schema') }}>
+                          <DetailSection title={t('tab.schema')} defaultOpen={false}>
                             <RecordSchema record={selected} preview stringWrapping={stringWrapping} t={t} />
-                          </OverviewSection>
+                          </DetailSection>
                         </>
                       )}
                   {selectedAssistantRequestTarget !== undefined && (
-                    <OverviewSection
-                      label={t('timing.request')}
-                      onOpen={() => {
-                        selectRequest(selectedAssistantRequestTarget, 'timing')
-                      }}
+                    <DetailSection
+                      title={t('timing.request')}
+                      defaultOpen={false}
+                      actions={(
+                        <button
+                          type="button"
+                          className={css.sectionJump}
+                          title={t('timing.request')}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            selectRequest(selectedAssistantRequestTarget, 'timing')
+                          }}
+                        >
+                          ›
+                        </button>
+                      )}
                     >
                       <RecordTiming record={selected} preview t={t} />
-                    </OverviewSection>
+                    </DetailSection>
                   )}
                 </div>
-              </>
+              </div>
             )}
             {!promptSelected && selected !== undefined && activeTab === 'data' && (
               <RawDataPanel data={rawDataFor(selected)} qt={qt} />

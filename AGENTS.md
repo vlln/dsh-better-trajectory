@@ -31,9 +31,10 @@ fork 的 `TrajectoryView` 渲染。只有一个「轨迹」页签，没有第二
 
 | 文件 | 改了什么 |
 |---|---|
-| `TrajectoryToolbar.tsx` → `QueryBar.tsx` | token 查询条、建议菜单、chip、Quick、平铺 |
-| `TrajectoryTable.tsx` | 记录 chips、工具记录五 tab（异常 / 原始）、行内时间槽、隐藏提示行 |
-| `TrajectoryView.tsx` | 查询解析、`visibleTurns` 过滤、`hiddenHints`、`callMeta`、Table 按隐藏集换 key |
+| `TrajectoryToolbar.tsx` → `QueryBar.tsx` | token 查询条、建议菜单、chip、常驻总统计、前进/后退 |
+| `TrajectoryTimeline.tsx` | 两端对称的贴边动作、虚线光标 + 光标卡片、右端标记点 |
+| `TrajectoryTable.tsx` | 属性行（`MetaItem`）、工具/消息共用的折叠块、行内 `→ Error`、右端定位 |
+| `TrajectoryView.tsx` | 查询解析、`visibleTurns` 过滤（全类型）、`callMeta`、Table 按隐藏集换 key |
 
 `RawDataPanel.tsx` 是可搜索 JSON 树，只被「原始」tab 使用。
 
@@ -46,12 +47,15 @@ fork 里有三个宿主内部值导入，原生包会打包它们，这里用 `s
 
 ### 查询语法
 
-`src/client/query.mjs`（纯函数，13 个单测）：`tool:` / `status:` / `turn:` / `turn:a-b` /
-`ms:>/</a-b` / `code:`，`-` 前缀取反，其余词按自由文本 AND。未知字段回退为文本，
+`src/client/query.mjs`（纯函数，21 个单测）：`tool:` / `status:` / `turn:` / `turn:a-b` /
+`ms:>/</a-b` / `code:` / `type:`，`-` 前缀取反，其余词按自由文本 AND。未知字段回退为文本，
 非法值保留 token 但不参与过滤。`src/client/filter.mjs` 提供工具索引与统计（13 个单测）。
 
-过滤只裁**工具 cell**：`visibleTurns` 在进入 Table 前删掉未命中的 `kind === 'tool' | 'subtool'`，
-回合、用户、助手、上下文保留。`hiddenHints` 按 `turn + group` 计数，Table 在组尾插入合成提示行。
+判据只有一份（`matchesFilters`），`matchesQuery`（工具索引）与 `matchesCell`（树记录）都走它。
+
+过滤作用于**所有记录类型**：`visibleTurns` 在进入 Table 前删掉未命中项，工具、子调用、
+助手、用户、上下文、压缩点一视同仁。`tool:` 只可能命中调用，`status:`/`code:` 对消息无效。
+被过滤总数只在 toolbar 的 chip 行说一次，不再插「本组 N 条被过滤」行（每个组都掉一条时它比内容还密）。
 
 ### 构建
 
@@ -69,11 +73,15 @@ fork 里有三个宿主内部值导入，原生包会打包它们，这里用 `s
 
 - 宿主 **0.2.2-rc.2**（2026-11-14），隔离 web profile，端口 3197。
 - 单页签接管：只剩「对话 / 轨迹」，旧的 `Trajectory+`、筛选栏、调试面板、JSON 浮层已删。
-- 查询：`tool:bash` → 16/68；Quick `错误` → `status:error`；chip 删除、Esc 清空、平铺。
-- 过滤后回合/助手上下文保留，组尾出现「本组 N 个调用被过滤 · 显示全部」。
-- 右栏：chips、工具记录 `概述/参数/结果/异常/原始`，非错误记录无 `异常` tab；`原始` 搜索命中计数。
+- 查询：`tool:bash` → 36/100（只有调用行，助手/用户/上下文同时隐藏）；`type:system` → 1/13；
+  `type:` 建议菜单有「类型」组；chip 删除、Esc 清空。
+- toolbar 右端常驻总统计：`13 条记录 · 5 次调用 · 3 个错误 · 6.3s`（窗口总时长超 24h 显示 `NdNNh`）。
+- 右栏：工具 `概述/计时/原始`，消息 `概述/原始内容(/来源)`；两者共用 `MetaItem` 属性行与
+  `DetailSection` 折叠块；失败调用行内 `→ Error: …`，右栏红色 payload（原生处理，无自造横幅）。
+- 导轨两端对称：左端 20px 内取历史，右端 20px 内把缩放窗口推到最新（到端即停、点消失）；
+  悬停虚线光标 + 光标卡片（光标/区间/耗时/可见窗口/记录 + 三条按键提示）。
 - 暗色（`prefers-color-scheme`）与 1200px 窄屏无横向滚动。
-- 负控：错误筛选下不触发「加载更早」。
+- 负控：只放宽节点上限的加载不会让 span 数增长 → 不会无限翻页。
 
 ## 改动前先看
 
@@ -81,4 +89,5 @@ fork 里有三个宿主内部值导入，原生包会打包它们，这里用 `s
 - 不要声明 `conversation.trajectory.images`（会顶掉原生声明）。
 - 查询语义改动先加 `tests/query.test.mjs` 用例，再改 `matchesQuery`。
 - UI 只消费 `--dsw-alias-*` / `--dsw-specific-*`，不写死颜色。
-- 过滤态下不要触发历史加载（会打乱窗口），`requestOlder` 已加守卫。
+- 过滤态下贴边取历史是允许的：窗口变了计数也跟着变，不需要额外守卫。
+- 行高恒定 30px（虚拟滚动按它估算），任何新行（含提示行）都必须落在 30px 网格上。

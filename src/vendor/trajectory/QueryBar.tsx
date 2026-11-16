@@ -9,6 +9,13 @@ export interface QueryBarProps {
   query: string
   onQuery: (next: string) => void
   stats: { total: number; matched: number; hidden: number; errors: number; running: number }
+  /** Always-on totals for the whole loaded window. */
+  totals: {
+    records: number
+    calls: number
+    errors: number
+    durationMs: number | null
+  }
   tools: readonly { name: string; calls?: number; count?: number }[]
   turns: readonly { turn: number; count: number }[]
   canGoBack: boolean
@@ -28,6 +35,22 @@ export interface QueryBarProps {
   onToggleAllSubCalls: () => void
   t: (key: string) => string
   qt: (key: string, params?: Record<string, string | number>) => string
+}
+
+/** Wall-clock span of the loaded window: `812ms` / `4.2s` / `51m05s` / `3h12m` / `19d18h`. */
+function formatSpan(milliseconds: number): string {
+  const ms = Math.max(0, Math.round(milliseconds))
+  if (ms < 1_000) return `${ms}ms`
+  const seconds = ms / 1_000
+  if (seconds < 10) return `${seconds.toFixed(1)}s`
+  if (seconds < 60) return `${Math.round(seconds)}s`
+  const minutes = Math.floor(seconds / 60)
+  const rest = Math.round(seconds % 60)
+  if (minutes < 60) return `${minutes}m${String(rest).padStart(2, '0')}s`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h${String(minutes % 60).padStart(2, '0')}m`
+  const days = Math.floor(hours / 24)
+  return `${days}d${String(hours % 24).padStart(2, '0')}h`
 }
 
 interface Suggestion {
@@ -57,6 +80,11 @@ function buildSuggestions(props: QueryBarProps, lastWord: string): Suggestion[] 
   if (field === '' || field === 'turn') {
     for (const turn of props.turns.slice(0, 8)) {
       if (match(String(turn.turn))) out.push({ insert: `turn:${turn.turn}`, label: `#${turn.turn}`, detail: String(turn.count), group: props.qt('query.groupTurn') })
+    }
+  }
+  if (field === '' || field === 'type') {
+    for (const type of ['call', 'message', 'user', 'system', 'context', 'compacted']) {
+      if (match(type)) out.push({ insert: `type:${type}`, label: type, group: props.qt('query.groupType') })
     }
   }
   if (field === '' || field === 'ms') {
@@ -233,6 +261,30 @@ export function QueryBar(props: QueryBarProps) {
           )}
         </div>
 
+        <div className={css.totals} data-query={query.trim() === '' ? undefined : 'active'}>
+          <span className={css.totalsItem} title={qt('totals.records')}>
+            <b>{props.totals.records.toLocaleString()}</b>
+            <i>{qt('totals.records')}</i>
+          </span>
+          <span className={css.totalsItem} title={qt('totals.calls')}>
+            <b>{props.totals.calls.toLocaleString()}</b>
+            <i>{qt('totals.calls')}</i>
+          </span>
+          <span
+            className={css.totalsItem}
+            data-tone={props.totals.errors > 0 ? 'error' : undefined}
+            title={qt('totals.errors')}
+          >
+            <b>{props.totals.errors.toLocaleString()}</b>
+            <i>{qt('totals.errors')}</i>
+          </span>
+          {props.totals.durationMs !== null && (
+            <span className={css.totalsItem} data-mono="" title={qt('totals.duration')}>
+              <b>{formatSpan(props.totals.durationMs)}</b>
+            </span>
+          )}
+        </div>
+
       </div>
 
       {tokens.some(token => !token.valid) && (
@@ -257,7 +309,7 @@ export function QueryBar(props: QueryBarProps) {
             </span>
           ))}
           <span className={css.summary}>
-            {qt('query.summary', { matched: stats.matched, total: stats.total })}
+            {qt('query.summary', { matched: stats.matched })}
             {stats.hidden > 0 && <span className={css.hidden}>· {qt('query.hidden', { count: stats.hidden })}</span>}
           </span>
           <button type="button" className={css.showAll} onClick={() => onQuery('')}>{qt('query.showAll')}</button>

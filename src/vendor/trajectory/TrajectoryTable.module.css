@@ -2062,26 +2062,6 @@
   padding: 10px 12px;
 }
 
-.errorBanner {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border: 1px solid color-mix(in srgb, #e5484d 35%, transparent);
-  border-radius: 6px;
-  background: color-mix(in srgb, #e5484d 8%, transparent);
-  color: #b42318;
-  font-size: 12px;
-}
-
-.errorDot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #e5484d;
-  flex-shrink: 0;
-}
-
 .errorCopy {
   margin-left: auto;
   border: 0;
@@ -2139,37 +2119,12 @@
   background: var(--dsw-alias-bg-layer-2, rgba(0, 0, 0, 0.04));
 }
 
-tr[data-error='true'] {
-  background: color-mix(in srgb, #e5484d 4%, transparent);
-}
-
 tr[data-error='true'] .content {
   box-shadow: inset 2px 0 0 color-mix(in srgb, #e5484d 55%, transparent);
 }
 
-.hiddenHintRow {
-  background: var(--dsw-alias-bg-layer-2, rgba(0, 0, 0, 0.02));
-}
-
-.hiddenHintCell {
-  padding: 4px 8px 4px 40px !important;
-  color: var(--dsw-alias-label-tertiary, #999);
-  font-size: 11px;
-}
-
-.hiddenHintText {
-  margin-right: 8px;
-}
-
-.hiddenHintButton {
-  border: 0;
-  background: transparent;
-  color: var(--dsw-alias-brand-primary, #4a6cf7);
-  font-size: 11px;
-  cursor: pointer;
-  padding: 0;
-}
-
+/* exactly one 30px ledger row: the virtualizer owns a fixed row height, so a
+   taller hint would drift every row below it */
 @media (max-width: 900px) {
   .rowMeta {
     display: none;
@@ -2261,6 +2216,36 @@ tr[data-error='true'] .content {
   font-size: 11px;
 }
 
+/* failed call: the reason rides in the row, native style (`→ error`, all red) */
+.rowLine[data-tone='error'] .rowSub {
+  flex: 0 1 auto;
+  max-width: 40%;
+}
+
+.rowResult {
+  display: flex;
+  flex: 1 1 46%;
+  align-items: center;
+  min-width: 0;
+  max-width: 46%;
+  color: var(--bt-error, #d92d20);
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10.5px;
+}
+
+.rowResultArrow {
+  flex: none;
+  margin: 0 6px 0 8px;
+  color: color-mix(in srgb, var(--bt-error, #d92d20) 55%, transparent);
+}
+
+.rowResultText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .rowBarWrap {
   margin-left: auto;
   flex: none;
@@ -2319,18 +2304,6 @@ tr[data-selected='true'] {
 
 tr[data-selected='true'] .event {
   box-shadow: inset 2px 0 0 var(--bt-accent, #2563eb);
-}
-
-tr[data-error='true'] {
-  background: var(--bt-error-soft, #fef3f2);
-}
-
-tr[data-error='true']:hover {
-  background: color-mix(in srgb, var(--bt-error, #d92d20) 12%, var(--bt-surface, #ffffff));
-}
-
-tr[data-selected='true'][data-error='true'] {
-  background: color-mix(in srgb, var(--bt-error, #d92d20) 14%, transparent);
 }
 
 .rowLine[data-tone='error'] .rowSub {
@@ -2872,6 +2845,30 @@ tr[data-turn-start='true'][data-kind='user'] > td {
   min-height: 0;
 }
 
+.toolSections {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.sectionJump {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--bt-text-3, #9aa1ab);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.sectionJump:hover {
+  background: var(--bt-hover, rgba(16, 24, 40, 0.06));
+  color: var(--bt-text, #1c2128);
+}
+
 .metaRow {
   display: flex;
   flex-wrap: wrap;
@@ -2913,6 +2910,32 @@ tr[data-turn-start='true'][data-kind='user'] > td {
 
 .metaValue[data-tone='warn'] {
   color: var(--bt-warn, #d97706);
+}
+
+/* inline link inside a meta row (来源 / 层级): same weight as its value, with an
+   affordance that says it navigates */
+.metaLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--bt-accent, #2563eb);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.metaLink:hover {
+  text-decoration: underline;
+}
+
+.metaLink:focus-visible {
+  outline: 2px solid var(--bt-accent, #2563eb);
+  outline-offset: 1px;
 }
 
 .metaValueMono {

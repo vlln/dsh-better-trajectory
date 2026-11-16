@@ -121,6 +121,14 @@
   max-height: none;
 }
 
+/* failed tool payload: the native treatment is red text on the error surface,
+   not a separate banner — the status is already stated in the meta row */
+.text[data-tone='error'] {
+  border-color: color-mix(in srgb, var(--bt-error, #d92d20) 26%, transparent);
+  background: var(--bt-error-soft, #fef3f2);
+  color: var(--bt-error, #d92d20);
+}
+
 .empty {
   margin: 0;
   padding: 2px 0 6px;

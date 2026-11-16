@@ -80,6 +80,27 @@
   pointer-events: none;
 }
 
+.laterHistory {
+  position: absolute;
+  z-index: 5;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  width: 12px;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.laterDot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--bt-text-3, #9aa1ab);
+  opacity: 0.55;
+}
+
 .earlierDot {
   width: 4px;
   height: 4px;
@@ -276,6 +297,8 @@
   pointer-events: none;
 }
 
+/* cursor line: one dashed hairline, drawn over the bars as well. A filled 2px
+   bar (the previous shape) read as a selection; this reads as a pointer. */
 .hoverLine {
   position: absolute;
   z-index: 4;
@@ -283,11 +306,15 @@
   bottom: 0;
   left: clamp(
     0px,
-    calc(var(--trajectory-hover-left) - 1px),
-    calc(100% - 2px)
+    calc(var(--trajectory-hover-left) - 0.5px),
+    calc(100% - 1px)
   );
-  width: 2px;
-  background: var(--dsw-alias-state-business-primary);
+  width: 1px;
+  background: repeating-linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--dsw-alias-state-business-primary) 62%, transparent) 0 3px,
+    transparent 3px 6px
+  );
   pointer-events: none;
 }
 

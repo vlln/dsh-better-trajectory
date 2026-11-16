@@ -135,6 +135,7 @@ export function buildToolIndex(snapshot) {
       : undefined
     const record = {
       callId,
+      kind: depth > 0 ? 'subtool' : 'tool',
       name,
       status,
       depth,
@@ -179,6 +180,7 @@ export function buildToolIndex(snapshot) {
       if (callId === '' || byKey.has(keyOf(node.turn, callId))) continue
       const record = {
         callId,
+        kind: 'tool',
         name: asString(block.name),
         status: 'ok',
         depth: 0,
@@ -201,6 +203,7 @@ export function buildToolIndex(snapshot) {
       if (callId === '' || byKey.has(keyOf(partial.turn, callId))) continue
       const record = {
         callId,
+        kind: 'tool',
         name: asString(block.name),
         status: 'running',
         depth: 0,

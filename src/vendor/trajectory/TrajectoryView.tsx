@@ -17,7 +17,7 @@ import {
 import type { WatchToolResult } from './watch-tool-result.ts'
 import { QueryBar } from './QueryBar.tsx'
 import { buildToolIndex, isErrorStatus, summarizeTools } from '../../client/filter.mjs'
-import { matchesQuery, parseQuery } from '../../client/query.mjs'
+import { matchesCell, parseQuery } from '../../client/query.mjs'
 import { TrajectoryTimeline } from './TrajectoryTimeline.tsx'
 import {
   appendTrajectoryPartialLayout, deriveTrajectoryLayout,
@@ -409,12 +409,13 @@ export function TrajectoryView({
   const query = useMemo(() => parseQuery(queryText), [queryText])
   const toolIndex = useMemo(() => buildToolIndex(completeInspection), [completeInspection])
   const callMeta = useMemo(() => {
-    const map = new Map<string, { durationMs?: number; time?: number }>()
+    const map = new Map<string, { durationMs?: number; time?: number; errorCode?: string }>()
     for (const record of toolIndex.records) {
       if (!record.callId) continue
       map.set(record.callId, {
         ...(typeof record.durationMs === 'number' ? { durationMs: record.durationMs } : {}),
         ...(typeof record.time === 'number' ? { time: record.time } : {}),
+        ...(typeof record.errorCode === 'string' ? { errorCode: record.errorCode } : {}),
       })
     }
     return map
@@ -423,23 +424,20 @@ export function TrajectoryView({
     group.cells
       .filter(cell => cell.kind === 'tool' || cell.kind === 'subtool')
       .map(cell => ({ cell, turn: turn.turn })))), [timelineTurns])
+  /* every record, not just calls: a query has to be able to hide an assistant
+     message that does not match, otherwise `status:error` leaves the list full
+     of irrelevant context rows */
+  const allCells = useMemo(() => timelineTurns.flatMap(turn => turn.groups.flatMap(group =>
+    group.cells.map(cell => ({ cell, turn: turn.turn })))), [timelineTurns])
   const matchedCells = useMemo(() => {
     const set = new Set<number>()
-    for (const { cell, turn } of toolCells) {
+    if (!query.active) return set
+    for (const { cell } of allCells) {
       const meta = cell.callId === undefined ? undefined : callMeta.get(cell.callId)
-      const status = cell.isError === true ? 'error' : 'ok'
-      if (matchesQuery({
-        name: cell.toolName ?? '',
-        status,
-        turn,
-        durationMs: meta?.durationMs,
-        args: cell.inputDetail ?? '',
-        result: cell.outputDetail ?? '',
-        errorText: '',
-      }, query)) set.add(cell.index)
+      if (matchesCell(cell, query, meta)) set.add(cell.index)
     }
     return set
-  }, [toolCells, callMeta, query])
+  }, [allCells, callMeta, query])
   const toolStats = useMemo(() => {
     let errors = 0
     let running = 0
@@ -449,6 +447,28 @@ export function TrajectoryView({
     }
     return { total: toolCells.length, errors, running }
   }, [toolCells])
+  /* always-on totals for the query bar: one pass over every record */
+  const recordStats = useMemo(() => {
+    let errors = 0
+    let start: number | null = null
+    let end: number | null = null
+    for (const { cell } of allCells) {
+      if (cell.requestOnly === true) continue
+      if (cell.isError === true) errors += 1
+      const startedAt = cell.startedAt
+      if (typeof startedAt === 'number' && Number.isFinite(startedAt)) {
+        if (start === null || startedAt < start) start = startedAt
+        const completed = startedAt + (cell.timeSeconds === null ? 0 : cell.timeSeconds * 1000)
+        if (end === null || completed > end) end = completed
+      }
+    }
+    return {
+      records: allCells.filter(entry => entry.cell.requestOnly !== true).length,
+      calls: toolCells.length,
+      errors,
+      durationMs: start === null || end === null ? null : Math.max(0, end - start),
+    }
+  }, [allCells, toolCells])
   const queryTurns = useMemo(
     () => [...toolIndex.turns.entries()]
       .sort((left, right) => left[0] - right[0])
@@ -458,11 +478,11 @@ export function TrajectoryView({
   const hiddenIndexes = useMemo(() => {
     if (!query.active) return null
     const hidden = new Set<number>()
-    for (const { cell } of toolCells) {
+    for (const { cell } of allCells) {
       if (!matchedCells.has(cell.index)) hidden.add(cell.index)
     }
     return hidden
-  }, [toolCells, matchedCells, query.active])
+  }, [allCells, matchedCells, query.active])
   const maxDurationMs = useMemo(() => {
     let max = 0
     for (const record of toolIndex.records) {
@@ -470,20 +490,6 @@ export function TrajectoryView({
     }
     return max
   }, [toolIndex])
-  const hiddenHints = useMemo(() => {
-    if (hiddenIndexes === null) return null
-    const map = new Map<string, number>()
-    for (const turn of timelineTurns) {
-      for (const group of turn.groups) {
-        let count = 0
-        for (const cell of group.cells) {
-          if ((cell.kind === 'tool' || cell.kind === 'subtool') && hiddenIndexes.has(cell.index)) count += 1
-        }
-        if (count > 0) map.set(`${turn.turn}\u0000${group.title}`, count)
-      }
-    }
-    return map
-  }, [timelineTurns, hiddenIndexes])
   const visibleTurns = useMemo(() => {
     if (hiddenIndexes === null) return timelineTurns
     return timelineTurns.map(turn => ({
@@ -769,10 +775,11 @@ export function TrajectoryView({
         stats={{
           total: toolStats.total,
           matched: matchedCells.size,
-          hidden: query.active ? toolStats.total - matchedCells.size : 0,
+          hidden: query.active ? hiddenIndexes?.size ?? 0 : 0,
           errors: toolStats.errors,
           running: toolStats.running,
         }}
+        totals={recordStats}
         tools={summarizeTools(toolIndex)}
         turns={queryTurns}
         canGoBack={nav.index > 0}
@@ -802,13 +809,14 @@ export function TrajectoryView({
       />
       <TrajectoryTimeline
         t={t}
+        qt={typeof qt === 'function' ? qt : (key: string) => key}
         turns={timelineTurns}
         mode={timelineMode}
         range={timelineRange}
         hasEarlierRecords={hasOlderHistory}
         onLoadEarlier={loadEarlierHistory}
         selectedIndex={selectedTimelineIndex}
-        searchMatchIndexes={null}
+        searchMatchIndexes={query.active ? matchedCells : null}
         onRangeChange={handleTimelineRangeChange}
         onRecordSelect={handleTimelineRecordSelect}
         onRecordFocus={handleTimelineRecordFocus}
@@ -833,7 +841,6 @@ export function TrajectoryView({
           streamingCells={streamingCells}
           timelineFocusIndexes={timelineFocusIndexes}
           hiddenIndexes={hiddenIndexes}
-          hiddenHints={hiddenHints}
           callMeta={callMeta}
           maxDurationMs={maxDurationMs}
           onShowAll={() => changeQuery('')}

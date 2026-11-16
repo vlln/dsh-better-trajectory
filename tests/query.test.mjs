@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { matchesQuery, parseQuery, removeToken, toggleToken } from '../src/client/query.mjs'
+import { matchesCell, matchesQuery, parseQuery, removeToken, toggleToken } from '../src/client/query.mjs'
 
 const call = (over = {}) => ({
   callId: 'c1',
@@ -96,4 +96,78 @@ test('removeToken and toggleToken edit the raw query', () => {
   assert.equal(removeToken('tool:bash status:error', 'tool:bash'), 'status:error')
   assert.equal(toggleToken('tool:bash', 'status:error'), 'tool:bash status:error')
   assert.equal(toggleToken('tool:bash status:error', 'status:error'), 'tool:bash')
+})
+const cell = (over = {}) => ({
+  kind: 'message',
+  text: 'Done. The workspace is readable.',
+  turn: 4,
+  timeSeconds: 1.2,
+  ...over,
+})
+
+test('type selects record kinds and accepts assistant as a message alias', () => {
+  const query = parseQuery('type:message')
+  assert.equal(matchesCell(cell(), query), true)
+  assert.equal(matchesCell(cell({ kind: 'user' }), query), false)
+  assert.equal(matchesCell(cell({ kind: 'tool', toolName: 'bash' }), query), false)
+  assert.equal(matchesCell(cell(), parseQuery('type:assistant')), true)
+  assert.equal(matchesCell(cell({ kind: 'subtool' }), parseQuery('type:call')), true)
+  assert.equal(matchesCell(cell({ kind: 'message' }), parseQuery('type:call')), false)
+})
+
+test('type supports alternatives and negation', () => {
+  const query = parseQuery('type:user|system')
+  assert.equal(matchesCell(cell({ kind: 'user' }), query), true)
+  assert.equal(matchesCell(cell({ kind: 'system' }), query), true)
+  assert.equal(matchesCell(cell({ kind: 'message' }), query), false)
+  const negated = parseQuery('-type:tool')
+  assert.equal(matchesCell(cell({ kind: 'tool', toolName: 'bash' }), negated), false)
+  assert.equal(matchesCell(cell(), negated), true)
+})
+
+test('status:error hides ordinary assistant messages', () => {
+  const query = parseQuery('status:error')
+  assert.equal(matchesCell(cell(), query), false)
+  assert.equal(matchesCell(cell({ isError: true }), query), true)
+  assert.equal(matchesCell(cell({ kind: 'tool', toolName: 'bash', outputDetail: 'x' }), query), false)
+})
+
+test('tool: only ever matches calls', () => {
+  const query = parseQuery('tool:bash')
+  assert.equal(matchesCell(cell({ kind: 'tool', toolName: 'bash', outputDetail: 'ok' }), query), true)
+  assert.equal(matchesCell(cell({ kind: 'message', text: 'tool:bash' }), query), false)
+  const excluded = parseQuery('-tool:bash')
+  assert.equal(matchesCell(cell(), excluded), true)
+  assert.equal(matchesCell(cell({ kind: 'tool', toolName: 'bash' }), excluded), false)
+})
+
+test('free text reaches message bodies, payloads and thinking', () => {
+  assert.equal(matchesCell(cell(), parseQuery('readable')), true)
+  assert.equal(matchesCell(cell(), parseQuery('missing')), false)
+  assert.equal(matchesCell(cell({ outputDetail: 'legacy branch' }), parseQuery('legacy')), true)
+  assert.equal(matchesCell(cell({ thinkingDetail: 'check HEAD' }), parseQuery('head')), true)
+  assert.equal(matchesCell(cell({ kind: 'user', text: 'again, please' }), parseQuery('again')), true)
+})
+
+test('duration on a message uses its own elapsed time', () => {
+  const query = parseQuery('ms:>1000')
+  assert.equal(matchesCell(cell({ timeSeconds: 2.5 }), query), true)
+  assert.equal(matchesCell(cell({ timeSeconds: 0.4 }), query), false)
+  assert.equal(matchesCell(cell({ kind: 'tool', timeSeconds: null }), query), false)
+  assert.equal(
+    matchesCell(cell({ kind: 'tool', timeSeconds: null }), query, { durationMs: 1400 }),
+    true,
+  )
+})
+
+test('turn filters every kind, not just calls', () => {
+  const query = parseQuery('turn:4')
+  assert.equal(matchesCell(cell(), query), true)
+  assert.equal(matchesCell(cell({ turn: 5 }), query), false)
+})
+
+test('code: only applies to calls with an error code', () => {
+  const query = parseQuery('code:401')
+  assert.equal(matchesCell(cell(), query), false)
+  assert.equal(matchesCell(cell({ kind: 'tool', outputDetail: 'x' }), query, { errorCode: '401' }), true)
 })

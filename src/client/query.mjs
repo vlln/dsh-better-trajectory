@@ -2,16 +2,35 @@
  * 查询条语法（Logfire 风格 token 的 DSH 子集）。
  *
  * `tool:bash` `status:error|running|ok` `turn:3` `turn:2-5`
- * `ms:>1000` `ms:<200` `ms:100-500` `code:401`，`-` 前缀取反；
- * 其余词按自由文本处理（工具名 / 参数 / 结果 / 错误文本，AND）。
+ * `ms:>1000` `ms:<200` `ms:100-500` `code:401` `type:message|tool`，
+ * `-` 前缀取反；其余词按自由文本处理（工具名 / 参数 / 结果 / 正文 / 错误文本，AND）。
+ *
+ * 谓词对**所有记录**生效（工具、子调用、助手、用户、上下文、压缩点），
+ * 不满足的记录在树里隐藏——不然 `status:error` 会留下满屏助手消息。
  *
  * 纯函数，不依赖 React，单测直接 import。
  */
 
 /** 已知 token 字段。 */
-export const FIELDS = ['tool', 'status', 'turn', 'ms', 'code']
+export const FIELDS = ['tool', 'status', 'turn', 'ms', 'code', 'type']
 
 const STATUSES = new Set(['error', 'running', 'ok'])
+
+/** 记录类型：查询里可写 `type:<别名>`。 */
+const TYPE_ALIASES = new Map([
+  ['tool', ['tool']],
+  ['subtool', ['subtool']],
+  ['call', ['tool', 'subtool']],
+  ['message', ['message']],
+  ['assistant', ['message']],
+  ['user', ['user']],
+  ['system', ['system']],
+  ['context', ['context']],
+  ['compacted', ['compacted']],
+])
+
+/** 建议菜单用的类型全集（不含别名）。 */
+export const TYPES = [...TYPE_ALIASES.keys()]
 
 /** 空查询。 */
 export function emptyQuery() {
@@ -22,6 +41,7 @@ export function emptyQuery() {
       status: [], notStatus: [],
       turn: [], notTurn: [], turnRanges: [], notTurnRanges: [],
       code: [], notCode: [],
+      type: [], notType: [],
       msMin: null, msMax: null,
       text: [],
     },
@@ -84,6 +104,11 @@ function parseToken(word) {
       ? { kind: 'code', value, raw: word, negated, valid: true }
       : { kind: 'code', value, raw: word, negated, valid: false }
   }
+  if (field === 'type') {
+    return value.split('|').every(item => TYPE_ALIASES.has(item))
+      ? { kind: 'type', value, raw: word, negated, valid: true }
+      : { kind: 'type', value, raw: word, negated, valid: false }
+  }
   return value === ''
     ? { kind: 'tool', value, raw: word, negated, valid: false }
     : { kind: 'tool', value, raw: word, negated, valid: true }
@@ -109,6 +134,15 @@ function applyToken(filters, token) {
     case 'code':
       filters[key('code')].push(Number(token.value))
       return
+    case 'type': {
+      const kinds = filters[key('type')]
+      for (const alias of token.value.split('|')) {
+        for (const kind of TYPE_ALIASES.get(alias) ?? []) {
+          if (!kinds.includes(kind)) kinds.push(kind)
+        }
+      }
+      return
+    }
     case 'turn': {
       const range = /^(\d+)-(\d+)$/.exec(token.value)
       if (range === null) {
@@ -149,33 +183,109 @@ function searchText(record) {
 }
 
 /**
+ * 一条归一化记录是否命中。所有记录类型共用这一份判据。
+ * @param {{
+ *   kind: string, name?: string, status?: string, turn?: number,
+ *   durationMs?: number, errorCode?: string, text?: string,
+ * }} subject
+ * @param {ReturnType<typeof emptyQuery>['filters']} filters
+ */
+function matchesFilters(subject, filters) {
+  const kind = subject.kind ?? ''
+  const isTool = kind === 'tool' || kind === 'subtool'
+  if (filters.type.length > 0 && !filters.type.includes(kind)) return false
+  if (filters.notType.includes(kind)) return false
+  /* tool: can only ever match a call; asking for a tool must hide every other
+     kind instead of testing the message's display name against it */
+  if (filters.tool.length > 0 && (!isTool || !filters.tool.includes(subject.name))) {
+    return false
+  }
+  if (isTool && filters.notTool.includes(subject.name)) return false
+  if (filters.status.length > 0 && !filters.status.includes(subject.status)) return false
+  if (filters.notStatus.includes(subject.status)) return false
+  if (filters.turn.length > 0 && !filters.turn.includes(subject.turn)) return false
+  if (filters.turnRanges.length > 0
+    && !filters.turnRanges.some(([from, to]) => subject.turn >= from && subject.turn <= to)) return false
+  if (filters.notTurn.includes(subject.turn)) return false
+  if (filters.notTurnRanges.some(([from, to]) => subject.turn >= from && subject.turn <= to)) return false
+  if (filters.code.length > 0
+    && (!isTool || !filters.code.includes(Number(subject.errorCode)))) return false
+  if (isTool && filters.notCode.includes(Number(subject.errorCode))) return false
+  if (filters.msMin !== null || filters.msMax !== null) {
+    const duration = typeof subject.durationMs === 'number' ? subject.durationMs : -1
+    if (filters.msMin !== null && duration < filters.msMin) return false
+    if (filters.msMax !== null && duration > filters.msMax) return false
+  }
+  if (filters.text.length > 0) {
+    const haystack = (subject.text ?? '').toLowerCase()
+    if (!filters.text.every(term => haystack.includes(term))) return false
+  }
+  return true
+}
+
+/**
  * 一条调用是否命中当前查询。
  * @param {any} record `buildToolIndex` 产出的记录。
  * @param {ReturnType<typeof emptyQuery>} query 解析结果。
  * @returns {boolean}
  */
 export function matchesQuery(record, query) {
-  const filters = query.filters
   if (!query.active) return true
-  if (filters.tool.length > 0 && !filters.tool.includes(record.name)) return false
-  if (filters.notTool.includes(record.name)) return false
-  if (filters.status.length > 0 && !filters.status.includes(record.status)) return false
-  if (filters.notStatus.includes(record.status)) return false
-  if (filters.turn.length > 0 && !filters.turn.includes(record.turn)) return false
-  if (filters.turnRanges.length > 0
-    && !filters.turnRanges.some(([from, to]) => record.turn >= from && record.turn <= to)) return false
-  if (filters.notTurn.includes(record.turn)) return false
-  if (filters.notTurnRanges.some(([from, to]) => record.turn >= from && record.turn <= to)) return false
-  if (filters.code.length > 0 && !filters.code.includes(Number(record.errorCode))) return false
-  if (filters.notCode.includes(Number(record.errorCode))) return false
-  const duration = typeof record.durationMs === 'number' ? record.durationMs : -1
-  if (filters.msMin !== null && duration < filters.msMin) return false
-  if (filters.msMax !== null && duration > filters.msMax) return false
-  if (filters.text.length > 0) {
-    const haystack = searchText(record)
-    if (!filters.text.every(term => haystack.includes(term))) return false
+  return matchesFilters({
+    kind: record.kind ?? 'tool',
+    name: record.name,
+    status: record.status,
+    turn: record.turn,
+    durationMs: record.durationMs,
+    errorCode: record.errorCode,
+    text: searchText(record),
+  }, query.filters)
+}
+
+/** 一条树记录（任意类型）的归一化字段。 */
+function cellSubject(cell, meta) {
+  const kind = cell.kind ?? ''
+  const isTool = kind === 'tool' || kind === 'subtool'
+  const durationMs = typeof cell.timeSeconds === 'number' && Number.isFinite(cell.timeSeconds)
+    ? Math.max(0, cell.timeSeconds * 1000)
+    : typeof meta?.durationMs === 'number' ? meta.durationMs : undefined
+  const status = cell.isError === true
+    ? 'error'
+    : (kind === 'compacted' && cell.timeSeconds === null)
+      || cell.assistantMetrics?.completedTime === null
+      || (isTool && cell.outputDetail === undefined)
+      ? 'running'
+      : 'ok'
+  return {
+    kind,
+    name: isTool ? (cell.toolName ?? '') : kind,
+    status,
+    turn: cell.turn,
+    durationMs,
+    errorCode: cell.errorCode ?? meta?.errorCode,
+    text: [
+      cell.text,
+      cell.previewMarkdown,
+      cell.toolName,
+      cell.inputDetail,
+      cell.outputDetail,
+      cell.thinkingDetail,
+      cell.result,
+      cell.errorText,
+    ].filter(value => typeof value === 'string' && value !== '').join('\n'),
   }
-  return true
+}
+
+/**
+ * 一条树记录是否命中当前查询——与工具索引共用同一份判据。
+ * @param {any} cell `TrajectoryCellProps`。
+ * @param {ReturnType<typeof emptyQuery>} query 解析结果。
+ * @param {{durationMs?: number}} [meta] 工具索引里的耗时。
+ * @returns {boolean}
+ */
+export function matchesCell(cell, query, meta) {
+  if (!query.active) return true
+  return matchesFilters(cellSubject(cell, meta), query.filters)
 }
 
 /**
