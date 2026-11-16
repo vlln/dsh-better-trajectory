@@ -3272,7 +3272,6 @@ export function TrajectoryTable({
                                         event.currentTarget.click()
                                       }}
                                       className={css.rowChevron}
-                                      data-folded={collapsed || undefined}
                                       aria-label={sectionLabel(record.turn, t)}
                                       aria-expanded={!collapsed}
                                       onClick={(event) => {
@@ -3298,7 +3297,6 @@ export function TrajectoryTable({
                                         event.currentTarget.click()
                                       }}
                                       className={css.rowChevron}
-                                      data-folded={collapsedHere || undefined}
                                       aria-label={t(collapsedHere ? 'assistant.expand' : 'assistant.collapse')}
                                       aria-expanded={!collapsedHere}
                                       onClick={(event) => {
@@ -3324,7 +3322,6 @@ export function TrajectoryTable({
                                         event.currentTarget.click()
                                       }}
                                       className={css.rowChevron}
-                                      data-folded={folded || undefined}
                                       aria-label={folded ? t('tool.expandSubCalls') : t('tool.collapseSubCalls')}
                                       aria-expanded={!folded}
                                       onClick={(event) => {

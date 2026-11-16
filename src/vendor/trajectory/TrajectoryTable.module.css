@@ -2714,15 +2714,6 @@ tr[data-kind='user'] .rowSub {
   font-weight: 500;
 }
 
-.chevronIcon {
-  transform: rotate(0deg);
-  transition: transform var(--bt-dur-2, 90ms) var(--bt-ease-std, ease);
-}
-
-.chevronIcon[data-open] {
-  transform: rotate(90deg);
-}
-
 /* turn marker: the only fold control at turn level */
 .turnMarker {
   display: inline-flex;
@@ -2933,11 +2924,6 @@ tr[data-kind='system'] .rowName {
 
 .hoverCard {
   pointer-events: none;
-}
-
-.chevronIcon {
-  width: 11px;
-  height: 11px;
 }
 
 /* tree guides: vertical rail + elbow for child rows */
