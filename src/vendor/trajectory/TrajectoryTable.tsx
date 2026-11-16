@@ -153,14 +153,14 @@ const KIND_ICON: Record<TrajectoryCellKind, ReactNode> = {
 }
 
 interface TableRecord {
-  /** Number of hidden tool calls in this record's group, rendered as a hint row. */
-  hint?: number
   /** Children hidden by an explicit collapse, shown as +N on the parent row. */
   foldedCount?: number
   foldSummary?: { tools: number; steps: number; names: string[]; durationMs: number | null }
   childLast?: boolean
   hasChildren?: boolean
   hasFold?: boolean
+  /** The turn has more than one content row, so folding it actually hides something. */
+  turnCollapsible?: boolean
   turn: number | null
   section: number
   group: string
@@ -2318,13 +2318,17 @@ export function TrajectoryTable({
        initial system prompt is not a turn start, so anchoring on it produced a
        summary row without a fold control and the turn could never be expanded */
     const turnAnchor = new Map<number, TableRecord>()
+    /* a turn with a single content row has nothing to hide: folding it would only
+       paint a dead dot that swallows clicks and changes nothing */
+    const turnContent = new Map<number, number>()
     for (const record of allRecords) {
       if (record.turn === null) continue
       const summary = turnSummary.get(record.turn) ?? emptySummary()
       addToSummary(summary, record)
       turnSummary.set(record.turn, summary)
-      if (turnAnchor.has(record.turn)) continue
       if (record.cell.requestOnly === true || record.cell.kind === 'system') continue
+      turnContent.set(record.turn, (turnContent.get(record.turn) ?? 0) + 1)
+      if (turnAnchor.has(record.turn)) continue
       turnAnchor.set(record.turn, record)
     }
 
@@ -2427,7 +2431,10 @@ export function TrajectoryTable({
       const nextKind = next?.cell.kind
       // must mirror the fold control rendered below, or the connector geometry
       // (elbow stops at the dot) desynchronises from the dot that is actually there
-      const hasFold = (record.turnStart && record.turn !== null)
+      const turnCollapsible = record.turn !== null
+        && (turnContent.get(record.turn) ?? 0) > 1
+      if (turnCollapsible) (record as TableRecord).turnCollapsible = true
+      const hasFold = (record.turnStart && record.turn !== null && turnCollapsible)
         || (kind === 'message' && messagesWithCalls.has(record.cell.index))
         || (kind === 'message' && collapsedAssistants.has(trajectoryRecordId(record.cell)))
         || (kind === 'tool' && nextKind === 'subtool')
@@ -3261,7 +3268,9 @@ export function TrajectoryTable({
                                   && (collapsedHere || messagesWithCalls.has(record.cell.index))
                                 const next = records[position + 1]
                                 const toolFold = toolLike && next !== undefined && next.cell.kind === 'subtool'
-                                const turnFold = record.turnStart && record.turn !== null && !isCollapsedSummary
+                                const turnFold = record.turnStart && record.turn !== null
+                                  && !isCollapsedSummary
+                                  && record.turnCollapsible === true
                                 if (turnFold) {
                                   const collapsed = collapsedTurns.has(record.turn as number)
                                   return (
@@ -3277,6 +3286,7 @@ export function TrajectoryTable({
                                       className={css.rowChevron}
                                       aria-label={sectionLabel(record.turn, t)}
                                       aria-expanded={!collapsed}
+                                      onDoubleClick={(event) => { event.stopPropagation() }}
                                       onClick={(event) => {
                                         event.stopPropagation()
                                         const collapsed = collapsedTurns.has(record.turn as number)
@@ -3302,6 +3312,7 @@ export function TrajectoryTable({
                                       className={css.rowChevron}
                                       aria-label={t(collapsedHere ? 'assistant.expand' : 'assistant.collapse')}
                                       aria-expanded={!collapsedHere}
+                                      onDoubleClick={(event) => { event.stopPropagation() }}
                                       onClick={(event) => {
                                         event.stopPropagation()
                                         if (collapsedHere && event.altKey) onClearDescendantFolds?.(record.turn, id)
@@ -3327,6 +3338,7 @@ export function TrajectoryTable({
                                       className={css.rowChevron}
                                       aria-label={folded ? t('tool.expandSubCalls') : t('tool.collapseSubCalls')}
                                       aria-expanded={!folded}
+                                      onDoubleClick={(event) => { event.stopPropagation() }}
                                       onClick={(event) => {
                                         event.stopPropagation()
                                         onToggleTool(id)
