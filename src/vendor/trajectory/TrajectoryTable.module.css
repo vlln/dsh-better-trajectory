@@ -2119,10 +2119,6 @@
   background: var(--dsw-alias-bg-layer-2, rgba(0, 0, 0, 0.04));
 }
 
-tr[data-error='true'] .content {
-  box-shadow: inset 2px 0 0 color-mix(in srgb, #e5484d 55%, transparent);
-}
-
 /* exactly one 30px ledger row: the virtualizer owns a fixed row height, so a
    taller hint would drift every row below it */
 @media (max-width: 900px) {
@@ -2304,10 +2300,6 @@ tr[data-selected='true'] {
 
 tr[data-selected='true'] .event {
   box-shadow: inset 2px 0 0 var(--bt-accent, #2563eb);
-}
-
-.rowLine[data-tone='error'] .rowSub {
-  color: var(--bt-error, #d92d20);
 }
 
 .table tr:focus-visible {
