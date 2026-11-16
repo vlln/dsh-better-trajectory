@@ -1,0 +1,88 @@
+/* Hover card — one implementation for the ledger rows and the timeline.
+   Previously each surface carried its own card: the row card was 300px with a
+   52px label column and the native kind tag, the timeline card 268/300px with a
+   16px mono pill and a 34/40px column, so the same hover looked different
+   depending on where it opened. */
+
+.card {
+  position: fixed;
+  z-index: 60;
+  width: 300px;
+  padding: 10px 12px;
+  border: 1px solid var(--bt-line, #e6e8eb);
+  border-radius: 8px;
+  background: var(--bt-surface, #fff);
+  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.12);
+  pointer-events: none;
+  animation: bt-card-in var(--bt-dur-3, 120ms) var(--bt-ease-out, ease);
+}
+
+@keyframes bt-card-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.name {
+  overflow: hidden;
+  color: var(--bt-text, #1c2128);
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.error {
+  flex: none;
+  height: 19px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--bt-error-soft, #fef3f2);
+  color: var(--bt-error, #d92d20);
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 9px;
+  line-height: 19px;
+  letter-spacing: 0.04em;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  gap: 3px 8px;
+  margin: 0;
+  font-size: 11px;
+}
+
+.grid dt {
+  color: var(--bt-text-3, #9aa1ab);
+}
+
+.grid dd {
+  margin: 0;
+  overflow: hidden;
+  color: var(--bt-text-2, #5b6470);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.extra {
+  display: -webkit-box;
+  margin: 8px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--bt-line-soft, #f0f2f4);
+  overflow: hidden;
+  color: var(--bt-text-3, #9aa1ab);
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10px;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}

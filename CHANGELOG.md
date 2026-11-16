@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- 悬浮卡合并成一份实现：新增 `HoverCard.tsx` / `HoverCard.module.css` 和 `KindTag.tsx` / `KindTag.module.css`，账本行与时间轴共用。此前时间轴有独立的 `tipCard` 一套（268px 卡宽、16px 等宽小胶囊、34px 标签列），和账本的 300px 卡、19px 原生标签不是同一个东西，所以同一个悬浮提示在上下两处长得不一样。
 - 行高固定为 30px（28px 行线 + 1px 分隔线），与原生表一致：删掉消息行的 `height: auto`、`padding-block: 5px`、`align-items: flex-start` 和三行 `-webkit-line-clamp`，以及用户行的 `min-height: 32px`。此前展开一个节点会让行高从 30 变 33/39，长内容会长到 48/67，虚拟滚动按 30 估算位置导致漂移。
 - 行内文本统一单行截断（`nowrap` + `ellipsis`），与原生一致；完整内容看右栏。
 - 修掉折叠控件的第二份样式：旧规则 `width:14px; margin-right:-4px; transform:rotate(90deg)` 还在生效，导致有圆点的行和无圆点的行标签列差 4px，控件也被旋转 90°（圆点看不出来，但包围盒从 24×28 变成 28×24）。

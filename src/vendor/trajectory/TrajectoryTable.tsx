@@ -4,6 +4,8 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { assertNever, type JsonValue } from '../host/util-values.ts'
+import { KindTag } from './KindTag.tsx'
+import { HoverCard } from './HoverCard.tsx'
 import type { WatchToolResult } from './watch-tool-result.ts'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
@@ -3335,9 +3337,10 @@ export function TrajectoryTable({
                                 return <span className={css.rowChevronSpace} />
                               })()}
                               <span className={css.kindSlot}>
-                                <span className={css.kindPill} data-kind={record.cell.kind}>
-                                  {t(KIND_LABEL_KEY[record.cell.kind])}
-                                </span>
+                                <KindTag
+                                  kind={record.cell.kind}
+                                  label={t(KIND_LABEL_KEY[record.cell.kind])}
+                                />
                               </span>
                               {toolLike && <span className={css.rowName}>{rowName}</span>}
                               {rowTone !== 'ok' && (
@@ -4053,37 +4056,22 @@ export function TrajectoryTable({
           : meta?.durationMs
         const args = String(record.cell.inputDetail ?? '').replace(/\s+/g, ' ').slice(0, 220)
         const kind = record.cell.kind
-        const left = Math.min(card.x + 14, window.innerWidth - 320)
-        const top = Math.min(card.y + 16, window.innerHeight - 220)
+        const rows = [
+          { label: qt('chip.turn'), value: `#${record.turn ?? '—'} · ${record.group}` },
+          { label: qt('chip.duration'), value: ms == null ? '—' : compactDuration(ms) },
+        ]
+        if (meta?.time !== undefined) rows.push({ label: '开始', value: formatClock(meta.time) })
         return (
-          <div
-            className={css.hoverCard}
-            style={{ left, top }}
-            role="tooltip"
-          >
-            <div className={css.hoverHead}>
-              <span className={css.kindPill} data-kind={kind}>
-                {t(KIND_LABEL_KEY[kind])}
-              </span>
-              {record.cell.toolName !== undefined && (
-                <span className={css.hoverName}>{record.cell.toolName}</span>
-              )}
-              {record.cell.isError === true && <span className={css.rowBadge} data-tone="error">error</span>}
-            </div>
-            <dl className={css.hoverGrid}>
-              <dt>{qt('chip.turn')}</dt>
-              <dd>#{record.turn ?? '—'} · {record.group}</dd>
-              <dt>{qt('chip.duration')}</dt>
-              <dd>{ms == null ? '—' : compactDuration(ms)}</dd>
-              {meta?.time !== undefined && (
-                <>
-                  <dt>开始</dt>
-                  <dd>{formatClock(meta.time)}</dd>
-                </>
-              )}
-            </dl>
-            {args !== '' && <p className={css.hoverArgs}>{args}</p>}
-          </div>
+          <HoverCard
+            x={card.x}
+            y={card.y}
+            kind={kind}
+            label={t(KIND_LABEL_KEY[kind])}
+            name={record.cell.toolName}
+            isError={record.cell.isError === true}
+            rows={rows}
+            extra={args}
+          />
         )
       })()}
     </div>

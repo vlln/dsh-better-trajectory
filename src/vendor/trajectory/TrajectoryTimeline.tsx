@@ -15,6 +15,7 @@ import {
   type TrajectoryTimelineMode,
   type TrajectoryTimeRange,
 } from './timeline.ts'
+import { HoverCard } from './HoverCard.tsx'
 import css from './TrajectoryTimeline.module.css'
 
 const MINIMUM_DRAG_PX = 3
@@ -748,45 +749,33 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
         </div>
       </div>
     </section>
-      {tip !== null && (
-        <div
-          className={css.tipCard}
-          role="tooltip"
-          style={{
-            left: Math.min(tip.x + 14, window.innerWidth - 300),
-            top: Math.min(tip.y + 16, window.innerHeight - 180),
-          }}
-        >
-          <div className={css.tipHead}>
-            <span className={css.tipPill} data-kind={tip.kind}>
-              {timelineKindLabel(tip.kind, t)}
-            </span>
-            {tip.isError === true && <span className={css.tipError}>error</span>}
-          </div>
-          <dl className={css.tipGrid}>
-            {tip.detail?.startedAt !== undefined && (
-              <>
-                <dt>开始</dt>
-                <dd>{formatRecordedTime(tip.detail.startedAt)}</dd>
-              </>
-            )}
-            {tip.detail?.startedAt !== undefined && tip.detail?.durationMs !== undefined && (
-              <>
-                <dt>结束</dt>
-                <dd>{formatRecordedTime(tip.detail.startedAt + tip.detail.durationMs)}</dd>
-              </>
-            )}
-            {tip.detail?.durationMs !== undefined && (
-              <>
-                <dt>耗时</dt>
-                <dd>{tip.detail.durationMs < 1000
-                  ? `${Math.round(tip.detail.durationMs)}ms`
-                  : `${(tip.detail.durationMs / 1000).toFixed(tip.detail.durationMs < 10000 ? 1 : 0)}s`}</dd>
-              </>
-            )}
-          </dl>
-        </div>
-      )}
+      {tip !== null && (() => {
+        const detail = tip.detail
+        const seconds = detail?.durationMs
+        const rows = []
+        if (detail?.startedAt !== undefined) rows.push({ label: '开始', value: formatRecordedTime(detail.startedAt) })
+        if (detail?.startedAt !== undefined && detail?.durationMs !== undefined) {
+          rows.push({ label: '结束', value: formatRecordedTime(detail.startedAt + detail.durationMs) })
+        }
+        if (seconds !== undefined) {
+          rows.push({
+            label: '耗时',
+            value: seconds < 1000
+              ? `${Math.round(seconds)}ms`
+              : `${(seconds / 1000).toFixed(seconds < 10000 ? 1 : 0)}s`,
+          })
+        }
+        return (
+          <HoverCard
+            x={tip.x}
+            y={tip.y}
+            kind={tip.kind}
+            label={timelineKindLabel(tip.kind, t)}
+            isError={tip.isError}
+            rows={rows}
+          />
+        )
+      })()}
     </>
   )
 })

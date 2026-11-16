@@ -2685,78 +2685,6 @@ tr[data-kind='system'] .rowName {
 }
 
 /* hover info card */
-.hoverCard {
-  position: fixed;
-  z-index: 60;
-  width: 300px;
-  padding: 10px 12px;
-  border: 1px solid var(--bt-line, #e6e8eb);
-  border-radius: 8px;
-  background: var(--bt-surface, #fff);
-  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.12);
-  pointer-events: none;
-  animation: bt-card-in var(--bt-dur-3, 120ms) var(--bt-ease-out, ease);
-}
-
-@keyframes bt-card-in {
-  from { opacity: 0; transform: translateY(3px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.hoverHead {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 8px;
-}
-
-.hoverName {
-  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--bt-text, #1c2128);
-}
-
-.hoverGrid {
-  display: grid;
-  grid-template-columns: 52px 1fr;
-  gap: 3px 8px;
-  margin: 0;
-  font-size: 11px;
-}
-
-.hoverGrid dt {
-  color: var(--bt-text-3, #9aa1ab);
-}
-
-.hoverGrid dd {
-  margin: 0;
-  color: var(--bt-text-2, #5b6470);
-  font-variant-numeric: tabular-nums;
-}
-
-.hoverArgs {
-  margin: 8px 0 0;
-  padding-top: 8px;
-  border-top: 1px solid var(--bt-line-soft, #f0f2f4);
-  color: var(--bt-text-3, #9aa1ab);
-  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 10px;
-  line-height: 1.5;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.hoverHint {
-  display: flex;
-  gap: 10px;
-  margin-top: 8px;
-  color: var(--bt-text-3, #9aa1ab);
-  font-size: 10px;
-}
-
 .split[data-show-time='false'] .eventColumn {
   width: 0;
 }
@@ -2769,73 +2697,6 @@ tr[data-kind='system'] .rowName {
   padding: 0 !important;
   border-bottom-color: transparent;
   overflow: hidden !important;
-}
-
-.hoverCard {
-  pointer-events: auto;
-}
-
-.hoverActions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-top: 9px;
-  padding-top: 8px;
-  border-top: 1px solid var(--bt-line-soft, #f0f2f4);
-}
-
-.hoverAction {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 22px;
-  padding: 0 6px;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--bt-text-2, #5b6470);
-  font-size: 10.5px;
-  cursor: pointer;
-}
-
-.hoverAction:hover {
-  border-color: var(--bt-line, #e6e8eb);
-  background: var(--bt-surface-2, #f6f7f9);
-  color: var(--bt-text, #1c2128);
-}
-
-.hoverKey {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 14px;
-  height: 14px;
-  padding: 0 3px;
-  border-radius: 3px;
-  background: var(--bt-surface-3, #eef0f3);
-  color: var(--bt-text-3, #9aa1ab);
-  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 9px;
-}
-
-.hoverClose {
-  margin-left: auto;
-  border: 0;
-  background: transparent;
-  color: var(--bt-text-3, #9aa1ab);
-  font-size: 13px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.hoverAction[data-on] {
-  border-color: var(--bt-accent, #2563eb);
-  color: var(--bt-accent, #2563eb);
-  background: color-mix(in srgb, var(--bt-accent, #2563eb) 8%, transparent);
-}
-
-.hoverCard {
-  pointer-events: none;
 }
 
 /* tree guides: vertical rail + elbow for child rows */
@@ -3149,12 +3010,9 @@ tr[data-has-children] .rowLine::after {
   outline-offset: 1px;
 }
 
-/* ===================== kind tag (mirrors the native tag) =====================
-   Native source: @deepseek-ai/dsh-client-ui-trajectory TrajectoryTable.module.css
-   `.kindTag` — 19px tall, 0 5px padding, 1px transparent border, radius-xs (4px),
-   10px/16px text at weight 650, letter-spacing .035em, natural width inside a
-   44px (zh) / 76px (en) slot. Colours come straight from the `--dsw-alias-*`
-   palette so light and dark both match the native view. */
+/* tag slot: fixed column so the content start is identical on every row.
+   The tag itself lives in KindTag.module.css (one definition for rows, the hover
+   card and the timeline). */
 .kindSlot {
   display: flex;
   flex: none;
@@ -3167,75 +3025,3 @@ tr[data-has-children] .rowLine::after {
   width: 44px;
 }
 
-.kindPill {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  box-sizing: border-box;
-  width: auto;
-  max-width: 72px;
-  height: 19px;
-  padding: 0 5px;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  font-family: inherit;
-  font-size: 10px;
-  font-weight: 650;
-  line-height: 16px;
-  letter-spacing: 0.035em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  user-select: none;
-  background: var(--dsw-alias-bg-module-platform);
-  color: var(--dsw-alias-label-secondary);
-}
-
-.kindPill[data-kind='tool'] {
-  color: var(--dsw-alias-state-warn-label);
-  background: var(--dsw-alias-state-warn-tertiary);
-}
-
-.kindPill[data-kind='subtool'] {
-  color: color-mix(
-    in srgb,
-    var(--dsw-alias-state-warn-label) 62%,
-    var(--dsw-alias-label-tertiary)
-  );
-  background: color-mix(
-    in srgb,
-    var(--dsw-alias-state-warn-tertiary) 58%,
-    var(--dsw-alias-bg-layer-1)
-  );
-}
-
-.kindPill[data-kind='message'] {
-  color: color-mix(
-    in srgb,
-    var(--dsw-alias-brand-primary-new-colorprimary-new-color) 60%,
-    var(--dsw-alias-state-error-secondary)
-  );
-  background: color-mix(
-    in srgb,
-    color-mix(
-      in srgb,
-      var(--dsw-alias-brand-primary-new-colorprimary-new-color) 55%,
-      var(--dsw-alias-state-error-secondary)
-    ) 15%,
-    var(--dsw-alias-bg-layer-1)
-  );
-}
-
-.kindPill[data-kind='user'] {
-  color: var(--dsw-alias-state-business-primary);
-  background: var(--dsw-alias-state-business-tertiary);
-}
-
-.kindPill[data-kind='context'] {
-  color: color-mix(
-    in srgb,
-    var(--dsw-alias-state-success-primary) 68%,
-    var(--dsw-alias-label-secondary)
-  );
-  background: var(--dsw-alias-state-success-tertiary);
-}
