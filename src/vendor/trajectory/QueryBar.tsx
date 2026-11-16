@@ -78,12 +78,12 @@ function buildSuggestions(props: QueryBarProps, lastWord: string): Suggestion[] 
   }
   if (field === '' || field === 'status') {
     for (const status of ['error', 'running', 'ok']) {
-      if (wholeGroup('status') || match(status)) out.push({ insert: `status:${status}`, label: props.qt(`query.status.${status}`), group: 'status:' })
+      if (wholeGroup('status') || match(status)) out.push({ insert: `status:${status}`, label: status, group: 'status:' })
     }
   }
   if (field === '' || field === 'turn') {
     for (const turn of props.turns.slice(0, 8)) {
-      if (wholeGroup('turn') || match(String(turn.turn))) out.push({ insert: `turn:${turn.turn}`, label: `#${turn.turn}`, detail: String(turn.count), group: 'turn:' })
+      if (wholeGroup('turn') || match(String(turn.turn))) out.push({ insert: `turn:${turn.turn}`, label: String(turn.turn), detail: String(turn.count), group: 'turn:' })
     }
   }
   if (field === '' || field === 'type') {
