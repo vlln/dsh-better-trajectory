@@ -9,6 +9,12 @@
 
 .root :global([role='tooltip']) {
   font: var(--dsw-font-xxxs-11);
+  padding: 8px 10px;
+  border: 1px solid var(--bt-line, #e6e8eb);
+  border-radius: 8px;
+  background: var(--bt-surface, #ffffff);
+  color: var(--bt-text, #1c2128);
+  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.12);
 }
 
 .plot {

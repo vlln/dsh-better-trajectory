@@ -3005,3 +3005,60 @@ tr[data-kind='system'] .rowName {
 .hoverCard {
   pointer-events: none;
 }
+
+/* bigger, clearer fold targets */
+.rowChevron,
+.rowChevronSpace {
+  width: 18px;
+  height: 20px;
+}
+
+.rowChevron {
+  border-radius: 4px;
+}
+
+.rowChevron:hover {
+  background: var(--bt-surface-3, #eef0f3);
+}
+
+.chevronIcon {
+  width: 11px;
+  height: 11px;
+}
+
+/* tree guides: vertical rail + elbow for child rows */
+.rowLine {
+  position: relative;
+}
+
+tr[data-kind='tool'] .rowLine::before,
+tr[data-kind='subtool'] .rowLine::before {
+  content: '';
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  left: 13px;
+  width: 1px;
+  background: var(--bt-line, #e6e8eb);
+}
+
+tr[data-kind='tool'] .rowLine::after,
+tr[data-kind='subtool'] .rowLine::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 13px;
+  width: 8px;
+  height: 1px;
+  background: var(--bt-line, #e6e8eb);
+}
+
+tr[data-kind='subtool'] .rowLine::before,
+tr[data-kind='subtool'] .rowLine::after {
+  left: 39px;
+}
+
+tr[data-kind='tool'] .content::before,
+tr[data-kind='subtool'] .content::before {
+  display: none;
+}

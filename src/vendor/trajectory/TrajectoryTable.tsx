@@ -3159,10 +3159,7 @@ export function TrajectoryTable({
                                   {rowTone === 'error' ? qt('row.error') : qt('row.running')}
                                 </span>
                               )}
-                              <span
-                                className={css.rowSub}
-                                title={record.collapsedSummary !== undefined ? record.collapsedSummary : rawSub}
-                              >
+                              <span className={css.rowSub}>
                                 {record.collapsedSummary !== undefined ? record.collapsedSummary : rowSub}
                               </span>
                               <span className={css.rowBarWrap}>
