@@ -2419,8 +2419,11 @@ export function TrajectoryTable({
       const kind = record.cell.kind
       const next = out[index + 1]
       const nextKind = next?.cell.kind
-      const hasFold = (record.turnStart && record.turn !== null && record.foldSummary === undefined)
-        || ((kind === 'message') && (nextKind === 'tool' || nextKind === 'subtool'))
+      // must mirror the fold control rendered below, or the connector geometry
+      // (elbow stops at the dot) desynchronises from the dot that is actually there
+      const hasFold = (record.turnStart && record.turn !== null)
+        || (kind === 'message' && assistantToolCalls(allRecords, record.cell.index).length > 0)
+        || (kind === 'message' && collapsedAssistants.has(trajectoryRecordId(record.cell)))
         || (kind === 'tool' && nextKind === 'subtool')
       if (hasFold) (record as TableRecord).hasFold = true
       if (kind === 'subtool') {
@@ -3235,14 +3238,15 @@ export function TrajectoryTable({
                             >
                               <span className={css.rails} aria-hidden="true">
                                 {[1, 2, 3].filter(axisLevel => level >= axisLevel).map(axisLevel => {
-                                  const axis = axisLevel === 1 ? 9 : axisLevel === 2 ? 35 : 61
+                                  // axis(k) is the centre of the level-k fold dot: 26k + 12
+                                  const axis = axisLevel === 1 ? 12 : axisLevel === 2 ? 38 : 64
                                   const stopsHere = record.childLast === true && level === axisLevel
                                   return (
                                     <i
                                       key={axisLevel}
                                       className={css.rail}
                                       style={stopsHere
-                                        ? { left: axis, top: 0, height: 14, bottom: 'auto' }
+                                        ? { left: axis, top: 0, height: '50%', bottom: 'auto' }
                                         : { left: axis, top: 0, bottom: 0 }}
                                     />
                                   )
@@ -3335,8 +3339,10 @@ export function TrajectoryTable({
                                 }
                                 return <span className={css.rowChevronSpace} />
                               })()}
-                              <span className={css.kindPill} data-kind={record.cell.kind}>
-                                {t(KIND_LABEL_KEY[record.cell.kind])}
+                              <span className={css.kindSlot}>
+                                <span className={css.kindPill} data-kind={record.cell.kind}>
+                                  {t(KIND_LABEL_KEY[record.cell.kind])}
+                                </span>
                               </span>
                               {toolLike && <span className={css.rowName}>{rowName}</span>}
                               {rowTone !== 'ok' && (

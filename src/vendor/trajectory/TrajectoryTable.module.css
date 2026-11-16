@@ -2737,18 +2737,6 @@ tr[data-kind='user'] .rowSub {
   font-weight: 500;
 }
 
-/* icon chevrons */
-.rowChevron {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transform: none;
-}
-
-.rowChevron[data-folded] {
-  transform: none;
-}
-
 .chevronIcon {
   transform: rotate(0deg);
   transition: transform var(--bt-dur-2, 90ms) var(--bt-ease-std, ease);
@@ -2809,48 +2797,6 @@ tr[data-kind='subtool'] .content::before {
 }
 
 /* kind pills (native-inspired identity) */
-.kindPill {
-  flex: none;
-  height: 16px;
-  padding: 0 5px;
-  border-radius: 3px;
-  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 9px;
-  line-height: 16px;
-  letter-spacing: 0.05em;
-  font-weight: 600;
-  background: var(--bt-surface-2, #f6f7f9);
-  color: var(--bt-text-3, #9aa1ab);
-}
-
-.kindPill[data-kind='tool'],
-.kindPill[data-kind='subtool'] {
-  background: color-mix(in srgb, var(--bt-tool, #b45309) 12%, var(--bt-surface, #ffffff));
-  color: var(--bt-tool, #b45309);
-}
-
-.kindPill[data-kind='message'] {
-  background: color-mix(in srgb, var(--bt-assistant, #7c3aed) 12%, var(--bt-surface, #ffffff));
-  color: var(--bt-assistant, #7c3aed);
-}
-
-.kindPill[data-kind='user'] {
-  background: color-mix(in srgb, var(--bt-user, #1d4ed8) 12%, var(--bt-surface, #ffffff));
-  color: var(--bt-user, #1d4ed8);
-}
-
-.kindPill[data-kind='context'],
-.kindPill[data-kind='system'] {
-  background: color-mix(in srgb, var(--bt-context, #047857) 10%, var(--bt-surface, #ffffff));
-  color: var(--bt-context, #047857);
-}
-
-.rowChevronSpace {
-  display: inline-block;
-  width: 14px;
-  flex: none;
-}
-
 tr[data-kind='message'] .rowName,
 tr[data-kind='user'] .rowName,
 tr[data-kind='context'] .rowName,
@@ -3012,21 +2958,6 @@ tr[data-kind='system'] .rowName {
   pointer-events: none;
 }
 
-/* bigger, clearer fold targets */
-.rowChevron,
-.rowChevronSpace {
-  width: 18px;
-  height: 20px;
-}
-
-.rowChevron {
-  border-radius: 4px;
-}
-
-.rowChevron:hover {
-  background: var(--bt-surface-3, #eef0f3);
-}
-
 .chevronIcon {
   width: 11px;
   height: 11px;
@@ -3137,191 +3068,63 @@ tr[data-turn-start='true'][data-kind='user'] > td {
   flex: none;
 }
 
+/* fold summary chips: same family as the kind tag, one rank quieter */
 .foldChip {
-  height: 15px;
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: 19px;
   padding: 0 5px;
-  border-radius: 3px;
-  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 9px;
-  line-height: 15px;
-  letter-spacing: 0.02em;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 10px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.035em;
   white-space: nowrap;
 }
 
 .foldChip[data-kind='steps'] {
-  background: color-mix(in srgb, var(--bt-assistant, #7c3aed) 12%, var(--bt-surface, #ffffff));
-  color: var(--bt-assistant, #7c3aed);
+  background: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      var(--dsw-alias-brand-primary-new-colorprimary-new-color) 55%,
+      var(--dsw-alias-state-error-secondary)
+    ) 15%,
+    var(--dsw-alias-bg-layer-1)
+  );
+  color: color-mix(
+    in srgb,
+    var(--dsw-alias-brand-primary-new-colorprimary-new-color) 60%,
+    var(--dsw-alias-state-error-secondary)
+  );
 }
 
 .foldChip[data-kind='tools'] {
-  background: color-mix(in srgb, var(--bt-tool, #b45309) 12%, var(--bt-surface, #ffffff));
-  color: var(--bt-tool, #b45309);
+  background: var(--dsw-alias-state-warn-tertiary);
+  color: var(--dsw-alias-state-warn-label);
 }
 
 .foldChip[data-kind='time'] {
-  background: var(--bt-surface-3, #eef0f3);
-  color: var(--bt-text-2, #5b6470);
+  background: var(--dsw-alias-bg-module-platform);
+  color: var(--dsw-alias-label-secondary);
 }
 
-/* continuous tree connectors: parent feeds children */
-tr[data-has-children] .rowLine::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  bottom: -3px;
-  left: 9px;
-  width: 1px;
-  background: var(--bt-text-3, #9aa1ab);
-  opacity: 0.35;
+/* ===================== tree connectors (single source of truth) =====================
+   Geometry contract for a row of level L (L = 0..3), all in px from the row line:
+     · indent                  = 26L
+     · parent elbow axis       = 26(L-1) + 9   (level 0 has no elbow)
+     · fold dot centre         = 26L + 12      → left edge 26L + 8
+     · kind tag slot           = 26L + 32 …   (dot slot is 24 wide + 8 gap)
+   Verticals are drawn by the child rows' `<i class=rail>`; every pseudo-element
+   below is a 1px line and carries an explicit height. A previous override let a
+   vertical drop inherit `width: 29px` and painted a filled box over the tag. */
+
+.rowLine {
+  position: relative;
 }
 
-tr[data-kind='tool'] .rowLine::before,
-tr[data-kind='subtool'] .rowLine::before {
-  top: 0;
-  bottom: 0;
-  left: 9px;
-  background: var(--bt-text-3, #9aa1ab);
-  opacity: 0.35;
-}
-
-tr[data-kind='tool'] .rowLine::after,
-tr[data-kind='subtool'] .rowLine::after {
-  left: 9px;
-  width: 17px;
-  background: var(--bt-text-3, #9aa1ab);
-  opacity: 0.35;
-}
-
-tr[data-child-last] .rowLine::before {
-  bottom: 50%;
-}
-
-tr[data-kind='subtool'] .rowLine::before,
-tr[data-kind='subtool'] .rowLine::after {
-  left: 35px;
-}
-
-/* three-level tree: turn > step > tool > subtool */
-tr[data-level='1'] .rowLine::before,
-tr[data-level='2'] .rowLine::before,
-tr[data-level='3'] .rowLine::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: var(--bt-text-3, #9aa1ab);
-  opacity: 0.38;
-}
-
-tr[data-level='1'] .rowLine::before { left: 9px; }
-tr[data-level='2'] .rowLine::before { left: 35px; }
-tr[data-level='3'] .rowLine::before { left: 61px; }
-
-tr[data-level='2'] .rowLine::after,
-tr[data-level='3'] .rowLine::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  height: 1px;
-  background: var(--bt-text-3, #9aa1ab);
-  opacity: 0.38;
-}
-
-tr[data-level='2'] .rowLine::after { left: 35px; width: 17px; }
-tr[data-level='3'] .rowLine::after { left: 61px; width: 17px; }
-
-tr[data-has-children][data-level='0'] .rowLine::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  bottom: -3px;
-  left: 9px;
-  width: 1px;
-  background: var(--bt-text-3, #9aa1ab);
-  opacity: 0.38;
-}
-
-tr[data-has-children][data-level='1'] .rowLine::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  bottom: -3px;
-  left: 35px;
-  width: 1px;
-  background: var(--bt-text-3, #9aa1ab);
-  opacity: 0.38;
-}
-
-tr[data-child-last] .rowLine::before {
-  bottom: 50%;
-}
-
-/* elbow reaches the child pill (indent + chevron slot) */
-tr[data-level='1'] .rowLine::after,
-tr[data-level='2'] .rowLine::after,
-tr[data-level='3'] .rowLine::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  height: 1px;
-  width: 35px;
-  background: var(--bt-text-3, #9aa1ab);
-  opacity: 0.38;
-}
-
-tr[data-level='1'] .rowLine::after { left: 9px; }
-tr[data-level='2'] .rowLine::after { left: 35px; }
-tr[data-level='3'] .rowLine::after { left: 61px; }
-
-/* connector ends at the fold button, not under it */
-tr[data-level='1'] .rowLine::after,
-tr[data-level='2'] .rowLine::after,
-tr[data-level='3'] .rowLine::after {
-  width: 17px;
-  opacity: 0.55;
-}
-
-tr[data-level='1'] .rowLine::before,
-tr[data-level='2'] .rowLine::before,
-tr[data-level='3'] .rowLine::before,
-tr[data-has-children][data-level='0'] .rowLine::after,
-tr[data-has-children][data-level='1'] .rowLine::after {
-  opacity: 0.55;
-}
-
-/* stronger rails */
-tr[data-level='1'] .rowLine::before,
-tr[data-level='2'] .rowLine::before,
-tr[data-level='3'] .rowLine::before,
-tr[data-has-children][data-level='0'] .rowLine::after,
-tr[data-has-children][data-level='1'] .rowLine::after {
-  background: var(--bt-text-2, #5b6470);
-  opacity: 0.45;
-}
-
-tr[data-level='1'] .rowLine::after,
-tr[data-level='2'] .rowLine::after,
-tr[data-level='3'] .rowLine::after {
-  background: var(--bt-text-2, #5b6470);
-  opacity: 0.45;
-}
-
-/* junction dot makes the connection explicit */
-tr[data-level='1'] .rowLine::after,
-tr[data-level='2'] .rowLine::after,
-tr[data-level='3'] .rowLine::after {
-  width: 17px;
-}
-
-/* elbow reaches the pill when there is no fold button in the slot */
-tr[data-level='1']:not([data-has-fold]) .rowLine::after,
-tr[data-level='2']:not([data-has-fold]) .rowLine::after,
-tr[data-level='3']:not([data-has-fold]) .rowLine::after {
-  width: 35px;
-}
-
-/* multiple ancestor rails per row */
 .rails {
   position: absolute;
   inset: 0;
@@ -3330,184 +3133,216 @@ tr[data-level='3']:not([data-has-fold]) .rowLine::after {
 
 .rail {
   position: absolute;
-  top: 0;
   width: 1px;
-  background: var(--bt-text-2, #5b6470);
+  background: var(--bt-rail, var(--bt-text-2, #5b6470));
   opacity: 0.45;
 }
 
-/* legacy pseudo rails off; elbows stay */
+/* legacy per-kind pseudo rails: off (the rails span replaced them) */
+tr[data-kind='tool'] .rowLine::before,
+tr[data-kind='subtool'] .rowLine::before,
 tr[data-level='1'] .rowLine::before,
 tr[data-level='2'] .rowLine::before,
-tr[data-level='3'] .rowLine::before {
+tr[data-level='3'] .rowLine::before,
+tr[data-kind='tool'] .rowLine::after,
+tr[data-kind='subtool'] .rowLine::after {
   content: none;
 }
 
-/* elbow sits on the first text line, not the vertical middle */
-tr[data-level='1'] .rowLine::after,
-tr[data-level='2'] .rowLine::after,
-tr[data-level='3'] .rowLine::after,
-tr[data-has-children][data-level='0'] .rowLine::after,
-tr[data-has-children][data-level='1'] .rowLine::after {
-  top: 14px;
+/* elbow: horizontal 1px line into the tag slot (::before, so the drop below
+   can own ::after on rows that are both nested and expandable). It sits on the
+   fold dot's centre line — 50% of the row line, whatever the row height — and
+   starts on the parent level's dot centre (26(L-1) + 12). */
+tr[data-level='1'] .rowLine::before,
+tr[data-level='2'] .rowLine::before,
+tr[data-level='3'] .rowLine::before {
+  content: '';
+  position: absolute;
+  top: 50%;
   bottom: auto;
   height: 1px;
-  width: 17px;
-  background: var(--bt-text-2, #5b6470);
+  width: 46px;
+  background: var(--bt-rail, var(--bt-text-2, #5b6470));
   opacity: 0.45;
+  pointer-events: none;
 }
 
-tr[data-level='1']:not([data-has-fold]) .rowLine::after,
-tr[data-level='2']:not([data-has-fold]) .rowLine::after,
-tr[data-level='3']:not([data-has-fold]) .rowLine::after {
-  width: 35px;
+tr[data-level='1'] .rowLine::before { left: 12px; }
+tr[data-level='2'] .rowLine::before { left: 38px; }
+tr[data-level='3'] .rowLine::before { left: 64px; }
+
+/* root rows: the turn dot still connects to its tag, so level 0 gets one too */
+tr[data-level='0'][data-has-fold] .rowLine::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  bottom: auto;
+  left: 16px;
+  width: 16px;
+  height: 1px;
+  background: var(--bt-rail, var(--bt-text-2, #5b6470));
+  opacity: 0.45;
+  pointer-events: none;
 }
 
-/* parent drops are vertical, not elbows */
-tr[data-has-children][data-level='0'] .rowLine::after {
-  top: 14px;
-  bottom: -3px;
-  height: auto;
-  width: 1px;
-  left: 9px;
+/* with a fold dot, stop at its outer edge (26L + 8) instead of running under it */
+tr[data-level='1'][data-has-fold] .rowLine::before,
+tr[data-level='2'][data-has-fold] .rowLine::before,
+tr[data-level='3'][data-has-fold] .rowLine::before {
+  width: 22px;
 }
 
+/* drop: vertical 1px line from the elbow down to the first child */
+tr[data-has-children][data-level='0'] .rowLine::after,
 tr[data-has-children][data-level='1'] .rowLine::after {
-  top: 14px;
+  content: '';
+  position: absolute;
+  /* clears the 8px dot (centre + 4 + 1) so the line never crosses it */
+  top: calc(50% + 5px);
   bottom: -3px;
   height: auto;
   width: 1px;
-  left: 35px;
+  background: var(--bt-rail, var(--bt-text-2, #5b6470));
+  opacity: 0.45;
+  pointer-events: none;
 }
 
-/* fixed pill column so content starts at the same x within a level */
+tr[data-has-children][data-level='0'] .rowLine::after { left: 12px; }
+tr[data-has-children][data-level='1'] .rowLine::after { left: 38px; }
+
+/* ===================== kind tag (mirrors the native tag) =====================
+   Native source: @deepseek-ai/dsh-client-ui-trajectory TrajectoryTable.module.css
+   `.kindTag` — 19px tall, 0 5px padding, 1px transparent border, radius-xs (4px),
+   10px/16px text at weight 650, letter-spacing .035em, natural width inside a
+   44px (zh) / 76px (en) right-aligned slot. Colours come straight from the
+   `--dsw-alias-*` palette so light/dark both match the native view. */
+.kindSlot {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-start;
+  width: 76px;
+}
+
+.kindSlot:where(:lang(zh)) {
+  width: 44px;
+}
+
 .kindPill {
-  width: 58px;
-  padding: 0;
   display: inline-flex;
+  flex: none;
   align-items: center;
-  justify-content: center;
-  text-transform: none;
-  letter-spacing: 0.02em;
-}
-
-/* fold affordance: hollow when expanded, filled when collapsed */
-.rowChevron {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 20px;
-  border-radius: 50%;
-  transform: none;
-}
-
-.rowChevron[data-folded] {
-  transform: none;
-}
-
-.foldDot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  border: 1.5px solid var(--bt-text-3, #9aa1ab);
-  background: transparent;
   box-sizing: border-box;
-  transition:
-    background-color var(--bt-dur-2, 90ms) var(--bt-ease-std, ease),
-    border-color var(--bt-dur-2, 90ms) var(--bt-ease-std, ease);
+  width: auto;
+  max-width: 72px;
+  height: 19px;
+  padding: 0 5px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 16px;
+  letter-spacing: 0.035em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: none;
+  background: var(--dsw-alias-bg-module-platform);
+  color: var(--dsw-alias-label-secondary);
 }
 
-.foldDot[data-filled] {
-  background: var(--bt-text-2, #5b6470);
-  border-color: var(--bt-text-2, #5b6470);
+.kindPill[data-kind='tool'] {
+  color: var(--dsw-alias-state-warn-label);
+  background: var(--dsw-alias-state-warn-tertiary);
 }
 
-.rowChevron:hover .foldDot {
-  border-color: var(--bt-text, #1c2128);
+.kindPill[data-kind='subtool'] {
+  color: color-mix(
+    in srgb,
+    var(--dsw-alias-state-warn-label) 62%,
+    var(--dsw-alias-label-tertiary)
+  );
+  background: color-mix(
+    in srgb,
+    var(--dsw-alias-state-warn-tertiary) 58%,
+    var(--dsw-alias-bg-layer-1)
+  );
 }
 
-.rowChevron:hover .foldDot[data-filled] {
-  background: var(--bt-text, #1c2128);
+.kindPill[data-kind='message'] {
+  color: color-mix(
+    in srgb,
+    var(--dsw-alias-brand-primary-new-colorprimary-new-color) 60%,
+    var(--dsw-alias-state-error-secondary)
+  );
+  background: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      var(--dsw-alias-brand-primary-new-colorprimary-new-color) 55%,
+      var(--dsw-alias-state-error-secondary)
+    ) 15%,
+    var(--dsw-alias-bg-layer-1)
+  );
 }
 
-/* elbow ends on the dot centre */
-tr[data-level='1'][data-has-fold] .rowLine::after,
-tr[data-level='2'][data-has-fold] .rowLine::after,
-tr[data-level='3'][data-has-fold] .rowLine::after {
-  width: 26px;
+.kindPill[data-kind='user'] {
+  color: var(--dsw-alias-state-business-primary);
+  background: var(--dsw-alias-state-business-tertiary);
 }
 
-/* strip UA button chrome from the fold affordance */
-.rowChevron {
-  appearance: none;
-  -webkit-appearance: none;
-  background: transparent !important;
-  border: 0 !important;
-  box-shadow: none !important;
-  color: inherit;
-  padding: 0;
+.kindPill[data-kind='context'] {
+  color: color-mix(
+    in srgb,
+    var(--dsw-alias-state-success-primary) 68%,
+    var(--dsw-alias-label-secondary)
+  );
+  background: var(--dsw-alias-state-success-tertiary);
 }
 
-.rowChevron:focus {
-  outline: none;
-}
-
-.rowChevron:focus-visible {
-  outline: 2px solid var(--bt-accent, #2563eb);
-  outline-offset: -2px;
-}
-
+/* ===================== fold control =====================
+   The dot is 8px; the hit area is 24x24 so the pointer target is larger than
+   the shape. Nothing may sit on top of that box: the elbow/drop pseudos above
+   are pointer-events:none and the chevron is lifted with z-index. */
 .rowChevron {
   all: unset;
+  position: relative;
+  z-index: 1;
   display: inline-flex;
+  flex: none;
   align-items: center;
   justify-content: center;
-  flex: none;
-  width: 18px;
-  height: 20px;
-  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  /* square, unrounded hit box: the 8px dot is the shape, the 24x24 box is the
+     target — a 50% radius would clip hit-testing back to a circle */
+  border-radius: 0;
+  color: var(--bt-text-3, #9aa1ab);
   cursor: pointer;
 }
 
-/* ---------- fold dot interaction ---------- */
-.rowChevron {
-  width: 20px;
-  height: 20px;
-  margin-left: -1px;
-  margin-right: -1px;
+.rowChevron:hover {
+  color: var(--bt-text, #1c2128);
 }
 
-.foldDot {
-  width: 7px;
-  height: 7px;
-  transition:
-    transform var(--bt-dur-2, 90ms) var(--bt-ease-std, ease),
-    box-shadow var(--bt-dur-2, 90ms) var(--bt-ease-std, ease),
-    background-color var(--bt-dur-2, 90ms) var(--bt-ease-std, ease),
-    border-color var(--bt-dur-2, 90ms) var(--bt-ease-std, ease);
+.rowChevron:active svg {
+  transform: scale(0.86);
 }
 
-.rowChevron:hover .foldDot {
-  transform: scale(1.25);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--bt-text-3, #9aa1ab) 18%, transparent);
-}
-
-.rowChevron:active .foldDot {
-  transform: scale(0.85);
+.rowChevron svg {
+  display: block;
+  transition: transform var(--bt-dur-2, 90ms) var(--bt-ease-std, ease);
+  transform-origin: center;
 }
 
 .rowChevron:focus-visible {
   outline: 2px solid var(--bt-accent, #2563eb);
-  outline-offset: 0;
-  border-radius: 50%;
+  outline-offset: 1px;
 }
 
-/* elbow stops at the dot edge instead of crossing it */
-tr[data-level='1'][data-has-fold] .rowLine::after,
-tr[data-level='2'][data-has-fold] .rowLine::after,
-tr[data-level='3'][data-has-fold] .rowLine::after {
-  width: 22px;
+.rowChevronSpace {
+  width: 24px;
 }
 
 /* collapsed parents stay on one line */
@@ -3525,66 +3360,4 @@ tr[data-collapsed='true'] .rowSub {
   overflow: hidden;
   text-overflow: ellipsis;
   -webkit-line-clamp: unset;
-}
-
-/* pill: native-like metrics */
-.kindPill {
-  width: 50px;
-  height: 16px;
-  padding: 0;
-  border-radius: 3px;
-  font-size: 9px;
-  letter-spacing: 0.04em;
-  font-weight: 600;
-}
-
-/* fold target: 24px hit area, SVG dot inside */
-.rowChevron {
-  all: unset;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  color: var(--bt-text-3, #9aa1ab);
-  cursor: pointer;
-  background: transparent !important;
-  transition: color var(--bt-dur-2, 90ms) var(--bt-ease-std, ease);
-}
-
-.rowChevron:hover {
-  color: var(--bt-text, #1c2128);
-}
-
-.rowChevron:active svg {
-  transform: scale(0.86);
-}
-
-.rowChevron svg {
-  transition: transform var(--bt-dur-2, 90ms) var(--bt-ease-std, ease);
-  transform-origin: center;
-}
-
-.rowChevron:focus-visible {
-  outline: 2px solid var(--bt-accent, #2563eb);
-  outline-offset: 0;
-}
-
-.rowChevronSpace {
-  width: 24px;
-}
-
-/* elbow reaches the dot edge (indent 26 + 12 - 9) */
-tr[data-level='1'][data-has-fold] .rowLine::after,
-tr[data-level='2'][data-has-fold] .rowLine::after,
-tr[data-level='3'][data-has-fold] .rowLine::after {
-  width: 29px;
-}
-
-tr[data-level='1']:not([data-has-fold]) .rowLine::after,
-tr[data-level='2']:not([data-has-fold]) .rowLine::after,
-tr[data-level='3']:not([data-has-fold]) .rowLine::after {
-  width: 41px;
 }
