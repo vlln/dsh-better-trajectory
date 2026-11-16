@@ -446,3 +446,9 @@
 .root {
   overflow: visible;
 }
+
+.tipPill {
+  min-width: 46px;
+  text-align: center;
+  text-transform: none;
+}

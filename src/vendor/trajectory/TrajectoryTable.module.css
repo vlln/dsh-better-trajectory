@@ -3373,3 +3373,14 @@ tr[data-has-children][data-level='1'] .rowLine::after {
   width: 1px;
   left: 35px;
 }
+
+/* fixed pill column so content starts at the same x within a level */
+.kindPill {
+  width: 58px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-transform: none;
+  letter-spacing: 0.02em;
+}

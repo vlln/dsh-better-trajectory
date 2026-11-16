@@ -759,12 +759,7 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
         >
           <div className={css.tipHead}>
             <span className={css.tipPill} data-kind={tip.kind}>
-              {tip.kind === 'input' ? 'INPUT'
-                : tip.kind === 'model' ? 'MODEL'
-                  : tip.kind === 'message' ? 'ASSISTANT'
-                    : tip.kind === 'context' ? 'CONTEXT'
-                      : tip.kind === 'user' ? 'USER'
-                        : tip.kind.toUpperCase()}
+              {timelineKindLabel(tip.kind, t)}
             </span>
             {tip.isError === true && <span className={css.tipError}>error</span>}
           </div>

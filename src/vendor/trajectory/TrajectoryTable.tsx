@@ -3314,9 +3314,7 @@ export function TrajectoryTable({
                                 return <span className={css.rowChevronSpace} />
                               })()}
                               <span className={css.kindPill} data-kind={record.cell.kind}>
-                                {record.cell.kind === 'message' ? 'ASSISTANT'
-                                  : record.cell.kind === 'subtool' ? 'SUBTOOL'
-                                    : record.cell.kind.toUpperCase()}
+                                {t(KIND_LABEL_KEY[record.cell.kind])}
                               </span>
                               {toolLike && <span className={css.rowName}>{rowName}</span>}
                               {rowTone !== 'ok' && (
@@ -4067,7 +4065,7 @@ export function TrajectoryTable({
           >
             <div className={css.hoverHead}>
               <span className={css.kindPill} data-kind={kind}>
-                {kind === 'message' ? 'ASSISTANT' : kind.toUpperCase()}
+                {t(KIND_LABEL_KEY[kind])}
               </span>
               {record.cell.toolName !== undefined && (
                 <span className={css.hoverName}>{record.cell.toolName}</span>
