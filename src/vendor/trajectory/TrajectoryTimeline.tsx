@@ -23,8 +23,10 @@ import css from './TrajectoryTimeline.module.css'
 const MINIMUM_DRAG_PX = 3
 /** Pressing/dragging this close to the left edge pulls in the previous page. */
 const EARLIER_TRIGGER_PX = 20
-/** Minimum gap between gesture-driven earlier loads. */
-const EARLIER_GESTURE_THROTTLE_MS = 600
+/** Extra distance the pointer must travel out of the zone before it can load again. */
+const EARLIER_LEAVE_PX = 8
+/** Wheel-driven earlier loads are rate limited, not edge-burst limited. */
+const WHEEL_LOAD_COOLDOWN_MS = 250
 const MINIMUM_ZOOM_OPERATIONS = 4
 const EDGE_PAN_ZONE_FRACTION = 0.08
 const EDGE_PAN_STEP_FRACTION = 0.025
@@ -470,17 +472,27 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
   /* reaching the left edge pages the next chunk in by itself, then the domain
      start moves left and the guard re-arms for the next page */
   const autoLoadedAtStart = useRef<number | null>(null)
-  const lastGestureLoadAt = useRef(0)
-  const requestEarlier = useCallback((fromGesture = false) => {
+  /* One page per visit to the edge: the ref resets when the pointer leaves the
+     zone (hysteresis), so a hover loads immediately, a drag loads immediately,
+     and staying on the edge does not chain through the whole history. A timer was
+     wrong here: a drag started right after a hover had to wait out the cooldown. */
+  const edgeLoadDone = useRef(false)
+  const lastWheelLoadAt = useRef(0)
+  const requestEarlier = useCallback((fromGesture = false, fromWheel = false) => {
     if (loadEarlier === undefined || model === null) return
+    if (fromWheel) {
+      const now = performance.now()
+      if (now - lastWheelLoadAt.current < WHEEL_LOAD_COOLDOWN_MS) return
+      lastWheelLoadAt.current = now
+      loadEarlier()
+      return
+    }
     if (fromGesture) {
       /* A press/drag on the left edge is an explicit "go earlier" gesture: honour
          it even when the view is zoomed or panned (panning needs pointer movement
-         to reach model.start, and a held finger produces none). Throttled so a
-         sweep along the edge loads page by page instead of all at once. */
-      const now = Date.now()
-      if (now - lastGestureLoadAt.current < EARLIER_GESTURE_THROTTLE_MS) return
-      lastGestureLoadAt.current = now
+         to reach model.start, and a held finger produces none). */
+      if (edgeLoadDone.current) return
+      edgeLoadDone.current = true
       loadEarlier()
       return
     }
@@ -518,6 +530,12 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
       event.preventDefault()
       const track = trackRef.current
       if (track === null || model === null) return
+      /* Plain wheel over the track pages history (up = older), the way the rest of
+         the app scrolls; zoom now needs ⌘/Ctrl so the two cannot fight. */
+      if (!event.ctrlKey && !event.metaKey) {
+        if (event.deltaY < 0) requestEarlier(false, true)
+        return
+      }
       setAnimateViewport(false)
       const rect = track.getBoundingClientRect()
       const anchorFraction =
@@ -617,8 +635,11 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
     if (event.button !== 0) return
     if (hasEarlierRecords) {
       const trackRect = trackRef.current?.getBoundingClientRect()
-      if (trackRect !== undefined && trackRect !== null
-        && event.clientX - trackRect.left <= EARLIER_TRIGGER_PX) requestEarlier(true)
+      if (trackRect !== undefined && trackRect !== null) {
+        const distance = event.clientX - trackRect.left
+        if (distance > EARLIER_TRIGGER_PX + EARLIER_LEAVE_PX) edgeLoadDone.current = false
+        else if (distance <= EARLIER_TRIGGER_PX) requestEarlier(true)
+      }
     }
     const anchor = fractionAt(event)
     const anchorTime = domainStart + anchor * domainDuration
