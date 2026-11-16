@@ -65,31 +65,35 @@ function buildSuggestions(props: QueryBarProps, lastWord: string): Suggestion[] 
   const out: Suggestion[] = []
   const term = lastWord.replace(/^-/, '')
   const [field, value = ''] = term.includes(':') ? [term.slice(0, term.indexOf(':')), term.slice(term.indexOf(':') + 1)] : ['', '']
-  const match = (text: string) => text.toLowerCase().includes(value.toLowerCase())
+  /* typing a field prefix (`ty`, `st`) should surface that field's values, while
+     typing a value (`bash`, `#3`) still filters inside every group */
+  const needle = field === '' ? term : value
+  const match = (text: string) => text.toLowerCase().includes(needle.toLowerCase())
+  const wholeGroup = (name: string) => needle !== '' && name.startsWith(needle.toLowerCase())
 
   if (field === '' || field === 'tool') {
     for (const tool of props.tools) {
-      if (match(tool.name)) out.push({ insert: `tool:${tool.name}`, label: tool.name, detail: String(tool.calls ?? tool.count ?? ''), group: props.qt('query.groupTools') })
+      if (wholeGroup('tool') || match(tool.name)) out.push({ insert: `tool:${tool.name}`, label: tool.name, detail: String(tool.calls ?? tool.count ?? ''), group: 'tool:' })
     }
   }
   if (field === '' || field === 'status') {
     for (const status of ['error', 'running', 'ok']) {
-      if (match(status)) out.push({ insert: `status:${status}`, label: props.qt(`query.status.${status}`), group: props.qt('query.groupStatus') })
+      if (wholeGroup('status') || match(status)) out.push({ insert: `status:${status}`, label: props.qt(`query.status.${status}`), group: 'status:' })
     }
   }
   if (field === '' || field === 'turn') {
     for (const turn of props.turns.slice(0, 8)) {
-      if (match(String(turn.turn))) out.push({ insert: `turn:${turn.turn}`, label: `#${turn.turn}`, detail: String(turn.count), group: props.qt('query.groupTurn') })
+      if (wholeGroup('turn') || match(String(turn.turn))) out.push({ insert: `turn:${turn.turn}`, label: `#${turn.turn}`, detail: String(turn.count), group: 'turn:' })
     }
   }
   if (field === '' || field === 'type') {
     for (const type of ['call', 'message', 'user', 'system', 'context', 'compacted']) {
-      if (match(type)) out.push({ insert: `type:${type}`, label: type, group: props.qt('query.groupType') })
+      if (wholeGroup('type') || match(type)) out.push({ insert: `type:${type}`, label: type, group: 'type:' })
     }
   }
   if (field === '' || field === 'ms') {
     for (const raw of ['ms:>1000', 'ms:>3000']) {
-      if (match(raw)) out.push({ insert: raw, label: raw, group: props.qt('query.groupSlow') })
+      if (wholeGroup('ms') || match(raw)) out.push({ insert: raw, label: raw.replace(/^ms:/, ''), group: 'ms:' })
     }
   }
   return out.slice(0, 14)
@@ -108,6 +112,7 @@ export function QueryBar(props: QueryBarProps) {
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)
   const rootRef = useRef<HTMLDivElement | null>(null)
+  const menuRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
 
   const words = query.trim() === '' ? [] : query.trim().split(/\s+/)
@@ -126,6 +131,14 @@ export function QueryBar(props: QueryBarProps) {
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [])
+
+  /* arrow keys move `active`; without this the selected row can walk out of the
+     scroll container and the menu looks like it ignores the keyboard */
+  useEffect(() => {
+    if (!open) return
+    const option = menuRef.current?.querySelectorAll<HTMLElement>('[role=option]')[active]
+    option?.scrollIntoView({ block: 'nearest' })
+  }, [active, open])
 
   useEffect(() => {
     if (!open) return
@@ -152,7 +165,11 @@ export function QueryBar(props: QueryBarProps) {
     if (!open) return
     if (event.key === 'ArrowDown') { event.preventDefault(); setActive(i => Math.min(i + 1, suggestions.length - 1)) }
     else if (event.key === 'ArrowUp') { event.preventDefault(); setActive(i => Math.max(i - 1, 0)) }
-    else if (event.key === 'Enter') { event.preventDefault(); if (suggestions.length > 0) pick(suggestions[active] ?? suggestions[0]); else setOpen(false) }
+    else if (event.key === 'Enter' || event.key === 'Tab') {
+      if (suggestions.length === 0) { if (event.key === 'Enter') setOpen(false); return }
+      event.preventDefault()
+      pick(suggestions[active] ?? suggestions[0])
+    }
   }
 
 
@@ -240,7 +257,7 @@ export function QueryBar(props: QueryBarProps) {
             </button>
           )}
           {open && query.trim() !== '' && suggestions.length > 0 && (
-            <div className={css.menu} role="listbox" aria-label={qt('query.suggestions')}>
+            <div className={css.menu} role="listbox" ref={menuRef} aria-label={qt('query.suggestions')}>
               {suggestions.map((suggestion, index) => (
                 <button
                   key={`${suggestion.group}:${suggestion.insert}`}
