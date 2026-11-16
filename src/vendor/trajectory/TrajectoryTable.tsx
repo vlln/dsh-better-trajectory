@@ -3234,20 +3234,19 @@ export function TrajectoryTable({
                               className={css.rowLine}
                               data-tone={rowTone}
                               data-mono={toolLike || undefined}
-                              style={{ paddingLeft: `${level * 26}px` }}
+                              // CSS owns the geometry; markup only says which level this row is
+                              style={{ '--bt-level': level } as CSSProperties}
                             >
                               <span className={css.rails} aria-hidden="true">
                                 {[1, 2, 3].filter(axisLevel => level >= axisLevel).map(axisLevel => {
-                                  // axis(k) is the centre of the level-k fold dot: 26k + 12
-                                  const axis = axisLevel === 1 ? 12 : axisLevel === 2 ? 38 : 64
+                                  // one rail per ancestor level; the x and the stop are pure CSS
                                   const stopsHere = record.childLast === true && level === axisLevel
                                   return (
                                     <i
                                       key={axisLevel}
                                       className={css.rail}
-                                      style={stopsHere
-                                        ? { left: axis, top: 0, height: '50%', bottom: 'auto' }
-                                        : { left: axis, top: 0, bottom: 0 }}
+                                      data-stop={stopsHere || undefined}
+                                      style={{ '--bt-anc': axisLevel - 1 } as CSSProperties}
                                     />
                                   )
                                 })}

@@ -2401,32 +2401,6 @@ tr[data-selected='true'][data-error='true'] {
   color: var(--bt-error, #d92d20);
 }
 
-/* chevron + focus + drag snap */
-.rowChevron,
-.rowChevronSpace {
-  flex: none;
-  width: 14px;
-  height: 14px;
-  margin-right: -4px;
-  border: 0;
-  background: transparent;
-  color: var(--bt-text-3, #9aa1ab);
-  font-size: 9px;
-  line-height: 14px;
-  text-align: center;
-  cursor: pointer;
-  transform: rotate(90deg);
-  transition: transform var(--bt-dur-2, 90ms) var(--bt-ease-std, ease);
-}
-
-.rowChevron[data-folded] {
-  transform: rotate(0deg);
-}
-
-.rowChevron:hover {
-  color: var(--bt-text, #1c2128);
-}
-
 .table tr:focus-visible {
   outline: 2px solid var(--bt-accent, #2563eb);
   outline-offset: -2px;
@@ -2690,7 +2664,10 @@ tr[data-kind='message'] .rowLine {
   height: auto;
   min-height: 28px;
   align-items: flex-start;
-  padding: 5px 0;
+  /* the only source of the vertical inset: the tree geometry derives the
+     marker line from it (see --bt-marker-y below) */
+  --bt-pad-y: 5px;
+  padding-block: var(--bt-pad-y);
   box-sizing: border-box;
 }
 
@@ -3111,17 +3088,29 @@ tr[data-turn-start='true'][data-kind='user'] > td {
   color: var(--dsw-alias-label-secondary);
 }
 
-/* ===================== tree connectors (single source of truth) =====================
-   Geometry contract for a row of level L (L = 0..3), all in px from the row line:
-     · indent                  = 26L
-     · parent elbow axis       = 26(L-1) + 9   (level 0 has no elbow)
-     · fold dot centre         = 26L + 12      → left edge 26L + 8
-     · kind tag slot           = 26L + 32 …   (dot slot is 24 wide + 8 gap)
-   Verticals are drawn by the child rows' `<i class=rail>`; every pseudo-element
-   below is a 1px line and carries an explicit height. A previous override let a
-   vertical drop inherit `width: 29px` and painted a filled box over the tag. */
+/* ===================== tree connectors: one formula for every level =====================
+   A row of level L draws three things from a single pair of numbers:
 
+     --bt-step  26px                       indent per level
+     --bt-dot   12px                       dot centre inside its own level
+     --bt-axis  calc(step * L + dot)       this row's fold-dot centre
+     elbow      horizontal 1px, from the parent dot centre (axis - step) to
+                this row's dot edge (axis - 4) or its tag slot (axis + 20)
+     drop       vertical 1px, from just under this row's dot to the row bottom
+     rail(a)    vertical 1px at (step * a + dot) for each ancestor level a
+
+   Vertical anchoring is also single-sourced: --bt-marker-y is the centre of the
+   first text line, and the fold dot box is one 28px line tall, so the dot, the
+   elbow and the drop share that y on every row height. Earlier the elbow used
+   `top: 50%` while message rows are top-aligned with 5px padding, which put the
+   line 10px below the dot on any row that wrapped to more than one line. */
 .rowLine {
+  --bt-step: 26px;
+  --bt-dot: 12px;
+  --bt-pad-y: 0px;
+  --bt-axis: calc(var(--bt-step) * var(--bt-level, 0) + var(--bt-dot));
+  --bt-marker-y: calc(var(--bt-pad-y) + 14px);
+  padding-left: calc(var(--bt-step) * var(--bt-level, 0));
   position: relative;
 }
 
@@ -3133,51 +3122,63 @@ tr[data-turn-start='true'][data-kind='user'] > td {
 
 .rail {
   position: absolute;
+  top: 0;
+  bottom: 0;
   width: 1px;
+  left: calc(var(--bt-step) * var(--bt-anc, 0) + var(--bt-dot));
   background: var(--bt-rail, var(--bt-text-2, #5b6470));
   opacity: 0.45;
 }
 
-/* legacy per-kind pseudo rails: off (the rails span replaced them) */
-tr[data-kind='tool'] .rowLine::before,
-tr[data-kind='subtool'] .rowLine::before,
-tr[data-level='1'] .rowLine::before,
-tr[data-level='2'] .rowLine::before,
-tr[data-level='3'] .rowLine::before,
-tr[data-kind='tool'] .rowLine::after,
-tr[data-kind='subtool'] .rowLine::after {
-  content: none;
+/* the last child of an ancestor stops its rail at the elbow */
+.rail[data-stop] {
+  bottom: auto;
+  height: var(--bt-marker-y);
 }
 
-/* elbow: horizontal 1px line into the tag slot (::before, so the drop below
-   can own ::after on rows that are both nested and expandable). It sits on the
-   fold dot's centre line — 50% of the row line, whatever the row height — and
-   starts on the parent level's dot centre (26(L-1) + 12). */
+/* legacy per-kind pseudo rails: off, the rails span replaced them */
+tr[data-kind='tool'] .rowLine::before,
+tr[data-kind='subtool'] .rowLine::before,
+tr[data-kind='tool'] .rowLine::after,
+tr[data-kind='subtool'] .rowLine::after,
 tr[data-level='1'] .rowLine::before,
 tr[data-level='2'] .rowLine::before,
 tr[data-level='3'] .rowLine::before {
+  content: none;
+}
+
+/* elbow: nested rows, dot present → stop at the dot's outer edge */
+tr[data-has-fold]:not([data-level='0']) .rowLine::before {
   content: '';
   position: absolute;
-  top: 50%;
-  bottom: auto;
+  top: var(--bt-marker-y);
+  left: calc(var(--bt-axis) - var(--bt-step));
+  width: 22px;
   height: 1px;
-  width: 46px;
   background: var(--bt-rail, var(--bt-text-2, #5b6470));
   opacity: 0.45;
   pointer-events: none;
 }
 
-tr[data-level='1'] .rowLine::before { left: 12px; }
-tr[data-level='2'] .rowLine::before { left: 38px; }
-tr[data-level='3'] .rowLine::before { left: 64px; }
+/* elbow: nested rows, no dot → run to the tag slot */
+tr:not([data-has-fold]):not([data-level='0']) .rowLine::before {
+  content: '';
+  position: absolute;
+  top: var(--bt-marker-y);
+  left: calc(var(--bt-axis) - var(--bt-step));
+  width: 46px;
+  height: 1px;
+  background: var(--bt-rail, var(--bt-text-2, #5b6470));
+  opacity: 0.45;
+  pointer-events: none;
+}
 
-/* root rows: the turn dot still connects to its tag, so level 0 gets one too */
+/* elbow: root rows, from the dot's outer edge to the tag slot */
 tr[data-level='0'][data-has-fold] .rowLine::before {
   content: '';
   position: absolute;
-  top: 50%;
-  bottom: auto;
-  left: 16px;
+  top: var(--bt-marker-y);
+  left: calc(var(--bt-axis) + 4px);
   width: 16px;
   height: 1px;
   background: var(--bt-rail, var(--bt-text-2, #5b6470));
@@ -3185,37 +3186,95 @@ tr[data-level='0'][data-has-fold] .rowLine::before {
   pointer-events: none;
 }
 
-/* with a fold dot, stop at its outer edge (26L + 8) instead of running under it */
-tr[data-level='1'][data-has-fold] .rowLine::before,
-tr[data-level='2'][data-has-fold] .rowLine::before,
-tr[data-level='3'][data-has-fold] .rowLine::before {
-  width: 22px;
-}
-
-/* drop: vertical 1px line from the elbow down to the first child */
-tr[data-has-children][data-level='0'] .rowLine::after,
-tr[data-has-children][data-level='1'] .rowLine::after {
+/* drop: any parent row, from under its dot down to the next row */
+tr[data-has-children] .rowLine::after {
   content: '';
   position: absolute;
-  /* clears the 8px dot (centre + 4 + 1) so the line never crosses it */
-  top: calc(50% + 5px);
+  top: calc(var(--bt-marker-y) + 5px);
   bottom: -3px;
-  height: auto;
+  left: var(--bt-axis);
   width: 1px;
   background: var(--bt-rail, var(--bt-text-2, #5b6470));
   opacity: 0.45;
   pointer-events: none;
 }
 
-tr[data-has-children][data-level='0'] .rowLine::after { left: 12px; }
-tr[data-has-children][data-level='1'] .rowLine::after { left: 38px; }
+/* ===================== fold control =====================
+   The dot is an 8px SVG circle; the hit box is 24x28 — one text line tall, 24px
+   wide — so the pointer target is larger than the shape and its centre is the
+   marker y. The box is square on purpose: a 50% radius clips hit-testing back
+   into a circle and makes the corners dead. */
+.rowChevron,
+.rowChevronSpace {
+  display: inline-flex;
+  flex: none;
+  align-self: flex-start;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 28px;
+}
+
+.rowChevron {
+  all: unset;
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  flex: none;
+  align-self: flex-start;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 24px;
+  height: 28px;
+  border-radius: 0;
+  color: var(--bt-text-3, #9aa1ab);
+  cursor: pointer;
+}
+
+.rowChevron:hover {
+  color: var(--bt-text, #1c2128);
+}
+
+.rowChevron:active svg {
+  transform: scale(0.86);
+}
+
+.rowChevron svg {
+  display: block;
+  transition: transform var(--bt-dur-2, 90ms) var(--bt-ease-std, ease);
+  transform-origin: center;
+}
+
+.rowChevron:focus-visible {
+  outline: 2px solid var(--bt-accent, #2563eb);
+  outline-offset: 1px;
+}
+
+/* collapsed parents stay on one line: no top padding, so the marker y is 14px */
+tr[data-collapsed='true'] .rowLine {
+  --bt-pad-y: 0px;
+  height: 28px;
+  min-height: 28px;
+  padding-top: 0;
+  padding-bottom: 0;
+  align-items: center;
+}
+
+tr[data-collapsed='true'] .rowSub {
+  white-space: nowrap;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  -webkit-line-clamp: unset;
+}
 
 /* ===================== kind tag (mirrors the native tag) =====================
    Native source: @deepseek-ai/dsh-client-ui-trajectory TrajectoryTable.module.css
    `.kindTag` — 19px tall, 0 5px padding, 1px transparent border, radius-xs (4px),
    10px/16px text at weight 650, letter-spacing .035em, natural width inside a
-   44px (zh) / 76px (en) right-aligned slot. Colours come straight from the
-   `--dsw-alias-*` palette so light/dark both match the native view. */
+   44px (zh) / 76px (en) slot. Colours come straight from the `--dsw-alias-*`
+   palette so light and dark both match the native view. */
 .kindSlot {
   display: flex;
   flex: none;
@@ -3299,65 +3358,4 @@ tr[data-has-children][data-level='1'] .rowLine::after { left: 38px; }
     var(--dsw-alias-label-secondary)
   );
   background: var(--dsw-alias-state-success-tertiary);
-}
-
-/* ===================== fold control =====================
-   The dot is 8px; the hit area is 24x24 so the pointer target is larger than
-   the shape. Nothing may sit on top of that box: the elbow/drop pseudos above
-   are pointer-events:none and the chevron is lifted with z-index. */
-.rowChevron {
-  all: unset;
-  position: relative;
-  z-index: 1;
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  /* square, unrounded hit box: the 8px dot is the shape, the 24x24 box is the
-     target — a 50% radius would clip hit-testing back to a circle */
-  border-radius: 0;
-  color: var(--bt-text-3, #9aa1ab);
-  cursor: pointer;
-}
-
-.rowChevron:hover {
-  color: var(--bt-text, #1c2128);
-}
-
-.rowChevron:active svg {
-  transform: scale(0.86);
-}
-
-.rowChevron svg {
-  display: block;
-  transition: transform var(--bt-dur-2, 90ms) var(--bt-ease-std, ease);
-  transform-origin: center;
-}
-
-.rowChevron:focus-visible {
-  outline: 2px solid var(--bt-accent, #2563eb);
-  outline-offset: 1px;
-}
-
-.rowChevronSpace {
-  width: 24px;
-}
-
-/* collapsed parents stay on one line */
-tr[data-collapsed='true'] .rowLine {
-  height: 28px;
-  min-height: 28px;
-  padding-top: 0;
-  padding-bottom: 0;
-  align-items: center;
-}
-
-tr[data-collapsed='true'] .rowSub {
-  white-space: nowrap;
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  -webkit-line-clamp: unset;
 }

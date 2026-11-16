@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- 修掉折叠控件的第二份样式：旧规则 `width:14px; margin-right:-4px; transform:rotate(90deg)` 还在生效，导致有圆点的行和无圆点的行标签列差 4px，控件也被旋转 90°（圆点看不出来，但包围盒从 24×28 变成 28×24）。
+- 树的几何改成单一来源：`elbow / drop / rail` 全部由 `--bt-step`、`--bt-dot`、`--bt-level`、`--bt-anc` 推出，不再按 level 1/2/3 逐条枚举，4 层以上也成立。
+- 修掉多行消息上「圆点在行首、连线在中线」的错位：纵向基准统一为 `--bt-marker-y`（行内距 + 14px），折叠控件盒高改成一行 28px，圆点 / elbow / drop 在任何行高下共线。
 - 标签（助手 / 工具 / 用户 / 上下文）改为原生的 `kindTag` 规格：19px 高、10px 字号、650 字重、0.035em 字距、4px 圆角、5px 内距、自然宽度；颜色与底色直接用 `--dsw-alias-*`，浅色深色都与原生一致。标签放进 44px（中文）/ 76px（英文）的右槽，正文起始列不变。
 - 折叠控件命中区改为 24×24 方块（外形仍是 8px 空心/实心圆）：去掉 `border-radius: 50%`，否则点击被裁回圆内，四角点不到；elbow/drop 伪元素加 `pointer-events: none`，不再抢点击。
 - 修复折叠行标签旁那块灰色矩形：`::after` 的竖线规则只写了 `height: auto`，被后面的 `width: 29px` 改成 29×23 的实心块盖在标签上。现在 elbow 用 `::before`、drop 用 `::after`，两者都显式 1px 线宽。
