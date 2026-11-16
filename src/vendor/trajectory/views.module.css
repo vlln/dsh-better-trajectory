@@ -27,12 +27,15 @@
   min-width: 0;
   overflow: hidden;
 
-  /* ConversationRoot publishes the floating composer's live height. */
-  --dsh-trajectory-bottom-clearance: calc(var(--dsh-composer-height, 152px) + 16px);
 }
 
 .root {
   position: relative;
+  /* ConversationRoot publishes the floating composer's live height. This must sit
+     on the trajectory root, not on .ledger: the inspector is a sibling of the
+     ledger and was getting no clearance at all, so its content scrolled under
+     the composer. */
+  --dsh-trajectory-bottom-clearance: calc(var(--dsh-composer-height, 152px) + 16px);
 }
 
 .toast {

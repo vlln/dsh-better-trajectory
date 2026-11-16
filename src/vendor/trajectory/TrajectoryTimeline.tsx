@@ -21,6 +21,8 @@ import css from './TrajectoryTimeline.module.css'
 const MINIMUM_DRAG_PX = 3
 /** Pressing/dragging this close to the left edge pulls in the previous page. */
 const EARLIER_TRIGGER_PX = 20
+/** Minimum gap between gesture-driven earlier loads. */
+const EARLIER_GESTURE_THROTTLE_MS = 600
 const MINIMUM_ZOOM_OPERATIONS = 4
 const EDGE_PAN_ZONE_FRACTION = 0.08
 const EDGE_PAN_STEP_FRACTION = 0.025
@@ -335,9 +337,22 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
   /* reaching the left edge pages the next chunk in by itself, then the domain
      start moves left and the guard re-arms for the next page */
   const autoLoadedAtStart = useRef<number | null>(null)
-  const requestEarlier = useCallback(() => {
-    if (loadEarlier === undefined || model === null || !atEarliest) return
-    if (autoLoadedAtStart.current === model.start) return
+  const lastGestureLoadAt = useRef(0)
+  const requestEarlier = useCallback((fromGesture = false) => {
+    if (loadEarlier === undefined || model === null) return
+    if (fromGesture) {
+      /* A press/drag on the left edge is an explicit "go earlier" gesture: honour
+         it even when the view is zoomed or panned (panning needs pointer movement
+         to reach model.start, and a held finger produces none). Throttled so a
+         sweep along the edge loads page by page instead of all at once. */
+      const now = Date.now()
+      if (now - lastGestureLoadAt.current < EARLIER_GESTURE_THROTTLE_MS) return
+      lastGestureLoadAt.current = now
+      loadEarlier()
+      return
+    }
+    /* boundary marker: once per model.start, otherwise it would page forever */
+    if (!atEarliest || autoLoadedAtStart.current === model.start) return
     autoLoadedAtStart.current = model.start
     loadEarlier()
   }, [atEarliest, loadEarlier, model])
@@ -453,8 +468,9 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
     }
     if (event.button !== 0) return
     if (hasEarlierRecords) {
-      const rect = event.currentTarget.getBoundingClientRect()
-      if (event.clientX - rect.left <= EARLIER_TRIGGER_PX) requestEarlier()
+      const trackRect = trackRef.current?.getBoundingClientRect()
+      if (trackRect !== undefined && trackRect !== null
+        && event.clientX - trackRect.left <= EARLIER_TRIGGER_PX) requestEarlier(true)
     }
     const anchor = fractionAt(event)
     const anchorTime = domainStart + anchor * domainDuration
@@ -475,7 +491,11 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
     const fraction = fractionAt(event)
-    if (hasEarlierRecords && event.clientX - rect.left <= EARLIER_TRIGGER_PX) requestEarlier()
+    if (hasEarlierRecords) {
+      const trackRect = trackRef.current?.getBoundingClientRect()
+      if (trackRect !== undefined && trackRect !== null
+        && event.clientX - trackRect.left <= EARLIER_TRIGGER_PX) requestEarlier(true)
+    }
     setHover({ fraction, recordIndex: recordIndexAt(event) })
     const pan = panRef.current
     if (pan !== null && pan.pointerId === event.pointerId) {
