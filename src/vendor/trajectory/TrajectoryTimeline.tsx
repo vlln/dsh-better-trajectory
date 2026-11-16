@@ -2,7 +2,7 @@
 /** Chrome-Network-style overview timeline for focusing the trajectory ledger. */
 
 import {
-  memo, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent,
+  Fragment, memo, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent,
   type PointerEvent,
 } from 'react'
 import { Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -273,6 +273,13 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
   const [draft, setDraft] = useState<TrajectoryTimeRange | null>(null)
   const [hover, setHover] = useState<HoverPoint | null>(null)
   const [loadingEarlier, setLoadingEarlier] = useState(false)
+  const [tip, setTip] = useState<{
+    x: number
+    y: number
+    kind: TrajectoryCellKind
+    detail: TimelineRecordDetail | undefined
+    isError: boolean | undefined
+  } | null>(null)
   const [panning, setPanning] = useState(false)
   const [viewport, setViewport] = useState<TrajectoryTimeRange | null>(null)
   const [animateViewport, setAnimateViewport] = useState(false)
@@ -584,6 +591,7 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
   }
 
   return (
+    <>
     <section ref={rootRef} className={css.root} aria-label={t('timeline.aria')}>
       <div className={css.plot}>
         <LaneLabels t={t} />
@@ -695,15 +703,19 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
                   ? null
                   : ttftMs / (ttftMs + decodingMs)
                 return (
-                  <Tooltip
-                    key={span.index}
-                    label={() => timelineTooltipLabel(span.kind, detail, t)}
-                    side="bottom"
-                    delayMs={TIMELINE_TOOLTIP_DELAY_MS}
-                  >
+                  <Fragment key={span.index}>
                     <span
                       aria-hidden="true"
                       className={css.span}
+                      onMouseEnter={(event) => {
+                        setTip({ x: event.clientX, y: event.clientY, kind: span.kind, detail, isError: span.isError })
+                      }}
+                      onMouseMove={(event) => {
+                        setTip(current => current === null
+                          ? current
+                          : { ...current, x: event.clientX, y: event.clientY })
+                      }}
+                      onMouseLeave={() => setTip(null)}
                       data-timeline-span={span.kind}
                       data-timeline-record-index={span.index}
                       data-assistant-timing={ttftFraction === null ? undefined : 'true'}
@@ -729,12 +741,57 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
                           : { '--trajectory-assistant-ttft': `${ttftFraction * 100}%` }),
                       } as CSSProperties}
                     />
-                  </Tooltip>
+                  </Fragment>
                 )
               })}
           </div>
         </div>
       </div>
     </section>
+      {tip !== null && (
+        <div
+          className={css.tipCard}
+          role="tooltip"
+          style={{
+            left: Math.min(tip.x + 14, window.innerWidth - 300),
+            top: Math.min(tip.y + 16, window.innerHeight - 180),
+          }}
+        >
+          <div className={css.tipHead}>
+            <span className={css.tipPill} data-kind={tip.kind}>
+              {tip.kind === 'input' ? 'INPUT'
+                : tip.kind === 'model' ? 'MODEL'
+                  : tip.kind === 'message' ? 'ASSISTANT'
+                    : tip.kind === 'context' ? 'CONTEXT'
+                      : tip.kind === 'user' ? 'USER'
+                        : tip.kind.toUpperCase()}
+            </span>
+            {tip.isError === true && <span className={css.tipError}>error</span>}
+          </div>
+          <dl className={css.tipGrid}>
+            {tip.detail?.startedAt !== undefined && (
+              <>
+                <dt>开始</dt>
+                <dd>{formatRecordedTime(tip.detail.startedAt)}</dd>
+              </>
+            )}
+            {tip.detail?.startedAt !== undefined && tip.detail?.durationMs !== undefined && (
+              <>
+                <dt>结束</dt>
+                <dd>{formatRecordedTime(tip.detail.startedAt + tip.detail.durationMs)}</dd>
+              </>
+            )}
+            {tip.detail?.durationMs !== undefined && (
+              <>
+                <dt>耗时</dt>
+                <dd>{tip.detail.durationMs < 1000
+                  ? `${Math.round(tip.detail.durationMs)}ms`
+                  : `${(tip.detail.durationMs / 1000).toFixed(tip.detail.durationMs < 10000 ? 1 : 0)}s`}</dd>
+              </>
+            )}
+          </dl>
+        </div>
+      )}
+    </>
   )
 })

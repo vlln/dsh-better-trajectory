@@ -333,3 +333,116 @@
     transparent
   );
 }
+
+/* timeline hover card mirrors the ledger hover card */
+.tipCard {
+  position: fixed;
+  z-index: 60;
+  width: 268px;
+  padding: 10px 12px;
+  border: 1px solid var(--bt-line, #e6e8eb);
+  border-radius: 8px;
+  background: var(--bt-surface, #fff);
+  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.12);
+  pointer-events: none;
+  animation: bt-tip-in var(--bt-dur-3, 120ms) var(--bt-ease-out, ease);
+}
+
+@keyframes bt-tip-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.tipHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 7px;
+}
+
+.tipPill {
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 3px;
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 9px;
+  line-height: 16px;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.tipPill[data-kind='tool'] {
+  background: color-mix(in srgb, var(--bt-tool, #b45309) 12%, transparent);
+  color: var(--bt-tool, #b45309);
+}
+
+.tipPill[data-kind='model'] {
+  background: color-mix(in srgb, var(--bt-assistant, #7c3aed) 12%, transparent);
+  color: var(--bt-assistant, #7c3aed);
+}
+
+.tipPill[data-kind='input'] {
+  background: color-mix(in srgb, var(--bt-context, #047857) 10%, transparent);
+  color: var(--bt-context, #047857);
+}
+
+.tipError {
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--bt-error, #d92d20) 10%, transparent);
+  color: var(--bt-error, #d92d20);
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 9px;
+  line-height: 16px;
+}
+
+.tipGrid {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 3px 8px;
+  margin: 0;
+  font-size: 11px;
+}
+
+.tipGrid dt {
+  color: var(--bt-text-3, #9aa1ab);
+}
+
+.tipGrid dd {
+  margin: 0;
+  color: var(--bt-text-2, #5b6470);
+  font-variant-numeric: tabular-nums;
+}
+
+.tipPill[data-kind='message'] {
+  background: color-mix(in srgb, var(--bt-assistant, #7c3aed) 12%, transparent);
+  color: var(--bt-assistant, #7c3aed);
+}
+
+.tipPill[data-kind='context'],
+.tipPill[data-kind='user'] {
+  background: color-mix(in srgb, var(--bt-context, #047857) 10%, transparent);
+  color: var(--bt-context, #047857);
+}
+
+.tipCard {
+  width: 300px;
+}
+
+.tipGrid {
+  grid-template-columns: 40px 1fr;
+  white-space: nowrap;
+}
+
+.tipGrid dt,
+.tipGrid dd {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* the hover card is a child of the section; don't clip it */
+.root {
+  overflow: visible;
+}
