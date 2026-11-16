@@ -5,6 +5,13 @@
   height: 100%;
 }
 
+/* inline mode inside an inspector section */
+.tree[data-bare] {
+  max-height: 260px;
+  overflow: auto;
+  padding: 2px 0 0;
+}
+
 .toolbar {
   display: flex;
   align-items: center;

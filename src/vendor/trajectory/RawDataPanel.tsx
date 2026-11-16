@@ -6,6 +6,10 @@ import css from './RawDataPanel.module.css'
 interface RawDataPanelProps {
   data: unknown
   qt: (key: string, params?: Record<string, string | number>) => string
+  /** Inline mode: no toolbar and no root row, so the section header is the title. */
+  bare?: boolean
+  /** Max string length shown inline before the "more" toggle (default 220, 120 when bare). */
+  stringLimit?: number
 }
 
 const MAX_PREVIEW = 220
@@ -59,12 +63,12 @@ function preview(value: Json): string {
   return ''
 }
 
-function Leaf({ value, qt }: { value: Json; qt: RawDataPanelProps['qt'] }) {
+function Leaf({ value, qt, limit = MAX_PREVIEW }: { value: Json; qt: RawDataPanelProps['qt']; limit?: number }) {
   const [open, setOpen] = useState(false)
   const kind = kindOf(value)
   if (kind === 'string') {
-    const long = (value as string).length > MAX_PREVIEW
-    const shown = open || !long ? (value as string) : `${(value as string).slice(0, MAX_PREVIEW)}…`
+    const long = (value as string).length > limit
+    const shown = open || !long ? (value as string) : `${(value as string).slice(0, limit)}…`
     return (
       <span className={css.string}>
         "{shown}"
@@ -83,7 +87,7 @@ function Leaf({ value, qt }: { value: Json; qt: RawDataPanelProps['qt'] }) {
 }
 
 function Node({
-  name, value, path, depth, expanded, toggle, term, qt,
+  name, value, path, depth, expanded, toggle, term, qt, stringLimit,
 }: {
   name: string
   value: Json
@@ -93,6 +97,7 @@ function Node({
   toggle: (path: string) => void
   term: string
   qt: RawDataPanelProps['qt']
+  stringLimit?: number
 }) {
   const kind = kindOf(value)
   const branch = kind === 'array' || kind === 'object'
@@ -142,6 +147,7 @@ function Node({
               toggle={toggle}
               term={term}
               qt={qt}
+              stringLimit={stringLimit}
             />
           ))}
           {entries.length > limit && (
@@ -155,14 +161,38 @@ function Node({
   )
 }
 
+/** Short size hint for a section header: key count, item count or line count. */
+export function payloadBadge(
+  value: unknown,
+  qt: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  if (Array.isArray(value)) return qt('payload.items', { count: value.length })
+  if (value !== null && typeof value === 'object') {
+    return qt('payload.keys', { count: Object.keys(value as Record<string, unknown>).length })
+  }
+  const text = value === null || value === undefined ? '' : String(value)
+  if (text === '') return ''
+  if (text.length > 120) return qt('payload.chars', { count: text.length })
+  return qt('payload.lines', { count: text.split('\n').length })
+}
+
 /**
  * JSON 树，带搜索、展开全部与复制。
  * @param props 数据与翻译函数。
  * @returns 原始数据面板。
  */
-export function RawDataPanel({ data, qt }: RawDataPanelProps) {
+export function RawDataPanel({ data, qt, bare = false, stringLimit }: RawDataPanelProps) {
+  const limit = stringLimit ?? (bare ? 120 : MAX_PREVIEW)
   const [term, setTerm] = useState('')
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set(['']))
+  const [expanded, setExpanded] = useState<Set<string>>(() => {
+    const initial = new Set<string>([''])
+    if (!bare) return initial
+    for (const [key, child] of entriesOf(data)) {
+      const kind = kindOf(child)
+      if (kind === 'object' || kind === 'array') initial.add(`/${key}`)
+    }
+    return initial
+  })
   const query = term.trim().toLowerCase()
 
   const matched = useMemo(() => {
@@ -211,6 +241,27 @@ export function RawDataPanel({ data, qt }: RawDataPanelProps) {
     setExpanded(next)
   }
 
+  if (bare) {
+    return (
+      <div className={css.tree} data-bare="">
+        {entriesOf(data).map(([key, child]) => (
+          <Node
+            key={`/${key}`}
+            name={key}
+            value={child}
+            path={`/${key}`}
+            depth={0}
+            expanded={visible}
+            toggle={toggle}
+            term={query}
+            qt={qt}
+            stringLimit={limit}
+          />
+        ))}
+      </div>
+    )
+  }
+
   return (
     <div className={css.root}>
       <div className={css.toolbar}>
@@ -227,7 +278,7 @@ export function RawDataPanel({ data, qt }: RawDataPanelProps) {
         {matched !== null && <span className={css.count}>{qt('raw.matches', { count: matched.size })}</span>}
       </div>
       <div className={css.tree}>
-        <Node name="root" value={data} path="" depth={0} expanded={visible} toggle={toggle} term={query} qt={qt} />
+        <Node name="root" value={data} path="" depth={0} expanded={visible} toggle={toggle} term={query} qt={qt} stringLimit={limit} />
       </div>
     </div>
   )

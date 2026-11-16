@@ -5,6 +5,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useSta
 import type { CSSProperties, ReactNode } from 'react'
 import { assertNever, type JsonValue } from '../host/util-values.ts'
 import { KindTag } from './KindTag.tsx'
+import { DetailSection, DetailText, DetailEmpty, SectionCopy } from './DetailSection.tsx'
 import { HoverCard } from './HoverCard.tsx'
 import type { WatchToolResult } from './watch-tool-result.ts'
 import { useVirtualizer } from '@tanstack/react-virtual'
@@ -47,7 +48,7 @@ import type { TrajectoryKey, TrajectoryTranslate } from './locales.ts'
 import { COMPACTION_INTERRUPTED_ERROR } from './copy-codes.ts'
 import { codeProgram, PTC_TOOL_NAME, type CodeProgram } from './code-program.ts'
 import css from './TrajectoryTable.module.css'
-import { RawDataPanel } from './RawDataPanel.tsx'
+import { RawDataPanel, payloadBadge } from './RawDataPanel.tsx'
 
 const BOTTOM_FOLLOW_THRESHOLD_PX = 2
 const OLDER_LOAD_THRESHOLD_PX = 48
@@ -1044,6 +1045,24 @@ function parseMaybeJson(text: string | undefined): unknown {
   try { return JSON.parse(text) } catch { return text }
 }
 
+/** One-line identity for the inspector header: the command, or the record text. */
+function primarySubject(record: TableRecord): string {
+  const cell = record.cell
+  if (cell.kind === 'tool' || cell.kind === 'subtool') {
+    const args = parseMaybeJson(cell.inputDetail)
+    const fromArgs = args !== null && typeof args === 'object'
+      ? (args as Record<string, unknown>).command
+        ?? (args as Record<string, unknown>).description
+        ?? (args as Record<string, unknown>).path
+      : undefined
+    const text = typeof fromArgs === 'string' && fromArgs !== ''
+      ? fromArgs
+      : String(cell.inputDetail ?? '')
+    return text.replace(/\s+/g, ' ').trim()
+  }
+  return String(cell.text ?? '').replace(/\s+/g, ' ').trim()
+}
+
 /** 「原始」tab 的结构化视图。 */
 function rawDataFor(record: TableRecord): unknown {
   const cell = record.cell
@@ -1081,9 +1100,10 @@ function detailTabs(record: TableRecord): readonly DetailTabItem[] {
     ]
   }
   if (isMarkdownRecord(record)) {
+    /* the rendered content is a collapsible section of 概述; only the raw text
+       needs its own tab, because it is a different representation */
     return [
       { id: 'overview', labelKey: 'tab.summary' },
-      { id: 'rendered', labelKey: 'tab.preview' },
       { id: 'raw', labelKey: 'tab.raw' },
       ...(record.cell.messageSource === undefined
         ? []
@@ -1091,17 +1111,11 @@ function detailTabs(record: TableRecord): readonly DetailTabItem[] {
     ]
   }
   if (record.cell.kind === 'tool' || record.cell.kind === 'subtool') {
+    /* params / result / error live in collapsible sections of 概述 now; the tabs
+       only switch representation (rendered document, timing, raw JSON) */
     return [
       { id: 'overview', labelKey: 'tab.summary' },
-      ...(record.cell.inputDetail
-        ? [{ id: 'input', labelKey: 'tab.payload' } as const]
-        : []),
-      ...(record.cell.outputDetail || record.cell.result
-        ? [{ id: 'output', labelKey: 'tab.result' } as const]
-        : []),
-      ...(record.cell.isError
-        ? [{ id: 'error', labelKey: 'tab.error', custom: true } as const]
-        : []),
+      { id: 'timing', labelKey: 'tab.timing' },
       { id: 'data', labelKey: 'tab.rawData', custom: true },
     ]
   }
@@ -1748,6 +1762,98 @@ function MarkdownRecordContent({
   )
 }
 
+/**
+ * 工具记录的概述：属性一行（状态 · 时长 · ID），下面是可折叠的参数 / 结果 / Schema。
+ * 参数与结果在这里就地展开，不再各占一个页签——一份数据只有一个入口。
+ */
+function ToolOverview({
+  record,
+  state,
+  qt,
+  t,
+}: {
+  record: TableRecord
+  state: RecordState
+  qt: (key: string, params?: Record<string, string | number>) => string
+  t: TrajectoryTranslate
+}) {
+  const cell = record.cell
+  const argsText = cell.inputDetail ?? ''
+  const resultText = cell.outputDetail ?? (cell.result ?? '')
+  const args = parseMaybeJson(cell.inputDetail)
+  const result = parseMaybeJson(resultText === '' ? undefined : resultText)
+  const schema = parseMaybeJson(cell.schemaDetail)
+  const isBranch = (value: unknown): boolean => value !== null && typeof value === 'object'
+  const ms = cell.timeSeconds === null ? null : Math.round(cell.timeSeconds * 1000)
+
+  return (
+    <div className={css.toolOverview}>
+      <div className={css.metaRow}>
+        <span className={css.metaItem}>
+          <span className={css.metaLabel}>{qt('chip.status')}</span>
+          <span className={css.metaValue} data-tone={state === 'error' ? 'error' : state === 'running' ? 'warn' : undefined}>
+            {statusLabel(state, t)}
+          </span>
+        </span>
+        {ms !== null && (
+          <span className={css.metaItem}>
+            <span className={css.metaLabel}>{qt('chip.duration')}</span>
+            <span className={css.metaValue}>{compactDuration(ms)}</span>
+          </span>
+        )}
+        {cell.callId !== undefined && (
+          <span className={`${css.metaItem} ${css.metaItemWide}`}>
+            <span className={css.metaLabel}>{qt('chip.callId')}</span>
+            <span className={`${css.metaValue} ${css.metaValueMono}`}>{cell.callId}</span>
+            <InspectorCopyButton text={cell.callId} label={qt('chip.callId')} t={t} />
+          </span>
+        )}
+      </div>
+      {argsText !== '' && (
+        <DetailSection
+          title={t('tab.payload')}
+          badge={payloadBadge(isBranch(args) ? args : argsText, qt)}
+          defaultOpen={false}
+          bare={isBranch(args)}
+        >
+          {isBranch(args)
+            ? <RawDataPanel data={args} qt={qt} bare />
+            : <DetailText text={argsText} full />}
+        </DetailSection>
+      )}
+      <DetailSection
+        title={t('tab.result')}
+        badge={resultText === '' ? '' : payloadBadge(isBranch(result) ? result : resultText, qt)}
+        defaultOpen
+        bare={isBranch(result) && !cell.isError}
+        actions={resultText === '' ? undefined : <SectionCopy text={resultText} label={qt('raw.copyAll')} />}
+      >
+        {cell.isError && (
+          <div className={css.errorBanner} role="alert">
+            <span className={css.errorDot} aria-hidden="true" />
+            <strong>{statusLabel(state, t)}</strong>
+          </div>
+        )}
+        {resultText === ''
+          ? <DetailEmpty>{state === 'running' ? t('code.running') : qt('payload.empty')}</DetailEmpty>
+          : isBranch(result) && !cell.isError
+            ? <RawDataPanel data={result} qt={qt} bare />
+            : <DetailText text={resultText} full={!cell.isError} />}
+      </DetailSection>
+      {isBranch(schema) && (
+        <DetailSection
+          title={t('tab.schema')}
+          badge={payloadBadge(schema, qt)}
+          defaultOpen={false}
+          bare
+        >
+          <RawDataPanel data={schema} qt={qt} bare />
+        </DetailSection>
+      )}
+    </div>
+  )
+}
+
 function RecordTiming({
   record,
   preview = false,
@@ -2229,6 +2335,7 @@ export function TrajectoryTable({
   const [detailsWidth, setDetailsWidth] = useState<number | null>(null)
   const [snapping, setSnapping] = useState(false)
   const [hoverCard, setHoverCard] = useState<{ x: number; y: number; record: TableRecord } | null>(null)
+  const [subjectHover, setSubjectHover] = useState<{ x: number; y: number } | null>(null)
   const hoverTimer = useRef<number | null>(null)
   const [toolRequestOffset, setToolRequestOffset] = useState<number | null>(null)
   const detailsResizeDrag = useRef<DetailsResizeDrag | null>(null)
@@ -2486,6 +2593,24 @@ export function TrajectoryTable({
     }
     return indexes
   }, [projectedVirtualRows])
+
+  /** Bring the selected record's row back into view (header ⌖ action). */
+  const locateSelected = useCallback((record: TableRecord) => {
+    const id = trajectoryRecordId(record.cell)
+    followsTableTail.current = false
+    if (virtualizationEnabled) {
+      const virtualIndex = virtualIndexByRecordId.get(id)
+      if (virtualIndex !== undefined) {
+        rowVirtualizer.scrollToIndex(virtualIndex, { behavior: 'smooth', align: 'center' })
+        return
+      }
+    }
+    const row = rootRef.current?.querySelector<HTMLElement>(`tr[data-record-index="${record.cell.index}"]`)
+    /* v8 ignore next -- jsdom lacks scrollIntoView; browsers always have it. */
+    if (row !== undefined && row !== null && typeof row.scrollIntoView === 'function') {
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  }, [virtualizationEnabled, virtualIndexByRecordId, rowVirtualizer])
   useEffect(() => {
     rowVirtualizer.measure()
   }, [hiddenIndexes, rowVirtualizer])
@@ -2606,6 +2731,12 @@ export function TrajectoryTable({
   const selectedTabs = selectedRequestInfo !== undefined
     ? REQUEST_TABS.filter(tab => tab.id !== 'options' || selectedRequestOptions !== undefined)
     : selected === undefined ? [] : detailTabs(selected)
+  /* switching to a record whose tabs no longer include the active one must not
+     leave an empty panel (tabs differ per record kind) */
+  useEffect(() => {
+    if (selectedTabs.length === 0) return
+    if (!selectedTabs.some(tab => tab.id === activeTab)) setActiveTab('overview')
+  }, [activeTab, selectedTabs])
   const selectedParents: ParentRecords = selected === undefined
     ? {}
     : parentRecords(allRecords, selected)
@@ -3545,6 +3676,31 @@ export function TrajectoryTable({
                     </>
                   )}
             </div>
+            {selected !== undefined && selectedRequestInfo === undefined && !promptSelected && (() => {
+              const subject = primarySubject(selected)
+              return (
+                <span className={css.headActions}>
+                  <button
+                    type="button"
+                    className={css.headAction}
+                    title={qt('head.copy')}
+                    aria-label={qt('head.copy')}
+                    onClick={() => { void navigator.clipboard?.writeText(subject) }}
+                  >
+                    ⧉
+                  </button>
+                  <button
+                    type="button"
+                    className={css.headAction}
+                    title={qt('head.locate')}
+                    aria-label={qt('head.locate')}
+                    onClick={() => { locateSelected(selected) }}
+                  >
+                    ⌖
+                  </button>
+                </span>
+              )
+            })()}
             <button
               type="button"
               className={css.close}
@@ -3554,6 +3710,16 @@ export function TrajectoryTable({
               <span aria-hidden="true">×</span>
             </button>
           </div>
+          {selected !== undefined && selectedRequestInfo === undefined && !promptSelected
+            && primarySubject(selected) !== '' && (
+            <div
+              className={css.detailsSubject}
+              onMouseEnter={(event) => { setSubjectHover({ x: event.clientX, y: event.clientY }) }}
+              onMouseLeave={() => { setSubjectHover(null) }}
+            >
+              <span className={css.detailsSubjectText}>{primarySubject(selected)}</span>
+            </div>
+          )}
           <div className={css.detailTabs} role="tablist" aria-label={t('details.event')}>
             {selectedTabs.map(tab => (
               <button
@@ -3790,7 +3956,16 @@ export function TrajectoryTable({
             )}
             {!promptSelected
               && selected !== undefined
+              && (selected.cell.kind === 'tool' || selected.cell.kind === 'subtool')
+              && selectedState !== undefined
+              && activeTab === 'overview' && (
+              <ToolOverview record={selected} state={selectedState} qt={qt} t={t} />
+            )}
+            {!promptSelected
+              && selected !== undefined
               && selected.cell.kind !== 'compacted'
+              && selected.cell.kind !== 'tool'
+              && selected.cell.kind !== 'subtool'
               && selectedState !== undefined
               && activeTab === 'overview' && (
               <>
@@ -3908,21 +4083,19 @@ export function TrajectoryTable({
                     )
                     : isMarkdownRecord(selected)
                       ? (
-                        <>
-                          <OverviewSection label={t('tab.preview')} onOpen={() => { activateTab('rendered') }}>
-                            <MarkdownRecordContent
-                              record={selected}
-                              renderSlot={renderSlot}
-                              loadImage={loadImage}
-                              rendered
-                              preview
-                              thinkingExpanded={thinkingExpanded}
-                              onThinkingExpandedChange={setThinkingExpanded}
-                              onOpenCall={openCallSummary}
-                              t={t}
-                            />
-                          </OverviewSection>
-                        </>
+                        <DetailSection title={t('tab.preview')} defaultOpen>
+                          <MarkdownRecordContent
+                            record={selected}
+                            renderSlot={renderSlot}
+                            loadImage={loadImage}
+                            rendered
+                            preview
+                            thinkingExpanded={thinkingExpanded}
+                            onThinkingExpandedChange={setThinkingExpanded}
+                            onOpenCall={openCallSummary}
+                            t={t}
+                          />
+                        </DetailSection>
                       )
                       : (
                         <>
@@ -3951,29 +4124,8 @@ export function TrajectoryTable({
                       <RecordTiming record={selected} preview t={t} />
                     </OverviewSection>
                   )}
-                  {(selected.cell.kind === 'tool' || selected.cell.kind === 'subtool') && (
-                    <OverviewSection label={t('tab.timing')} onOpen={() => { activateTab('timing') }}>
-                      <RecordTiming record={selected} preview t={t} />
-                    </OverviewSection>
-                  )}
                 </div>
               </>
-            )}
-            {!promptSelected && selected !== undefined && activeTab === 'error' && (
-              <div className={css.errorPanel}>
-                <div className={css.errorBanner} role="alert">
-                  <span className={css.errorDot} aria-hidden="true" />
-                  <strong>{qt('chip.status')}: {statusLabel(stateOf(selected), t)}</strong>
-                  <button
-                    type="button"
-                    className={css.errorCopy}
-                    onClick={() => { void navigator.clipboard?.writeText(selected.cell.outputDetail ?? selected.cell.result ?? '') }}
-                  >
-                    {qt('error.copy')}
-                  </button>
-                </div>
-                <pre className={css.errorBody}>{selected.cell.outputDetail ?? selected.cell.result ?? ''}</pre>
-              </div>
             )}
             {!promptSelected && selected !== undefined && activeTab === 'data' && (
               <RawDataPanel data={rawDataFor(selected)} qt={qt} />
@@ -4047,6 +4199,22 @@ export function TrajectoryTable({
           </div>
         </aside>
       )}
+      {subjectHover !== null && selected !== undefined && !promptSelected && (() => {
+        const subject = primarySubject(selected)
+        const kind = selected.cell.kind
+        return (
+          <HoverCard
+            x={subjectHover.x}
+            y={subjectHover.y}
+            kind={kind}
+            label={selected.cell.kind === 'tool' || selected.cell.kind === 'subtool'
+              ? (selected.cell.toolName ?? t(KIND_LABEL_KEY[kind]))
+              : t(KIND_LABEL_KEY[kind])}
+            rows={[]}
+            extra={subject}
+          />
+        )
+      })()}
       {hoverCard !== null && (() => {
         const card = hoverCard
         const { record } = card
