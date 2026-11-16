@@ -2404,26 +2404,33 @@ export function TrajectoryTable({
       flushAssistant()
       flushTool()
       const nextRecord = allRecords[recordIndex + 1]
-      if (record.cell.kind === 'message' && nextRecord !== undefined
-        && (nextRecord.cell.kind === 'tool' || nextRecord.cell.kind === 'subtool')) {
-        out.push({ ...record, hasChildren: true })
-      } else {
-        out.push(record)
-      }
+      const kind = record.cell.kind
+      const nextKind = nextRecord?.cell.kind
+      const hasChildren = (kind === 'message' || ((kind === 'user' || kind === 'system') && false))
+        ? nextKind === 'tool' || nextKind === 'subtool'
+        : (kind === 'user' && nextRecord?.turn === record.turn && nextKind !== undefined)
+      if (hasChildren) out.push({ ...record, hasChildren: true })
+      else out.push(record)
     }
     flushAssistant()
     flushTool()
 
     for (const [index, record] of out.entries()) {
       const kind = record.cell.kind
-      if (kind !== 'tool' && kind !== 'subtool') continue
       const next = out[index + 1]
       const nextKind = next?.cell.kind
-      if (kind === 'subtool' && nextKind !== 'subtool') {
-        ;(record as TableRecord).childLast = true
+      if (kind === 'subtool') {
+        if (nextKind !== 'subtool') (record as TableRecord).childLast = true
+        continue
       }
-      if (kind === 'tool' && nextKind !== 'subtool') {
-        ;(record as TableRecord).childLast = true
+      if (kind === 'tool') {
+        if (nextKind !== 'subtool') (record as TableRecord).childLast = true
+        continue
+      }
+      if (kind === 'message' || kind === 'context') {
+        const endsTurn = next === undefined || next.turn !== record.turn
+          || nextKind === 'user' || nextKind === 'system' || nextKind === 'compacted'
+        if (endsTurn) (record as TableRecord).childLast = true
       }
     }
     return out
@@ -3045,6 +3052,10 @@ export function TrajectoryTable({
                     : metaInfo?.durationMs
                   const rowStartedAt = record.cell.startedAt ?? metaInfo?.time
                   const toolLike = record.cell.kind === 'tool' || record.cell.kind === 'subtool'
+                  const level = record.cell.kind === 'subtool' ? 3
+                    : record.cell.kind === 'tool' ? 2
+                      : record.cell.kind === 'user' || record.cell.kind === 'system' || record.cell.kind === 'compacted' ? 0
+                        : 1
                   const rowName = toolLike
                     ? (record.cell.toolName ?? 'tool')
                     : record.cell.kind === 'message'
@@ -3084,6 +3095,7 @@ export function TrajectoryTable({
                       data-kind={record.cell.kind}
                       data-group-parity={(record.groupIndex ?? 0) % 2}
                       data-child-last={record.childLast || undefined}
+                      data-level={level}
                       data-has-children={record.hasChildren || undefined}
                       onMouseEnter={(event) => {
                         if (isRequestOnly) return
@@ -3213,7 +3225,7 @@ export function TrajectoryTable({
                               className={css.rowLine}
                               data-tone={rowTone}
                               data-mono={toolLike || undefined}
-                              style={{ paddingLeft: `${record.cell.kind === 'subtool' ? 52 : toolLike ? 26 : 0}px` }}
+                              style={{ paddingLeft: `${level * 26}px` }}
                             >
                               {(() => {
                                 const id = trajectoryRecordId(record.cell)

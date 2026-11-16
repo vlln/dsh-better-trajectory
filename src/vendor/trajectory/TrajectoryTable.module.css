@@ -3194,3 +3194,76 @@ tr[data-kind='subtool'] .rowLine::before,
 tr[data-kind='subtool'] .rowLine::after {
   left: 35px;
 }
+
+/* three-level tree: turn > step > tool > subtool */
+tr[data-level='1'] .rowLine::before,
+tr[data-level='2'] .rowLine::before,
+tr[data-level='3'] .rowLine::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--bt-text-3, #9aa1ab);
+  opacity: 0.38;
+}
+
+tr[data-level='1'] .rowLine::before { left: 9px; }
+tr[data-level='2'] .rowLine::before { left: 35px; }
+tr[data-level='3'] .rowLine::before { left: 61px; }
+
+tr[data-level='2'] .rowLine::after,
+tr[data-level='3'] .rowLine::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  height: 1px;
+  background: var(--bt-text-3, #9aa1ab);
+  opacity: 0.38;
+}
+
+tr[data-level='2'] .rowLine::after { left: 35px; width: 17px; }
+tr[data-level='3'] .rowLine::after { left: 61px; width: 17px; }
+
+tr[data-has-children][data-level='0'] .rowLine::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  bottom: -3px;
+  left: 9px;
+  width: 1px;
+  background: var(--bt-text-3, #9aa1ab);
+  opacity: 0.38;
+}
+
+tr[data-has-children][data-level='1'] .rowLine::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  bottom: -3px;
+  left: 35px;
+  width: 1px;
+  background: var(--bt-text-3, #9aa1ab);
+  opacity: 0.38;
+}
+
+tr[data-child-last] .rowLine::before {
+  bottom: 50%;
+}
+
+/* elbow reaches the child pill (indent + chevron slot) */
+tr[data-level='1'] .rowLine::after,
+tr[data-level='2'] .rowLine::after,
+tr[data-level='3'] .rowLine::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  height: 1px;
+  width: 35px;
+  background: var(--bt-text-3, #9aa1ab);
+  opacity: 0.38;
+}
+
+tr[data-level='1'] .rowLine::after { left: 9px; }
+tr[data-level='2'] .rowLine::after { left: 35px; }
+tr[data-level='3'] .rowLine::after { left: 61px; }
