@@ -154,6 +154,8 @@ const KIND_ICON: Record<TrajectoryCellKind, ReactNode> = {
 interface TableRecord {
   /** Number of hidden tool calls in this record's group, rendered as a hint row. */
   hint?: number
+  /** Children hidden by an explicit collapse, shown as +N on the parent row. */
+  foldedCount?: number
   turn: number | null
   section: number
   group: string
@@ -2296,46 +2298,78 @@ export function TrajectoryTable({
     [sessionRequestNumbers],
   )
   const records = useMemo(() => {
-    const base = (() => {
-      if (searchMatchIndexes !== null) return filterRecords(allRecords, searchMatchIndexes)
-      const turnRecords = collapsedTurns.size === 0
-        ? allRecords
-        : collapseTurnRecords(allRecords, collapsedTurns, requestGroups, t)
-      const assistantRecords = collapsedAssistants.size === 0
-        ? turnRecords
-        : collapseCallRecords(turnRecords, collapsedAssistants, 'assistant', t)
-      return collapsedTools.size === 0
-        ? assistantRecords
-        : collapseCallRecords(assistantRecords, collapsedTools, 'tool', t)
-    })()
-    if (hiddenHints === null || hiddenHints.size === 0) return base
+    if (searchMatchIndexes !== null) return filterRecords(allRecords, searchMatchIndexes)
     const out: TableRecord[] = []
-    let sequence = 0
-    for (const [index, record] of base.entries()) {
-      out.push(record)
-      const count = hiddenHints.get(`${record.turn}\u0000${record.group}`)
-      if (count === undefined || count === 0) continue
-      const next = base[index + 1]
-      if (next !== undefined && next.turn === record.turn && next.group === record.group) continue
-      out.push({
-        turn: record.turn,
-        section: record.section,
-        group: record.group,
-        groupStart: false,
-        turnStart: false,
-        turnEnd: false,
-        hint: count,
-        cell: {
-          index: -(++sequence) - 1,
-          kind: 'context',
-          text: '',
-          recordId: `hint:${record.turn}:${record.group}`,
-          timeSeconds: null,
-        } as TrajectoryCellProps,
-      })
+    const seenTurns = new Set<number>()
+    const turnSizes = new Map<number, number>()
+    for (const record of allRecords) {
+      if (record.turn === null) continue
+      turnSizes.set(record.turn, (turnSizes.get(record.turn) ?? 0) + 1)
     }
+    let assistantOpen: TableRecord | null = null
+    let assistantCount = 0
+    let toolOpen: TableRecord | null = null
+    let toolCount = 0
+    const flushAssistant = () => {
+      if (assistantOpen !== null && assistantCount > 0) {
+        ;(assistantOpen as TableRecord).foldedCount = assistantCount
+      }
+      assistantOpen = null
+      assistantCount = 0
+    }
+    const flushTool = () => {
+      if (toolOpen !== null && toolCount > 0) {
+        ;(toolOpen as TableRecord).foldedCount = toolCount
+      }
+      toolOpen = null
+      toolCount = 0
+    }
+    for (const record of allRecords) {
+      const isToolRow = record.cell.kind === 'tool' || record.cell.kind === 'subtool'
+      if (record.turn !== null && collapsedTurns.has(record.turn)) {
+        if (seenTurns.has(record.turn)) continue
+        seenTurns.add(record.turn)
+        flushAssistant()
+        flushTool()
+        const size = turnSizes.get(record.turn) ?? 1
+        out.push({ ...record, foldedCount: Math.max(0, size - 1) })
+        continue
+      }
+      if (assistantOpen !== null && isToolRow) {
+        assistantCount += 1
+        continue
+      }
+      const isMessage = record.cell.kind === 'message'
+      const messageId = trajectoryRecordId(record.cell)
+      if (isMessage && collapsedAssistants.has(messageId)) {
+        flushAssistant()
+        flushTool()
+        const copy = { ...record }
+        out.push(copy)
+        assistantOpen = copy
+        continue
+      }
+      if (toolOpen !== null && record.cell.kind === 'subtool') {
+        toolCount += 1
+        continue
+      }
+      if (record.cell.kind === 'tool' && collapsedTools.has(trajectoryRecordId(record.cell))) {
+        flushAssistant()
+        flushTool()
+        const copy = { ...record }
+        out.push(copy)
+        toolOpen = copy
+        continue
+      }
+      flushAssistant()
+      flushTool()
+      out.push(record)
+    }
+    flushAssistant()
+    flushTool()
     return out
-  }, [allRecords, collapsedAssistants, collapsedTools, collapsedTurns, requestGroups, searchMatchIndexes, hiddenHints, t])
+  }, [allRecords, collapsedAssistants, collapsedTools, collapsedTurns, searchMatchIndexes])
+
   const projectedVirtualRows = useMemo(
     () => groupTrajectoryVirtualRows(records),
     [records],
@@ -3158,6 +3192,9 @@ export function TrajectoryTable({
                                 <span className={css.rowBadge} data-tone={rowTone}>
                                   {rowTone === 'error' ? qt('row.error') : qt('row.running')}
                                 </span>
+                              )}
+                              {record.foldedCount !== undefined && record.foldedCount > 0 && (
+                                <span className={css.foldedPill}>+{record.foldedCount}</span>
                               )}
                               <span className={css.rowSub}>
                                 {record.collapsedSummary !== undefined ? record.collapsedSummary : rowSub}

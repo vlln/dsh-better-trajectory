@@ -3062,3 +3062,15 @@ tr[data-kind='tool'] .content::before,
 tr[data-kind='subtool'] .content::before {
   display: none;
 }
+
+.foldedPill {
+  flex: none;
+  height: 15px;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: var(--bt-surface-3, #eef0f3);
+  color: var(--bt-text-3, #9aa1ab);
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 9px;
+  line-height: 15px;
+}
