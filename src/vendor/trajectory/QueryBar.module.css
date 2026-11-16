@@ -250,8 +250,10 @@
 
 .chips {
   display: flex;
+  flex: 1;
   align-items: center;
   flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 4px;
   padding: 2px 0 2px 2px;
 }
@@ -314,7 +316,8 @@
 }
 
 .showAll {
-  margin-left: auto;
+  flex: none;
+  margin-left: 2px;
   height: 20px;
   padding: 0 6px;
   border: 0;
@@ -326,8 +329,102 @@
 }
 
 .showAll:hover {
-  background: var(--dsw-alias-bg-layer-2, rgba(0, 0, 0, 0.05));
+  background: var(--bt-hover, rgba(16, 24, 40, 0.06));
 }
+/* one row per question: row 1 is the query, row 2 is "what is loaded  |  what is
+   filtered". Stats lead, conditions trail. */
+.metaRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 22px;
+  padding: 0 0 1px;
+}
+
+.metaRow .chips {
+  min-width: 0;
+}
+
+.infoWrap {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+
+.infoButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--bt-text-3, #9aa1ab);
+  cursor: help;
+}
+
+.infoButton svg {
+  width: 15px;
+  height: 15px;
+}
+
+.infoButton:hover,
+.infoButton[aria-expanded='true'] {
+  background: var(--bt-hover, rgba(16, 24, 40, 0.06));
+  color: var(--bt-text, #1c2128);
+}
+
+.infoButton:focus-visible {
+  outline: 2px solid var(--bt-accent, #2563eb);
+  outline-offset: 0;
+}
+
+/* syntax cheat sheet: examples stay literal, descriptions are localised */
+.syntax {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 4px);
+  right: 0;
+  width: 372px;
+  padding: 8px 10px 9px;
+  border: 1px solid var(--bt-line, #e6e8eb);
+  border-radius: 8px;
+  background: var(--bt-surface, #fff);
+  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.12);
+}
+
+.syntaxLead {
+  margin: 0 0 6px;
+  color: var(--bt-text-3, #9aa1ab);
+  font-size: 10px;
+  line-height: 1.6;
+  word-break: keep-all;
+}
+
+.syntaxGrid {
+  display: grid;
+  grid-template-columns: 104px 1fr;
+  gap: 3px 8px;
+  margin: 0;
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.syntaxGrid dt {
+  color: var(--bt-text, #1c2128);
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.syntaxGrid dd {
+  margin: 0;
+  color: var(--bt-text-2, #5b6470);
+}
+
 .invalidHint {
   padding: 2px 2px 4px;
   color: var(--bt-warn, #d97706);
@@ -363,8 +460,6 @@
   flex: none;
   align-items: baseline;
   gap: 10px;
-  padding-left: 10px;
-  border-left: 1px solid var(--bt-line, #e6e8eb);
   color: var(--bt-text-2, #5b6470);
   font-size: 10.5px;
   white-space: nowrap;

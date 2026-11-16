@@ -2,7 +2,7 @@
 /** 查询条：Logfire 风格 token + chip + 建议 + Quick 筛选。 */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { IconSearchOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
-import { toggleToken } from '../../client/query.mjs'
+import { removeToken, toggleToken } from '../../client/query.mjs'
 import css from './QueryBar.module.css'
 
 export interface QueryBarProps {
@@ -111,6 +111,7 @@ export function QueryBar(props: QueryBarProps) {
   } = props
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)
+  const [syntaxOpen, setSyntaxOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const menuRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
@@ -278,6 +279,51 @@ export function QueryBar(props: QueryBarProps) {
           )}
         </div>
 
+        <span
+          className={css.infoWrap}
+          onMouseEnter={() => setSyntaxOpen(true)}
+          onMouseLeave={() => setSyntaxOpen(false)}
+        >
+          <button
+            type="button"
+            className={css.infoButton}
+            aria-label={qt('syntax.title')}
+            aria-expanded={syntaxOpen}
+            data-tip={qt('syntax.title')}
+            onFocus={() => setSyntaxOpen(true)}
+            onBlur={() => setSyntaxOpen(false)}
+          >
+            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <circle cx="8" cy="8" r="6.1" stroke="currentColor" strokeWidth="1.3" />
+              <path d="M8 4.4v4.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              <circle cx="8" cy="11.3" r=".85" fill="currentColor" />
+            </svg>
+          </button>
+          {syntaxOpen && (
+            <div className={css.syntax} role="dialog" aria-label={qt('syntax.title')}>
+              <p className={css.syntaxLead}>{qt('syntax.lead')}</p>
+              <dl className={css.syntaxGrid}>
+                <dt>tool:bash</dt><dd>{qt('syntax.tool')}</dd>
+                <dt>type:message</dt><dd>{qt('syntax.type')}</dd>
+                <dt>status:error</dt><dd>{qt('syntax.status')}</dd>
+                <dt>turn:2-5</dt><dd>{qt('syntax.turn')}</dd>
+                <dt>ms:&gt;1000</dt><dd>{qt('syntax.ms')}</dd>
+                <dt>code:401</dt><dd>{qt('syntax.code')}</dd>
+                <dt>args:path</dt><dd>{qt('syntax.args')}</dd>
+                <dt>result:error</dt><dd>{qt('syntax.result')}</dd>
+                <dt>error:timeout</dt><dd>{qt('syntax.error')}</dd>
+                <dt>&quot;git push&quot;</dt><dd>{qt('syntax.phrase')}</dd>
+                <dt>-bash</dt><dd>{qt('syntax.negate')}</dd>
+                <dt>bash</dt><dd>{qt('syntax.fulltext')}</dd>
+              </dl>
+            </div>
+          )}
+        </span>
+
+      </div>
+
+      {/* second row: what is loaded on the left, what is filtered on the right */}
+      <div className={css.metaRow}>
         <div className={css.totals} data-query={query.trim() === '' ? undefined : 'active'}>
           <span className={css.totalsItem} title={qt('totals.records')}>
             <b>{props.totals.records.toLocaleString()}</b>
@@ -302,34 +348,33 @@ export function QueryBar(props: QueryBarProps) {
           )}
         </div>
 
+        {tokens.length > 0 && (
+          <div className={css.chips}>
+            {tokens.map(token => (
+              <span key={token.raw} className={css.chip} data-invalid={!token.valid || undefined}>
+                <span className={css.chipKind}>{token.kind === 'text' ? qt('query.text') : token.kind}</span>
+                <span className={css.chipValue}>{token.raw.replace(/^-?[a-z]+:/, '') || token.raw}</span>
+                <button
+                  type="button"
+                  className={css.chipClose}
+                  aria-label={qt('query.removeToken', { token: token.raw })}
+                  onClick={() => onQuery(removeToken(query, token.raw))}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            <span className={css.summary}>
+              {qt('query.summary', { matched: stats.matched })}
+              {stats.hidden > 0 && <span className={css.hidden}>· {qt('query.hidden', { count: stats.hidden })}</span>}
+            </span>
+            <button type="button" className={css.showAll} onClick={() => onQuery('')}>{qt('query.showAll')}</button>
+          </div>
+        )}
       </div>
-
       {tokens.some(token => !token.valid) && (
         <div className={css.invalidHint} role="status">
           {qt('query.invalid', { tokens: tokens.filter(token => !token.valid).map(token => token.raw).join(' ') })}
-        </div>
-      )}
-      {tokens.length > 0 && (
-        <div className={css.chips}>
-          {tokens.map(token => (
-            <span key={token.raw} className={css.chip} data-invalid={!token.valid || undefined}>
-              <span className={css.chipKind}>{token.kind === 'text' ? qt('query.text') : token.kind}</span>
-              <span className={css.chipValue}>{token.raw.replace(/^-?[a-z]+:/, '') || token.raw}</span>
-              <button
-                type="button"
-                className={css.chipClose}
-                aria-label={qt('query.removeToken', { token: token.raw })}
-                onClick={() => onQuery(query.split(/\s+/).filter(word => word !== token.raw).join(' '))}
-              >
-                ×
-              </button>
-            </span>
-          ))}
-          <span className={css.summary}>
-            {qt('query.summary', { matched: stats.matched })}
-            {stats.hidden > 0 && <span className={css.hidden}>· {qt('query.hidden', { count: stats.hidden })}</span>}
-          </span>
-          <button type="button" className={css.showAll} onClick={() => onQuery('')}>{qt('query.showAll')}</button>
         </div>
       )}
     </div>

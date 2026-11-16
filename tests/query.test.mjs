@@ -178,3 +178,64 @@ test('the turn of a cell comes from the caller, not the cell', () => {
   assert.equal(matchesCell(cellWithoutTurn, query, { turn: 2 }), true)
   assert.equal(matchesCell(cellWithoutTurn, query, { turn: 3 }), false)
 })
+
+test('bare words negate without the hyphen', () => {
+  const query = parseQuery('-success')
+  assert.equal(matchesCell(cell(), query), true)
+  assert.equal(matchesCell(cell({ text: 'success: all done' }), query), false)
+  assert.equal(query.tokens[0].negated, true)
+})
+
+test('unknown a:b stays a plain search term, with negation', () => {
+  const query = parseQuery('http://example.com')
+  assert.equal(matchesCell(cell({ text: 'see http://example.com/x' }), query), true)
+  assert.equal(matchesCell(cell(), query), false)
+  const excluded = parseQuery('-http://example.com')
+  assert.equal(matchesCell(cell(), excluded), true)
+  assert.equal(matchesCell(cell({ text: 'http://example.com' }), excluded), false)
+})
+
+test('quoted phrases keep their spaces and survive removal', () => {
+  const query = parseQuery('"git push" origin')
+  assert.equal(query.tokens.length, 2)
+  assert.equal(query.tokens[0].value, 'git push')
+  assert.equal(matchesCell(cell({ text: 'ran git push --force on origin' }), query), true)
+  assert.equal(matchesCell(cell({ text: 'git commits on origin' }), query), false)
+  assert.equal(removeToken('"git push" origin', 'git push'), 'origin')
+  assert.equal(toggleToken('"git push" origin', 'git push'), 'origin')
+  assert.equal(toggleToken('origin', 'git push'), 'origin "git push"')
+})
+
+test('args and result search their own side only', () => {
+  const argsQuery = parseQuery('args:AllData')
+  assert.equal(matchesCell(cell({ kind: 'tool', inputDetail: '{"file_path":"AllData.csv"}' }), argsQuery), true)
+  assert.equal(matchesCell(cell({ kind: 'tool', outputDetail: 'AllData.csv is ignored' }), argsQuery), false)
+  const resultQuery = parseQuery('result:not found')
+  assert.equal(matchesCell(cell({ kind: 'tool', outputDetail: 'Error: not found' }), resultQuery), true)
+  assert.equal(matchesCell(cell({ kind: 'tool', inputDetail: 'not found' }), resultQuery), false)
+})
+
+test('error: only matches failing records', () => {
+  const query = parseQuery('error:invalid')
+  assert.equal(matchesCell(cell({ kind: 'tool', isError: true, outputDetail: 'invalid arguments' }), query), true)
+  assert.equal(matchesCell(cell({ kind: 'tool', outputDetail: 'invalid arguments' }), query), false)
+  assert.equal(matchesCell(cell({ kind: 'tool', isError: true, outputDetail: 'boom' }), query), false)
+})
+
+test('tool supports alternatives and a glob', () => {
+  const alternatives = parseQuery('tool:bash|read')
+  assert.equal(matchesCell(cell({ kind: 'tool', toolName: 'read' }), alternatives), true)
+  assert.equal(matchesCell(cell({ kind: 'tool', toolName: 'glob' }), alternatives), false)
+  const glob = parseQuery('tool:*read*')
+  assert.equal(matchesCell(cell({ kind: 'tool', toolName: 'todo_read' }), glob), true)
+  assert.equal(matchesCell(cell({ kind: 'tool', toolName: 'bash' }), glob), false)
+  const prefix = parseQuery('tool:todo*')
+  assert.equal(matchesCell(cell({ kind: 'tool', toolName: 'todo_write' }), prefix), true)
+})
+
+test('code:* means the record has an error code', () => {
+  const query = parseQuery('code:*')
+  assert.equal(matchesCell(cell({ kind: 'tool', outputDetail: 'x' }), query, { errorCode: 'E1' }), true)
+  assert.equal(matchesCell(cell({ kind: 'tool', outputDetail: 'x' }), query), false)
+  assert.equal(matchesCell(cell(), query), false)
+})
