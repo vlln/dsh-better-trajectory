@@ -156,7 +156,7 @@ interface TableRecord {
   hint?: number
   /** Children hidden by an explicit collapse, shown as +N on the parent row. */
   foldedCount?: number
-  foldSummary?: { tools: number; messages: number; names: string[]; durationMs: number | null }
+  foldSummary?: { tools: number; steps: number; names: string[]; durationMs: number | null }
   childLast?: boolean
   hasChildren?: boolean
   turn: number | null
@@ -2303,8 +2303,8 @@ export function TrajectoryTable({
   )
   const records = useMemo(() => {
     if (searchMatchIndexes !== null) return filterRecords(allRecords, searchMatchIndexes)
-    type Summary = { tools: number; messages: number; names: string[]; durationMs: number | null }
-    const emptySummary = (): Summary => ({ tools: 0, messages: 0, names: [], durationMs: null })
+    type Summary = { tools: number; steps: Set<string>; names: string[]; durationMs: number | null }
+    const emptySummary = (): Summary => ({ tools: 0, steps: new Set(), names: [], durationMs: null })
     const addToSummary = (summary: Summary, record: TableRecord) => {
       const cell = record.cell
       if (cell.kind === 'tool' || cell.kind === 'subtool') {
@@ -2312,7 +2312,7 @@ export function TrajectoryTable({
         const name = cell.toolName
         if (name !== undefined && !summary.names.includes(name)) summary.names.push(name)
       }
-      if (cell.kind === 'message') summary.messages += 1
+      summary.steps.add(`${record.turn ?? ''}\u0000${record.group}`)
       const meta = cell.callId === undefined ? undefined : callMeta?.get(cell.callId)
       const ms = cell.timeSeconds !== null
         ? Math.round(cell.timeSeconds * 1000)
@@ -2335,7 +2335,12 @@ export function TrajectoryTable({
     let toolCount = 0
     const flushAssistant = () => {
       if (assistantOpen !== null && assistantSummary !== null && assistantSummary.tools > 0) {
-        ;(assistantOpen as TableRecord).foldSummary = assistantSummary
+        ;(assistantOpen as TableRecord).foldSummary = {
+          tools: assistantSummary.tools,
+          steps: 0,
+          names: assistantSummary.names,
+          durationMs: assistantSummary.durationMs,
+        }
       }
       assistantOpen = null
       assistantSummary = null
@@ -2343,7 +2348,7 @@ export function TrajectoryTable({
     const flushTool = () => {
       if (toolOpen !== null && toolCount > 0) {
         ;(toolOpen as TableRecord).foldSummary = {
-          tools: toolCount, messages: 0, names: [], durationMs: null,
+          tools: toolCount, steps: 0, names: [], durationMs: null,
         }
       }
       toolOpen = null
@@ -2356,7 +2361,16 @@ export function TrajectoryTable({
         seenTurns.add(record.turn)
         flushAssistant()
         flushTool()
-        out.push({ ...record, foldSummary: turnSummary.get(record.turn) ?? emptySummary() })
+        const summary = turnSummary.get(record.turn) ?? emptySummary()
+        out.push({
+          ...record,
+          foldSummary: {
+            tools: summary.tools,
+            steps: summary.steps.size,
+            names: summary.names,
+            durationMs: summary.durationMs,
+          },
+        })
         continue
       }
       if (assistantOpen !== null && isToolRow) {
@@ -3281,8 +3295,8 @@ export function TrajectoryTable({
                               )}
                               {record.foldSummary !== undefined && (
                                 <span className={css.foldGroup}>
-                                  {record.foldSummary.messages > 0 && (
-                                    <span className={css.foldChip} data-kind="steps">{record.foldSummary.messages} 步</span>
+                                  {record.foldSummary.steps > 0 && (
+                                    <span className={css.foldChip} data-kind="steps">{record.foldSummary.steps} 步</span>
                                   )}
                                   {record.foldSummary.tools > 0 && (
                                     <span className={css.foldChip} data-kind="tools">{record.foldSummary.tools} 工具</span>
