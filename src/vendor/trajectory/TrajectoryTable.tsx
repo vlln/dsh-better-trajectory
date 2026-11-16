@@ -159,6 +159,7 @@ interface TableRecord {
   foldSummary?: { tools: number; steps: number; names: string[]; durationMs: number | null }
   childLast?: boolean
   hasChildren?: boolean
+  hasFold?: boolean
   turn: number | null
   section: number
   group: string
@@ -2419,6 +2420,10 @@ export function TrajectoryTable({
       const kind = record.cell.kind
       const next = out[index + 1]
       const nextKind = next?.cell.kind
+      const hasFold = (record.turnStart && record.turn !== null && record.foldSummary === undefined)
+        || ((kind === 'message') && (nextKind === 'tool' || nextKind === 'subtool'))
+        || (kind === 'tool' && nextKind === 'subtool')
+      if (hasFold) (record as TableRecord).hasFold = true
       if (kind === 'subtool') {
         if (nextKind !== 'subtool') (record as TableRecord).childLast = true
         continue
@@ -3097,6 +3102,7 @@ export function TrajectoryTable({
                       data-child-last={record.childLast || undefined}
                       data-level={level}
                       data-has-children={record.hasChildren || undefined}
+                      data-has-fold={record.hasFold || undefined}
                       onMouseEnter={(event) => {
                         if (isRequestOnly) return
                         const x = event.clientX

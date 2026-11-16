@@ -3267,3 +3267,50 @@ tr[data-level='3'] .rowLine::after {
 tr[data-level='1'] .rowLine::after { left: 9px; }
 tr[data-level='2'] .rowLine::after { left: 35px; }
 tr[data-level='3'] .rowLine::after { left: 61px; }
+
+/* connector ends at the fold button, not under it */
+tr[data-level='1'] .rowLine::after,
+tr[data-level='2'] .rowLine::after,
+tr[data-level='3'] .rowLine::after {
+  width: 17px;
+  opacity: 0.55;
+}
+
+tr[data-level='1'] .rowLine::before,
+tr[data-level='2'] .rowLine::before,
+tr[data-level='3'] .rowLine::before,
+tr[data-has-children][data-level='0'] .rowLine::after,
+tr[data-has-children][data-level='1'] .rowLine::after {
+  opacity: 0.55;
+}
+
+/* stronger rails */
+tr[data-level='1'] .rowLine::before,
+tr[data-level='2'] .rowLine::before,
+tr[data-level='3'] .rowLine::before,
+tr[data-has-children][data-level='0'] .rowLine::after,
+tr[data-has-children][data-level='1'] .rowLine::after {
+  background: var(--bt-text-2, #5b6470);
+  opacity: 0.45;
+}
+
+tr[data-level='1'] .rowLine::after,
+tr[data-level='2'] .rowLine::after,
+tr[data-level='3'] .rowLine::after {
+  background: var(--bt-text-2, #5b6470);
+  opacity: 0.45;
+}
+
+/* junction dot makes the connection explicit */
+tr[data-level='1'] .rowLine::after,
+tr[data-level='2'] .rowLine::after,
+tr[data-level='3'] .rowLine::after {
+  width: 17px;
+}
+
+/* elbow reaches the pill when there is no fold button in the slot */
+tr[data-level='1']:not([data-has-fold]) .rowLine::after,
+tr[data-level='2']:not([data-has-fold]) .rowLine::after,
+tr[data-level='3']:not([data-has-fold]) .rowLine::after {
+  width: 35px;
+}
