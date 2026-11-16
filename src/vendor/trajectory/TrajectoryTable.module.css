@@ -3122,3 +3122,75 @@ tr[data-turn-start='true'] > td {
 tr[data-turn-start='true'][data-kind='user'] > td {
   background: color-mix(in srgb, var(--bt-accent, #2563eb) 7%, var(--bt-surface, #ffffff));
 }
+
+/* fold summary chips: distinct tints instead of one flat string */
+.foldGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+}
+
+.foldChip {
+  height: 15px;
+  padding: 0 5px;
+  border-radius: 3px;
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 9px;
+  line-height: 15px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.foldChip[data-kind='steps'] {
+  background: color-mix(in srgb, var(--bt-assistant, #7c3aed) 12%, transparent);
+  color: var(--bt-assistant, #7c3aed);
+}
+
+.foldChip[data-kind='tools'] {
+  background: color-mix(in srgb, var(--bt-tool, #b45309) 12%, transparent);
+  color: var(--bt-tool, #b45309);
+}
+
+.foldChip[data-kind='time'] {
+  background: var(--bt-surface-3, #eef0f3);
+  color: var(--bt-text-2, #5b6470);
+}
+
+/* continuous tree connectors: parent feeds children */
+tr[data-has-children] .rowLine::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  bottom: -3px;
+  left: 9px;
+  width: 1px;
+  background: var(--bt-text-3, #9aa1ab);
+  opacity: 0.35;
+}
+
+tr[data-kind='tool'] .rowLine::before,
+tr[data-kind='subtool'] .rowLine::before {
+  top: 0;
+  bottom: 0;
+  left: 9px;
+  background: var(--bt-text-3, #9aa1ab);
+  opacity: 0.35;
+}
+
+tr[data-kind='tool'] .rowLine::after,
+tr[data-kind='subtool'] .rowLine::after {
+  left: 9px;
+  width: 17px;
+  background: var(--bt-text-3, #9aa1ab);
+  opacity: 0.35;
+}
+
+tr[data-child-last] .rowLine::before {
+  bottom: 50%;
+}
+
+tr[data-kind='subtool'] .rowLine::before,
+tr[data-kind='subtool'] .rowLine::after {
+  left: 35px;
+}

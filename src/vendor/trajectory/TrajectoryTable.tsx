@@ -158,6 +158,7 @@ interface TableRecord {
   foldedCount?: number
   foldSummary?: { tools: number; messages: number; names: string[]; durationMs: number | null }
   childLast?: boolean
+  hasChildren?: boolean
   turn: number | null
   section: number
   group: string
@@ -2348,7 +2349,7 @@ export function TrajectoryTable({
       toolOpen = null
       toolCount = 0
     }
-    for (const record of allRecords) {
+    for (const [recordIndex, record] of allRecords.entries()) {
       const isToolRow = record.cell.kind === 'tool' || record.cell.kind === 'subtool'
       if (record.turn !== null && collapsedTurns.has(record.turn)) {
         if (seenTurns.has(record.turn)) continue
@@ -2388,7 +2389,13 @@ export function TrajectoryTable({
       }
       flushAssistant()
       flushTool()
-      out.push(record)
+      const nextRecord = allRecords[recordIndex + 1]
+      if (record.cell.kind === 'message' && nextRecord !== undefined
+        && (nextRecord.cell.kind === 'tool' || nextRecord.cell.kind === 'subtool')) {
+        out.push({ ...record, hasChildren: true })
+      } else {
+        out.push(record)
+      }
     }
     flushAssistant()
     flushTool()
@@ -3063,6 +3070,7 @@ export function TrajectoryTable({
                       data-kind={record.cell.kind}
                       data-group-parity={(record.groupIndex ?? 0) % 2}
                       data-child-last={record.childLast || undefined}
+                      data-has-children={record.hasChildren || undefined}
                       onMouseEnter={(event) => {
                         if (isRequestOnly) return
                         const x = event.clientX
@@ -3272,13 +3280,16 @@ export function TrajectoryTable({
                                 </span>
                               )}
                               {record.foldSummary !== undefined && (
-                                <span className={css.foldedPill}>
-                                  {record.foldSummary.messages > 0 && `${record.foldSummary.messages} 步 · `}
-                                  {record.foldSummary.tools > 0 && `${record.foldSummary.tools} 工具`}
-                                  {record.foldSummary.names.length > 0 && record.foldSummary.tools <= 2
-                                    && ` ${record.foldSummary.names.join(' ')}`}
-                                  {record.foldSummary.durationMs != null && record.foldSummary.durationMs > 0
-                                    && ` · ${compactDuration(record.foldSummary.durationMs)}`}
+                                <span className={css.foldGroup}>
+                                  {record.foldSummary.messages > 0 && (
+                                    <span className={css.foldChip} data-kind="steps">{record.foldSummary.messages} 步</span>
+                                  )}
+                                  {record.foldSummary.tools > 0 && (
+                                    <span className={css.foldChip} data-kind="tools">{record.foldSummary.tools} 工具</span>
+                                  )}
+                                  {record.foldSummary.durationMs != null && record.foldSummary.durationMs > 0 && (
+                                    <span className={css.foldChip} data-kind="time">{compactDuration(record.foldSummary.durationMs)}</span>
+                                  )}
                                 </span>
                               )}
                               <span className={css.rowSub}>
