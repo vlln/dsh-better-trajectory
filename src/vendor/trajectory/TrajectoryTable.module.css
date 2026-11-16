@@ -2106,7 +2106,7 @@
 }
 
 .detailChip[data-tone='error'] {
-  background: color-mix(in srgb, #e5484d 12%, transparent);
+  background: color-mix(in srgb, #e5484d 12%, var(--bt-surface, #ffffff));
   color: #b42318;
 }
 
@@ -2390,7 +2390,7 @@ tr[data-error='true'] {
 }
 
 tr[data-error='true']:hover {
-  background: color-mix(in srgb, var(--bt-error, #d92d20) 12%, transparent);
+  background: color-mix(in srgb, var(--bt-error, #d92d20) 12%, var(--bt-surface, #ffffff));
 }
 
 tr[data-selected='true'][data-error='true'] {
@@ -2825,23 +2825,23 @@ tr[data-kind='subtool'] .content::before {
 
 .kindPill[data-kind='tool'],
 .kindPill[data-kind='subtool'] {
-  background: color-mix(in srgb, var(--bt-tool, #b45309) 12%, transparent);
+  background: color-mix(in srgb, var(--bt-tool, #b45309) 12%, var(--bt-surface, #ffffff));
   color: var(--bt-tool, #b45309);
 }
 
 .kindPill[data-kind='message'] {
-  background: color-mix(in srgb, var(--bt-assistant, #7c3aed) 12%, transparent);
+  background: color-mix(in srgb, var(--bt-assistant, #7c3aed) 12%, var(--bt-surface, #ffffff));
   color: var(--bt-assistant, #7c3aed);
 }
 
 .kindPill[data-kind='user'] {
-  background: color-mix(in srgb, var(--bt-user, #1d4ed8) 12%, transparent);
+  background: color-mix(in srgb, var(--bt-user, #1d4ed8) 12%, var(--bt-surface, #ffffff));
   color: var(--bt-user, #1d4ed8);
 }
 
 .kindPill[data-kind='context'],
 .kindPill[data-kind='system'] {
-  background: color-mix(in srgb, var(--bt-context, #047857) 10%, transparent);
+  background: color-mix(in srgb, var(--bt-context, #047857) 10%, var(--bt-surface, #ffffff));
   color: var(--bt-context, #047857);
 }
 
@@ -3149,12 +3149,12 @@ tr[data-turn-start='true'][data-kind='user'] > td {
 }
 
 .foldChip[data-kind='steps'] {
-  background: color-mix(in srgb, var(--bt-assistant, #7c3aed) 12%, transparent);
+  background: color-mix(in srgb, var(--bt-assistant, #7c3aed) 12%, var(--bt-surface, #ffffff));
   color: var(--bt-assistant, #7c3aed);
 }
 
 .foldChip[data-kind='tools'] {
-  background: color-mix(in srgb, var(--bt-tool, #b45309) 12%, transparent);
+  background: color-mix(in srgb, var(--bt-tool, #b45309) 12%, var(--bt-surface, #ffffff));
   color: var(--bt-tool, #b45309);
 }
 
