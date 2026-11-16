@@ -140,10 +140,40 @@ export function TrajectoryView({
   & Pick<PropsRenderSlots<'conversation.trajectory.images'>, 'renderSlot'>
   & InjectFace<TrajectoryViewInjected>
   & PropsLocale<'trajectory'>) {
-  const [collapsedTurns, setCollapsedTurns] = useState<ReadonlySet<number>>(EMPTY_TURN_IDS)
+  const foldKey = `dsh-better-trajectory:folds:${sessionId ?? ''}`
+  const [collapsedTurns, setCollapsedTurns] = useState<ReadonlySet<number>>(() => {
+    try {
+      const raw = window.sessionStorage.getItem(foldKey)
+      const parsed = raw === null ? null : JSON.parse(raw) as { turns?: number[] }
+      return new Set(Array.isArray(parsed?.turns) ? parsed.turns : [])
+    } catch { return EMPTY_TURN_IDS }
+  })
   const [collapsedAssistants, setCollapsedAssistants] =
-    useState<ReadonlySet<string>>(EMPTY_RECORD_IDS)
-  const [collapsedTools, setCollapsedTools] = useState<ReadonlySet<string>>(EMPTY_RECORD_IDS)
+    useState<ReadonlySet<string>>(() => {
+      try {
+        const raw = window.sessionStorage.getItem(foldKey)
+        const parsed = raw === null ? null : JSON.parse(raw) as { assistants?: string[] }
+        return new Set(Array.isArray(parsed?.assistants) ? parsed.assistants : [])
+      } catch { return EMPTY_RECORD_IDS }
+    })
+  const [collapsedTools, setCollapsedTools] = useState<ReadonlySet<string>>(() => {
+    try {
+      const raw = window.sessionStorage.getItem(foldKey)
+      const parsed = raw === null ? null : JSON.parse(raw) as { tools?: string[] }
+      return new Set(Array.isArray(parsed?.tools) ? parsed.tools : [])
+    } catch { return EMPTY_RECORD_IDS }
+  })
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem(foldKey, JSON.stringify({
+        turns: [...collapsedTurns],
+        assistants: [...collapsedAssistants],
+        tools: [...collapsedTools],
+      }))
+    } catch {
+      // 隐私模式：折叠仍生效，只是不跨刷新保留。
+    }
+  }, [foldKey, collapsedTurns, collapsedAssistants, collapsedTools])
   const [timelineSelection, setTimelineSelection] = useState<TrajectoryTimeRange | null>(null)
   const actualDuration = useDuration(value => value)
   const [actualTime, setActualTime] = useState(false)
@@ -619,6 +649,40 @@ export function TrajectoryView({
     }, 4000)
   }, [])
 
+  const clearDescendantFolds = useCallback((turn: number | null, assistantId?: string) => {
+    if (turn !== null) {
+      setCollapsedAssistants(prev => {
+        const next = new Set(prev)
+        for (const t of timelineTurns) {
+          if (t.turn !== turn) continue
+          for (const g of t.groups) for (const c of g.cells) {
+            if (c.kind === 'message') next.delete(trajectoryRecordId(c))
+          }
+        }
+        return next
+      })
+      setCollapsedTools(prev => {
+        const next = new Set(prev)
+        for (const t of timelineTurns) {
+          if (t.turn !== turn) continue
+          for (const g of t.groups) for (const c of g.cells) {
+            if (c.kind === 'tool' || c.kind === 'subtool') next.delete(trajectoryRecordId(c))
+          }
+        }
+        return next
+      })
+      return
+    }
+    if (assistantId === undefined) return
+    setCollapsedTools(prev => {
+      const next = new Set(prev)
+      for (const r of toolIndex.records) {
+        if (r.callId) next.delete(`tool\u0000call\u0000${r.callId}`)
+      }
+      return next
+    })
+  }, [timelineTurns, toolIndex])
+
   const changeQuery = useCallback((next: string) => {
     const pane = document.querySelector('[data-trajectory-scroll]')
     if (pane instanceof HTMLElement) restoreScroll.current = pane.scrollTop
@@ -698,6 +762,7 @@ export function TrajectoryView({
           key={hiddenIndexes === null ? 'all' : `f${[...hiddenIndexes].join(',')}`}
           initialScrollTop={restoreScroll.current}
           showTime={showTime}
+          onClearDescendantFolds={clearDescendantFolds}
           t={t}
           qt={typeof qt === 'function' ? qt : (key: string) => key}
           watchToolResult={watchToolResult}

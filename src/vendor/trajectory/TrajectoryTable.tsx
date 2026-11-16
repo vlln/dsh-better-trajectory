@@ -156,6 +156,8 @@ interface TableRecord {
   hint?: number
   /** Children hidden by an explicit collapse, shown as +N on the parent row. */
   foldedCount?: number
+  foldSummary?: { tools: number; messages: number; names: string[]; durationMs: number | null }
+  childLast?: boolean
   turn: number | null
   section: number
   group: string
@@ -2195,6 +2197,7 @@ export function TrajectoryTable({
   maxDurationMs = 1,
   initialScrollTop = null,
   showTime = true,
+  onClearDescendantFolds,
   onShowAll,
   onSelectedIndexChange,
   onRecordSelect,
@@ -2299,27 +2302,48 @@ export function TrajectoryTable({
   )
   const records = useMemo(() => {
     if (searchMatchIndexes !== null) return filterRecords(allRecords, searchMatchIndexes)
-    const out: TableRecord[] = []
-    const seenTurns = new Set<number>()
-    const turnSizes = new Map<number, number>()
+    type Summary = { tools: number; messages: number; names: string[]; durationMs: number | null }
+    const emptySummary = (): Summary => ({ tools: 0, messages: 0, names: [], durationMs: null })
+    const addToSummary = (summary: Summary, record: TableRecord) => {
+      const cell = record.cell
+      if (cell.kind === 'tool' || cell.kind === 'subtool') {
+        summary.tools += 1
+        const name = cell.toolName
+        if (name !== undefined && !summary.names.includes(name)) summary.names.push(name)
+      }
+      if (cell.kind === 'message') summary.messages += 1
+      const meta = cell.callId === undefined ? undefined : callMeta?.get(cell.callId)
+      const ms = cell.timeSeconds !== null
+        ? Math.round(cell.timeSeconds * 1000)
+        : meta?.durationMs
+      if (typeof ms === 'number') summary.durationMs = (summary.durationMs ?? 0) + ms
+    }
+    const turnSummary = new Map<number, Summary>()
     for (const record of allRecords) {
       if (record.turn === null) continue
-      turnSizes.set(record.turn, (turnSizes.get(record.turn) ?? 0) + 1)
+      const summary = turnSummary.get(record.turn) ?? emptySummary()
+      addToSummary(summary, record)
+      turnSummary.set(record.turn, summary)
     }
+
+    const out: TableRecord[] = []
+    const seenTurns = new Set<number>()
     let assistantOpen: TableRecord | null = null
-    let assistantCount = 0
+    let assistantSummary: Summary | null = null
     let toolOpen: TableRecord | null = null
     let toolCount = 0
     const flushAssistant = () => {
-      if (assistantOpen !== null && assistantCount > 0) {
-        ;(assistantOpen as TableRecord).foldedCount = assistantCount
+      if (assistantOpen !== null && assistantSummary !== null && assistantSummary.tools > 0) {
+        ;(assistantOpen as TableRecord).foldSummary = assistantSummary
       }
       assistantOpen = null
-      assistantCount = 0
+      assistantSummary = null
     }
     const flushTool = () => {
       if (toolOpen !== null && toolCount > 0) {
-        ;(toolOpen as TableRecord).foldedCount = toolCount
+        ;(toolOpen as TableRecord).foldSummary = {
+          tools: toolCount, messages: 0, names: [], durationMs: null,
+        }
       }
       toolOpen = null
       toolCount = 0
@@ -2331,12 +2355,11 @@ export function TrajectoryTable({
         seenTurns.add(record.turn)
         flushAssistant()
         flushTool()
-        const size = turnSizes.get(record.turn) ?? 1
-        out.push({ ...record, foldedCount: Math.max(0, size - 1) })
+        out.push({ ...record, foldSummary: turnSummary.get(record.turn) ?? emptySummary() })
         continue
       }
       if (assistantOpen !== null && isToolRow) {
-        assistantCount += 1
+        if (assistantSummary !== null) addToSummary(assistantSummary, record)
         continue
       }
       const isMessage = record.cell.kind === 'message'
@@ -2347,6 +2370,7 @@ export function TrajectoryTable({
         const copy = { ...record }
         out.push(copy)
         assistantOpen = copy
+        assistantSummary = emptySummary()
         continue
       }
       if (toolOpen !== null && record.cell.kind === 'subtool') {
@@ -2359,6 +2383,7 @@ export function TrajectoryTable({
         const copy = { ...record }
         out.push(copy)
         toolOpen = copy
+        toolCount = 0
         continue
       }
       flushAssistant()
@@ -2367,8 +2392,21 @@ export function TrajectoryTable({
     }
     flushAssistant()
     flushTool()
+
+    for (const [index, record] of out.entries()) {
+      const kind = record.cell.kind
+      if (kind !== 'tool' && kind !== 'subtool') continue
+      const next = out[index + 1]
+      const nextKind = next?.cell.kind
+      if (kind === 'subtool' && nextKind !== 'subtool') {
+        ;(record as TableRecord).childLast = true
+      }
+      if (kind === 'tool' && nextKind !== 'subtool') {
+        ;(record as TableRecord).childLast = true
+      }
+    }
     return out
-  }, [allRecords, collapsedAssistants, collapsedTools, collapsedTurns, searchMatchIndexes])
+  }, [allRecords, collapsedAssistants, collapsedTools, collapsedTurns, searchMatchIndexes, callMeta])
 
   const projectedVirtualRows = useMemo(
     () => groupTrajectoryVirtualRows(records),
@@ -3024,6 +3062,7 @@ export function TrajectoryTable({
                       aria-selected={!isCollapsedSummary && !isRequestOnly && selectedIndex === record.cell.index}
                       data-kind={record.cell.kind}
                       data-group-parity={(record.groupIndex ?? 0) % 2}
+                      data-child-last={record.childLast || undefined}
                       onMouseEnter={(event) => {
                         if (isRequestOnly) return
                         const x = event.clientX
@@ -3083,6 +3122,42 @@ export function TrajectoryTable({
                       }}
                       onKeyDown={(event) => {
                         if (isRequestOnly || singleToolNotice) return
+                        if (event.key === 'ArrowLeft') {
+                          event.preventDefault()
+                          const id = trajectoryRecordId(record.cell)
+                          if (record.cell.kind === 'message' && collapsedAssistants.has(id) === false
+                            && assistantToolCalls(allRecords, record.cell.index).length > 0) {
+                            onToggleAssistant(id)
+                            return
+                          }
+                          if ((record.cell.kind === 'tool' || record.cell.kind === 'subtool')
+                            && record.cell.callId !== undefined) {
+                            const toolId = trajectoryRecordId(record.cell)
+                            const hasChild = records[position + 1]?.cell.kind === 'subtool'
+                            if (hasChild && !collapsedTools.has(toolId)) { onToggleTool(toolId); return }
+                          }
+                          if (record.turn !== null && !collapsedTurns.has(record.turn)) {
+                            onToggleTurn(record.turn)
+                            return
+                          }
+                          return
+                        }
+                        if (event.key === 'ArrowRight') {
+                          event.preventDefault()
+                          const id = trajectoryRecordId(record.cell)
+                          if (record.cell.kind === 'message' && collapsedAssistants.has(id)) { onToggleAssistant(id); return }
+                          if (record.turn !== null && collapsedTurns.has(record.turn)) { onToggleTurn(record.turn); return }
+                          return
+                        }
+                        if (event.key === 'Home' || event.key === 'End') {
+                          event.preventDefault()
+                          const body = event.currentTarget.parentElement
+                          if (body === null) return
+                          const rows = [...body.querySelectorAll('tr[tabindex="0"]')]
+                          const target = event.key === 'Home' ? rows[0] : rows[rows.length - 1]
+                          if (target instanceof HTMLElement) target.focus()
+                          return
+                        }
                         if (event.key === 'ArrowDown' || event.key === 'j' || event.key === 'ArrowUp' || event.key === 'k') {
                           event.preventDefault()
                           const body = event.currentTarget.parentElement
@@ -3138,6 +3213,8 @@ export function TrajectoryTable({
                                       aria-expanded={!collapsed}
                                       onClick={(event) => {
                                         event.stopPropagation()
+                                        const collapsed = collapsedTurns.has(record.turn as number)
+                                        if (collapsed && event.altKey) onClearDescendantFolds?.(record.turn)
                                         onToggleTurn(record.turn as number)
                                       }}
                                     >
@@ -3155,6 +3232,7 @@ export function TrajectoryTable({
                                       aria-expanded={!collapsedHere}
                                       onClick={(event) => {
                                         event.stopPropagation()
+                                        if (collapsedHere && event.altKey) onClearDescendantFolds?.(record.turn, id)
                                         onToggleAssistant(id)
                                       }}
                                     >
@@ -3193,8 +3271,15 @@ export function TrajectoryTable({
                                   {rowTone === 'error' ? qt('row.error') : qt('row.running')}
                                 </span>
                               )}
-                              {record.foldedCount !== undefined && record.foldedCount > 0 && (
-                                <span className={css.foldedPill}>+{record.foldedCount}</span>
+                              {record.foldSummary !== undefined && (
+                                <span className={css.foldedPill}>
+                                  {record.foldSummary.messages > 0 && `${record.foldSummary.messages} 步 · `}
+                                  {record.foldSummary.tools > 0 && `${record.foldSummary.tools} 工具`}
+                                  {record.foldSummary.names.length > 0 && record.foldSummary.tools <= 2
+                                    && ` ${record.foldSummary.names.join(' ')}`}
+                                  {record.foldSummary.durationMs != null && record.foldSummary.durationMs > 0
+                                    && ` · ${compactDuration(record.foldSummary.durationMs)}`}
+                                </span>
                               )}
                               <span className={css.rowSub}>
                                 {record.collapsedSummary !== undefined ? record.collapsedSummary : rowSub}
