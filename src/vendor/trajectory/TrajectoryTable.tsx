@@ -3555,23 +3555,13 @@ export function TrajectoryTable({
           {!promptSelected && selected !== undefined
             && (selected.cell.kind === 'tool' || selected.cell.kind === 'subtool') && (
             <div className={css.detailChips}>
-              {selected.cell.toolName !== undefined && (
-                // no "工具" caption: the header tag above already names the tool,
-                // so the caption only repeated it in a second, quieter voice
-                <span className={`${css.detailChip} ${css.detailChipIdentity}`}>
-                  <span className={css.detailChipValue}>{selected.cell.toolName}</span>
-                </span>
-              )}
+              {/* the tool name and the turn already sit in the panel header tag and
+                  its "第 N 轮" label, so the chip row only carries what the header
+                  cannot: state, duration and the call id */}
               <span className={css.detailChip} data-tone={selected.cell.isError ? 'error' : undefined}>
                 <span className={css.detailChipLabel}>{qt('chip.status')}</span>
                 <span className={css.detailChipValue}>{statusLabel(stateOf(selected), t)}</span>
               </span>
-              {selected.turn !== null && (
-                <span className={css.detailChip}>
-                  <span className={css.detailChipLabel}>{qt('chip.turn')}</span>
-                  <span className={css.detailChipValue}>#{selected.turn}</span>
-                </span>
-              )}
               {selected.cell.timeSeconds !== null && (
                 <span className={css.detailChip}>
                   <span className={css.detailChipLabel}>{qt('chip.duration')}</span>
