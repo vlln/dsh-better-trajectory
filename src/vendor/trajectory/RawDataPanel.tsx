@@ -63,27 +63,18 @@ function preview(value: Json): string {
   return ''
 }
 
-function Leaf({ value, qt, limit = MAX_PREVIEW }: { value: Json; qt: RawDataPanelProps['qt']; limit?: number }) {
-  const [open, setOpen] = useState(false)
+function Leaf({ value }: { value: Json }) {
   const kind = kindOf(value)
-  if (kind === 'string') {
-    const long = (value as string).length > limit
-    const shown = open || !long ? (value as string) : `${(value as string).slice(0, limit)}…`
-    return (
-      <span className={css.string}>
-        "{shown}"
-        {long && (
-          <button type="button" className={css.inlineButton} onClick={() => setOpen(v => !v)}>
-            {open ? qt('raw.less') : qt('raw.more')}
-          </button>
-        )}
-      </span>
-    )
-  }
+  if (kind === 'string') return <span className={css.string}>"{String(value)}"</span>
   if (kind === 'number') return <span className={css.number}>{String(value)}</span>
   if (kind === 'boolean') return <span className={css.boolean}>{String(value)}</span>
   if (kind === 'null') return <span className={css.null}>null</span>
   return <span className={css.other}>{String(value)}</span>
+}
+
+/** Copy payload for one node: strings copy verbatim, everything else as JSON. */
+function copyTextFor(value: Json): string {
+  return typeof value === 'string' ? value : JSON.stringify(value, null, 2)
 }
 
 function Node({
@@ -108,31 +99,34 @@ function Node({
 
   return (
     <div className={css.node} data-depth={depth}>
-      <div className={css.line} data-path={path}>
+      <div
+        className={css.line}
+        data-path={path}
+        data-branch={branch || undefined}
+        data-open={branch ? isOpen || undefined : undefined}
+        data-hit={term !== '' && String(name).toLowerCase().includes(term) ? 'key' : undefined}
+        onClick={branch ? () => toggle(path) : undefined}
+      >
         {branch ? (
-          <button type="button" className={css.chevron} data-open={isOpen || undefined} onClick={() => toggle(path)} aria-label={isOpen ? qt('raw.collapse') : qt('raw.expand')}>
-            ▸
-          </button>
+          <span className={css.chevron} data-open={isOpen || undefined} aria-hidden="true">▸</span>
         ) : (
           <span className={css.chevronSpace} />
         )}
         <span className={css.key}>{name}</span>
         <span className={css.colon}>:</span>
-        {branch ? (
-          <span className={css.branch}>
-            {preview(value)}
-            <button
-              type="button"
-              className={css.copy}
-              title={qt('raw.copy')}
-              onClick={() => { void navigator.clipboard?.writeText(JSON.stringify(value, null, 2)) }}
-            >
-              ⧉
-            </button>
-          </span>
-        ) : (
-          <Leaf value={value} qt={qt} />
-        )}
+        {branch ? <span className={css.branch}>{preview(value)}</span> : <Leaf value={value} />}
+        <button
+          type="button"
+          className={css.copy}
+          title={qt('raw.copy')}
+          aria-label={qt('raw.copy')}
+          onClick={(event) => {
+            event.stopPropagation()
+            void navigator.clipboard?.writeText(copyTextFor(value))
+          }}
+        >
+          ⧉
+        </button>
       </div>
       {branch && isOpen && (
         <div className={css.children}>

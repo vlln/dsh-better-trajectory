@@ -52,7 +52,6 @@ import { RawDataPanel, payloadBadge } from './RawDataPanel.tsx'
 
 const BOTTOM_FOLLOW_THRESHOLD_PX = 2
 const OLDER_LOAD_THRESHOLD_PX = 48
-const HISTORY_LOAD_ROW_HEIGHT_PX = 30
 const VIRTUALIZATION_THRESHOLD = 100
 const VIRTUAL_OVERSCAN_ROWS = 12
 const VIRTUAL_INITIAL_VIEWPORT_HEIGHT_PX = 600
@@ -2559,7 +2558,8 @@ export function TrajectoryTable({
   const virtualRowStructure = useStableVirtualRowStructure(projectedVirtualRows)
   const virtualizationEnabled = hasOlderRecords
     || records.length > VIRTUALIZATION_THRESHOLD
-  const virtualScrollMargin = hasOlderRecords ? HISTORY_LOAD_ROW_HEIGHT_PX : 0
+  /* no static "load earlier" row any more, so the list starts at row 0 */
+  const virtualScrollMargin = 0
   const estimateVirtualRowSize = useCallback(
     (index: number) => virtualRowStructure[index]?.height ?? 30,
     [virtualRowStructure],
@@ -3043,7 +3043,6 @@ export function TrajectoryTable({
 
   const olderBusy = olderHistoryLoading || olderLoading
   const showInitialLoading = historyLoading || !tableScrollReady
-  const historyRowOffset = hasOlderRecords ? 1 : 0
 
   return (
     <div ref={rootRef} className={css.split} style={splitStyle} data-show-time={showTime ? undefined : 'false'}>
@@ -3069,6 +3068,14 @@ export function TrajectoryTable({
             ))}
           </div>
         )}
+        {olderBusy && !showInitialLoading && (
+          <div className={css.historyLoading} role="status" aria-live="polite">
+            <span className={css.historyLoadingBar}>
+              <StateDot state="ongoing" />
+              {t('history.loadingEarlier')}
+            </span>
+          </div>
+        )}
         {showInitialLoading && (
           <div className={css.historyLoading} role="status" aria-live="polite">
             <span className={css.historyLoadingBar}>
@@ -3080,45 +3087,13 @@ export function TrajectoryTable({
         <table
           className={css.table}
           data-scroll-ready={tableScrollReady || undefined}
-          aria-rowcount={records.length + historyRowOffset}
+          aria-rowcount={records.length}
         >
           <colgroup>
             <col className={css.eventColumn} />
             <col className={css.contentColumn} />
           </colgroup>
           <tbody>
-            {hasOlderRecords && (
-              <tr
-                className={css.historyLoadRow}
-                data-history-load=""
-                aria-rowindex={1}
-              >
-                <td colSpan={2}>
-                  <button
-                    type="button"
-                    className={css.historyLoadButton}
-                    disabled={olderBusy || onLoadOlder === undefined}
-                    aria-label={olderBusy
-                      ? t('history.loadingEarlierAria')
-                      : t('history.loadEarlier')}
-                    onClick={() => {
-                      const pane = tablePaneRef.current
-                      if (pane !== null) requestOlder(pane, false)
-                    }}
-                  >
-                    {olderBusy && (
-                      <StateDot state="ongoing" />
-                    )}
-                    <span aria-hidden="true">
-                      {olderBusy ? t('history.loadingEarlier') : t('history.loadEarlier')}
-                    </span>
-                    <span className={css.visuallyHidden} role="status" aria-live="polite">
-                      {olderBusy ? t('history.loadingEarlier') : ''}
-                    </span>
-                  </button>
-                </td>
-              </tr>
-            )}
             {!showInitialLoading && records.length === 0 && (
               <tr className={css.emptyRow}>
                 <td colSpan={2} className={css.emptyCell}>
@@ -3218,7 +3193,7 @@ export function TrajectoryTable({
                   return (
                     <tr
                       tabIndex={isRequestOnly || singleToolNotice ? -1 : 0}
-                      aria-rowindex={position + 1 + historyRowOffset}
+                      aria-rowindex={position + 1}
                       aria-label={isCollapsedSummary
                         ? t('request.collapsedSummary', {
                           kind: t(COLLAPSED_SUMMARY_LABEL_KEY[summaryKind]),

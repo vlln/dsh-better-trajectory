@@ -77,7 +77,7 @@
 }
 
 .toastClose:hover {
-  background: var(--bt-surface-2, #f6f7f9);
+  background: var(--bt-hover, rgba(16, 24, 40, 0.06));
   color: var(--bt-text, #1c2128);
 }
 

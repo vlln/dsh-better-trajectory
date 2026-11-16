@@ -74,39 +74,27 @@
   bottom: 0;
   left: 0;
   display: flex;
-  width: 28px;
+  width: 12px;
   align-items: center;
-  justify-content: flex-start;
-  appearance: none;
-  box-sizing: border-box;
-  padding-left: 3px;
-  border: 0;
-  outline: none;
-  background: linear-gradient(
-    to right,
-    var(--dsw-alias-bg-layer-2) 0,
-    var(--dsw-alias-bg-layer-2) 38%,
-    transparent 100%
-  );
-  color: var(--dsw-alias-label-secondary);
-  font: var(--dsw-font-xs-13);
-  line-height: 1;
-  opacity: 0.72;
-  cursor: pointer;
+  justify-content: center;
+  pointer-events: none;
 }
 
-@media (hover: hover) {
-  .earlierHistory:hover {
-    opacity: 1;
-  }
+.earlierDot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--bt-text-3, #9aa1ab);
+  opacity: 0.55;
 }
 
-.earlierHistory[aria-disabled='true'] {
-  cursor: default;
+.earlierDot[data-loading] {
+  animation: bt-earlier-pulse 900ms ease-in-out infinite;
 }
 
-.earlierHistory:focus-visible {
-  box-shadow: inset 0 0 0 1px var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+@keyframes bt-earlier-pulse {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 0.9; }
 }
 
 .empty {

@@ -1,8 +1,12 @@
 /* Better Trajectory design tokens (docs/design-language.md). */
 .bt-trajectory-root {
   --bt-surface: var(--dsw-alias-bg-layer-1, #ffffff);
-  --bt-surface-2: var(--dsw-alias-bg-layer-2, #f6f7f9);
-  --bt-surface-3: var(--dsw-alias-bg-layer-3, #eef0f3);
+  /* bg-layer-2/3 are #fff in this theme, so they are useless as tints; use the
+     platform surface for raised blocks and the interactive tokens for states */
+  --bt-surface-2: var(--dsw-alias-bg-module-platform, #f6f7f9);
+  --bt-surface-3: color-mix(in srgb, var(--dsw-alias-label-primary, #1c2128) 8%, var(--bt-surface));
+  --bt-hover: var(--dsw-alias-interactive-bg-hover, rgba(16, 24, 40, 0.06));
+  --bt-active: var(--dsw-alias-interactive-bg-active, rgba(16, 24, 40, 0.1));
   --bt-line: var(--dsw-alias-border-l2, #e6e8eb);
   --bt-line-soft: var(--dsw-alias-border-l1, #f0f2f4);
   --bt-text: var(--dsw-alias-label-primary, #1c2128);

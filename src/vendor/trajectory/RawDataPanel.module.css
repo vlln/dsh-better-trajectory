@@ -82,10 +82,19 @@
   align-items: baseline;
   gap: 3px;
   min-width: 0;
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
+/* the whole line is the hit area: rows toggle in place, and a wrapped value
+   highlights as one block because the line box contains all of it */
+.line[data-branch],
+.line[data-branch]:hover {
+  cursor: pointer;
 }
 
 .line:hover {
-  background: var(--bt-surface-2, #f6f7f9);
+  background: var(--bt-hover, rgba(16, 24, 40, 0.06));
 }
 
 .chevron,
@@ -93,12 +102,9 @@
   flex-shrink: 0;
   width: 14px;
   height: 14px;
-  border: 0;
-  background: transparent;
   color: var(--bt-text-3, #9aa1ab);
   font-size: 9px;
   line-height: 1;
-  cursor: pointer;
   transform: rotate(0deg);
   transition: transform 0.12s ease;
 }
@@ -151,12 +157,24 @@
 }
 
 .copy {
+  flex: none;
+  margin-left: auto;
+  padding: 0 2px;
   border: 0;
+  border-radius: 3px;
   background: transparent;
   color: var(--dsw-alias-label-tertiary, #bbb);
   font-size: 10px;
+  line-height: 1;
   cursor: pointer;
   opacity: 0;
+  transition: opacity var(--bt-dur-2, 90ms) var(--bt-ease-std, ease);
+}
+
+.copy:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--bt-accent, #2563eb);
+  outline-offset: 0;
 }
 
 .line:hover .copy {
@@ -165,16 +183,6 @@
 
 .copy:hover {
   color: var(--bt-text, #1c2128);
-}
-
-.inlineButton {
-  margin-left: 4px;
-  border: 0;
-  background: transparent;
-  color: var(--bt-accent, #2563eb);
-  font-size: 10.5px;
-  cursor: pointer;
-  padding: 0;
 }
 
 .loadMore {

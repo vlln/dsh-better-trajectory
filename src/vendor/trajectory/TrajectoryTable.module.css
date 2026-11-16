@@ -45,45 +45,8 @@
   font: var(--dsw-font-xxs-12);
 }
 
-.table tbody .historyLoadRow td {
-  height: 30px;
-  padding: 0;
-}
 
-/* The pagination control does not create a trajectory turn boundary. */
-.table tbody .historyLoadRow + tr[data-turn-start='true'] td::before {
-  content: none;
-}
 
-.historyLoadButton {
-  display: flex;
-  width: 100%;
-  height: 29px;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border: 0;
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-label-secondary);
-  cursor: pointer;
-  font: var(--dsw-font-xxs-12);
-}
-
-@media (hover: hover) {
-  .historyLoadButton:hover:not(:disabled) {
-    background: var(--dsw-alias-interactive-bg-hover);
-    color: var(--dsw-alias-label-primary);
-  }
-}
-
-.historyLoadButton:focus-visible {
-  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
-  outline-offset: -2px;
-}
-
-.historyLoadButton:disabled {
-  cursor: default;
-}
 
 .visuallyHidden {
   position: absolute;
@@ -2347,7 +2310,7 @@ tr[data-error='true'] .content {
 }
 
 .table tr:hover {
-  background: var(--bt-surface-2, #f6f7f9);
+  background: var(--bt-hover, rgba(16, 24, 40, 0.06));
 }
 
 tr[data-selected='true'] {
@@ -2596,7 +2559,7 @@ tr[data-group-parity='1'] {
 
 tr[data-group-parity='1']:hover,
 tr[data-group-parity='0']:hover {
-  background: var(--bt-surface-3, #eef0f3);
+  background: var(--bt-active, rgba(16, 24, 40, 0.1));
 }
 
 tr[data-kind='user'] {
@@ -2647,7 +2610,7 @@ tr[data-kind='user'] .rowSub {
 }
 
 .turnMarker:hover {
-  background: var(--bt-surface-2, #f6f7f9);
+  background: var(--bt-hover, rgba(16, 24, 40, 0.06));
   color: var(--bt-text, #1c2128);
 }
 
@@ -2893,7 +2856,7 @@ tr[data-turn-start='true'][data-kind='user'] > td {
 }
 
 .headAction:hover {
-  background: var(--bt-surface-3, #eef0f3);
+  background: var(--bt-active, rgba(16, 24, 40, 0.1));
   color: var(--bt-text, #1c2128);
 }
 

@@ -11,8 +11,10 @@ export interface QueryBarProps {
   stats: { total: number; matched: number; hidden: number; errors: number; running: number }
   tools: readonly { name: string; calls?: number; count?: number }[]
   turns: readonly { turn: number; count: number }[]
-  flat: boolean
-  onToggleFlat: () => void
+  canGoBack: boolean
+  canGoForward: boolean
+  onBack: () => void
+  onForward: () => void
   showTime: boolean
   onToggleTime: () => void
   tokens: readonly { kind: string; raw: string; valid: boolean; negated: boolean }[]
@@ -71,7 +73,10 @@ function buildSuggestions(props: QueryBarProps, lastWord: string): Suggestion[] 
  * @returns 工具栏元素。
  */
 export function QueryBar(props: QueryBarProps) {
-  const { query, onQuery, stats, flat, onToggleFlat, tokens, t, qt, showTime, onToggleTime } = props
+  const {
+    query, onQuery, stats, tokens, t, qt, showTime, onToggleTime,
+    canGoBack, canGoForward, onBack, onForward,
+  } = props
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)
   const rootRef = useRef<HTMLDivElement | null>(null)
@@ -122,15 +127,37 @@ export function QueryBar(props: QueryBarProps) {
     else if (event.key === 'Enter') { event.preventDefault(); if (suggestions.length > 0) pick(suggestions[active] ?? suggestions[0]); else setOpen(false) }
   }
 
-  const quick = [
-    { key: 'error', raw: 'status:error', label: qt('query.quickErrors'), count: stats.errors },
-    { key: 'running', raw: 'status:running', label: qt('query.quickRunning'), count: stats.running },
-    { key: 'slow', raw: 'ms:>1000', label: qt('query.quickSlow'), count: null },
-  ]
 
   return (
     <div className={css.root} role="toolbar" aria-label={t('toolbar.aria')}>
       <div className={css.row} ref={rootRef}>
+        <div className={css.history}>
+          <button
+            type="button"
+            className={css.historyButton}
+            disabled={!canGoBack}
+            aria-label={qt('nav.back')}
+            title={qt('nav.back')}
+            onClick={onBack}
+          >
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M10 3.5 5.5 8l4.5 4.5" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className={css.historyButton}
+            disabled={!canGoForward}
+            aria-label={qt('nav.forward')}
+            title={qt('nav.forward')}
+            onClick={onForward}
+          >
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M6 3.5 10.5 8 6 12.5" />
+            </svg>
+          </button>
+        </div>
+        <span className={css.divider} aria-hidden="true" />
         <div className={css.actions}>
           <button
             type="button"
@@ -206,28 +233,6 @@ export function QueryBar(props: QueryBarProps) {
           )}
         </div>
 
-        <div className={css.quick}>
-          {quick.map(item => {
-            const on = words.includes(item.raw)
-            return (
-              <button
-                key={item.key}
-                type="button"
-                className={css.quickButton}
-                data-on={on || undefined}
-                aria-pressed={on}
-                data-tip={item.raw}
-                onClick={() => onQuery(toggleToken(query, item.raw))}
-              >
-                {item.label}
-                {item.count !== null && <span className={css.quickCount}>{item.count}</span>}
-              </button>
-            )
-          })}
-          <button type="button" className={css.quickButton} data-on={flat || undefined} aria-pressed={flat} onClick={onToggleFlat} data-tip={qt('query.flatHint')}>
-            {qt('query.flat')}
-          </button>
-        </div>
       </div>
 
       {tokens.some(token => !token.valid) && (

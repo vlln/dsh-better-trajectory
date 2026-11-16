@@ -201,41 +201,23 @@ function LaneLabels({ t }: { t: TrajectoryTranslate }) {
   )
 }
 
-function EarlierHistoryBoundary({
-  loading,
-  onHover,
-  onLoad,
-  t,
-}: {
-  loading: boolean
-  onHover: () => void
-  onLoad: (() => void) | undefined
-  t: TrajectoryTranslate
-}) {
+/**
+ * Passive marker for "there is more history to the left". Loading is automatic:
+ * reaching the left edge (dragging, or scrolling the ledger to the top) pulls the
+ * next page, so there is no click target here any more.
+ */
+function EarlierHistoryBoundary({ loading, t }: { loading: boolean; t: TrajectoryTranslate }) {
   return (
-    <Tooltip
-      label={loading ? t('history.loadingEarlier') : t('history.clickToLoadEarlier')}
-      side="right"
-      delayMs={TIMELINE_TOOLTIP_DELAY_MS}
+    <span
+      className={css.earlierHistory}
+      data-earlier-history
+      data-loading={loading || undefined}
+      role="status"
+      aria-live="polite"
+      title={loading ? t('history.loadingEarlier') : t('history.autoLoadEarlier')}
     >
-      <button
-        type="button"
-        className={css.earlierHistory}
-        data-earlier-history
-        data-loading={loading || undefined}
-        aria-label={loading ? t('history.loadingEarlierAria') : t('history.loadEarlier')}
-        aria-disabled={loading || onLoad === undefined}
-        onClick={onLoad}
-        onPointerEnter={(event) => {
-          event.stopPropagation()
-          onHover()
-        }}
-        onPointerMove={(event) => { event.stopPropagation() }}
-        onPointerDown={(event) => { event.stopPropagation() }}
-      >
-        …
-      </button>
-    </Tooltip>
+      <span className={css.earlierDot} data-loading={loading || undefined} aria-hidden="true" />
+    </span>
   )
 }
 
@@ -346,6 +328,19 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
       setLoadingEarlier(true)
       void onLoadEarlier().finally(() => { setLoadingEarlier(false) })
     }
+  /* reaching the left edge pages the next chunk in by itself, then the domain
+     start moves left and the guard re-arms for the next page */
+  const autoLoadedAtStart = useRef<number | null>(null)
+  useEffect(() => {
+    if (!showsEarlierBoundary || loadEarlier === undefined) {
+      autoLoadedAtStart.current = null
+      return
+    }
+    const key = model === null ? null : model.start
+    if (key === null || autoLoadedAtStart.current === key) return
+    autoLoadedAtStart.current = key
+    loadEarlier()
+  }, [loadEarlier, model, showsEarlierBoundary])
   const projectedDomainStyle = model === null
     ? undefined
     : {
@@ -402,12 +397,7 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
           <div className={css.track}>
             <span className={css.empty}>{t('timeline.noTimingData')}</span>
             {hasEarlierRecords && (
-              <EarlierHistoryBoundary
-                loading={loadingEarlier}
-                onHover={() => { setHover(null) }}
-                onLoad={loadEarlier}
-                t={t}
-              />
+              <EarlierHistoryBoundary loading={loadingEarlier} t={t} />
             )}
           </div>
         </div>
@@ -619,12 +609,7 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
           }}
         >
           {showsEarlierBoundary && (
-            <EarlierHistoryBoundary
-              loading={loadingEarlier}
-              onHover={() => { setHover(null) }}
-              onLoad={loadEarlier}
-              t={t}
-            />
+            <EarlierHistoryBoundary loading={loadingEarlier} t={t} />
           )}
           {hover !== null && hover.recordIndex === null && draft === null && (
             <div

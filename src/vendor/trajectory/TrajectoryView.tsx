@@ -35,6 +35,7 @@ import css from './views.module.css'
 const EMPTY_TURN_IDS: ReadonlySet<number> = new Set()
 const EMPTY_RECORD_IDS: ReadonlySet<string> = new Set()
 const HISTORY_PAGE_NODES = 50
+const NAV_HISTORY_LIMIT = 50
 const QUERY_STORAGE_PREFIX = 'dsh-better-trajectory:query:'
 
 function containsCall(calls: readonly ToolCallBlock[], callId: string): boolean {
@@ -191,7 +192,6 @@ export function TrajectoryView({
       // 隐私模式：查询仍生效，只是不跨刷新记住。
     }
   }, [queryText, sessionId])
-  const [flat, setFlat] = useState(false)
   const [showTime, setShowTime] = useState(true)
   const restoreScroll = useRef(0)
   const [toast, setToast] = useState<{ id: number; text: string; undo?: () => void } | null>(null)
@@ -456,22 +456,13 @@ export function TrajectoryView({
     [toolIndex],
   )
   const hiddenIndexes = useMemo(() => {
-    if (!query.active && !flat) return null
+    if (!query.active) return null
     const hidden = new Set<number>()
     for (const { cell } of toolCells) {
       if (!matchedCells.has(cell.index)) hidden.add(cell.index)
     }
-    if (flat) {
-      for (const turn of timelineTurns) {
-        for (const group of turn.groups) {
-          for (const cell of group.cells) {
-            if (cell.kind !== 'tool' && cell.kind !== 'subtool') hidden.add(cell.index)
-          }
-        }
-      }
-    }
     return hidden
-  }, [toolCells, matchedCells, query.active, flat])
+  }, [toolCells, matchedCells, query.active])
   const maxDurationMs = useMemo(() => {
     let max = 0
     for (const record of toolIndex.records) {
@@ -510,6 +501,10 @@ export function TrajectoryView({
       : trajectoryTimelineFocusIndexes(timelineTurns, timelineRange, timelineMode),
     [timelineMode, timelineRange, timelineTurns],
   )
+  /* record navigation history: back / forward over the records the user opened,
+     capped so a long session cannot grow it without bound */
+  const [nav, setNav] = useState<{ entries: number[]; index: number }>({ entries: [], index: -1 })
+  const navSuppress = useRef(false)
   const handleRecordSelect = useCallback((index: number) => {
     if (
       timelineFocusIndexes !== null
@@ -517,10 +512,49 @@ export function TrajectoryView({
     ) {
       setTimelineSelection(null)
     }
+    setSelectedTimelineIndex(index)
+    if (navSuppress.current) {
+      navSuppress.current = false
+      return
+    }
+    setNav((prev) => {
+      if (prev.entries[prev.index] === index) return prev
+      const kept = prev.entries.slice(0, prev.index + 1)
+      kept.push(index)
+      const trimmed = kept.length > NAV_HISTORY_LIMIT ? kept.slice(kept.length - NAV_HISTORY_LIMIT) : kept
+      return { entries: trimmed, index: trimmed.length - 1 }
+    })
   }, [timelineFocusIndexes])
+  const navigateRecord = useCallback((delta: number) => {
+    const next = nav.index + delta
+    if (next < 0 || next >= nav.entries.length) return
+    const index = nav.entries[next]
+    navSuppress.current = true
+    setNav({ entries: nav.entries, index: next })
+    setTimelineSelection(null)
+    setTimelineRecordSelection({ index })
+    setSelectedTimelineIndex(index)
+  }, [nav])
   const handleTimelineRangeChange = useCallback((range: TrajectoryTimeRange | null) => {
     setTimelineSelection(range)
   }, [])
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!event.altKey || event.metaKey || event.ctrlKey) return
+      const target = event.target as HTMLElement | null
+      const tag = target?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable === true) return
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault()
+        navigateRecord(-1)
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault()
+        navigateRecord(1)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => { window.removeEventListener('keydown', onKeyDown) }
+  }, [navigateRecord])
   const handleTimelineRecordSelect = useCallback((index: number) => {
     setTimelineSelection(null)
     setTimelineRecordSelection({ index })
@@ -721,8 +755,10 @@ export function TrajectoryView({
         }}
         tools={summarizeTools(toolIndex)}
         turns={queryTurns}
-        flat={flat}
-        onToggleFlat={() => { setFlat(value => !value) }}
+        canGoBack={nav.index > 0}
+        canGoForward={nav.index < nav.entries.length - 1}
+        onBack={() => { navigateRecord(-1) }}
+        onForward={() => { navigateRecord(1) }}
         showTime={showTime}
         onToggleTime={() => setShowTime(value => !value)}
         actualDuration={actualDuration}
