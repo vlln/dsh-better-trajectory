@@ -547,6 +547,14 @@ export interface TrajectoryUsage {
   reasoning?: number
 }
 
+/** Indent level of a record kind: turn rows at 0, message/context at 1, calls deeper. */
+function recordLevel(kind: TrajectoryCellKind): number {
+  if (kind === 'subtool') return 3
+  if (kind === 'tool') return 2
+  if (kind === 'user' || kind === 'system' || kind === 'compacted') return 0
+  return 1
+}
+
 function flattenRecords(turns: readonly TrajectoryTurnModel[]): TableRecord[] {
   let groupIndex = -1
   return turns.flatMap((turn, section) => {
@@ -3067,10 +3075,9 @@ export function TrajectoryTable({
                     : metaInfo?.durationMs
                   const rowStartedAt = record.cell.startedAt ?? metaInfo?.time
                   const toolLike = record.cell.kind === 'tool' || record.cell.kind === 'subtool'
-                  const level = record.cell.kind === 'subtool' ? 3
-                    : record.cell.kind === 'tool' ? 2
-                      : record.cell.kind === 'user' || record.cell.kind === 'system' || record.cell.kind === 'compacted' ? 0
-                        : 1
+                  const level = recordLevel(record.cell.kind)
+                  const nextRow = records[position + 1]
+                  const nextLevel = nextRow === undefined ? -1 : recordLevel(nextRow.cell.kind)
                   const rowName = toolLike
                     ? (record.cell.toolName ?? 'tool')
                     : record.cell.kind === 'message'
@@ -3252,8 +3259,13 @@ export function TrajectoryTable({
                             >
                               <span className={css.rails} aria-hidden="true">
                                 {[1, 2, 3].filter(axisLevel => level >= axisLevel).map(axisLevel => {
-                                  // one rail per ancestor level; the x and the stop are pure CSS
-                                  const stopsHere = record.childLast === true && level === axisLevel
+                                  /* one rail per ancestor level. It runs down while a later
+                                     row still descends below that ancestor, and stops on the
+                                     last one — `childLast` was "I have no children", which cut
+                                     the message's rail at every tool and broke the line between
+                                     sibling calls. */
+                                  const stopsHere = nextRow === undefined
+                                    || nextLevel <= axisLevel - 1
                                   return (
                                     <i
                                       key={axisLevel}
