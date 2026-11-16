@@ -121,6 +121,9 @@
 ```
 
 - 查询条固定 40px；输入聚焦时高度不变（建议菜单浮层覆盖，不推挤）。
+- 搜索框最宽 560px（够读一条中等长度的查询，再宽只是留白）；语法按钮紧跟其右。
+- 统计行（第二行）左边是「标签 + 数值」：标签统一 2 字（记录 / 调用 / 错误 / 时长）、灰色 10px，数值等宽 11px、tabular-nums，所以四列天然对齐；错误数在非 0 时整列变红。
+- 筛选区贴右，并在其左侧有一条 1px 发丝线——「窗口里有多少」和「筛出了什么」是两个问题，靠线分开，不靠间距猜。
 - 建议菜单：左侧灰字是**查询语法本身**（`tool:` `status:` `turn:` `ms:` `type:`），保持英文、等宽、不本地化；右侧是值，再右是计数。
   - 键盘：`↑↓` 移动预选（滚出可视区自动跟随）、`Tab` / `Enter` 采纳、`Esc` 关闭。预选行 = 8% 底 + 2px 左 accent + 1px 轻阴影（原先用 `--dsw-alias-bg-layer-2`，在该主题里解析成 `#fff`，等于没有预选态）。
   - 输入字段前缀（`ty`、`st`）先列该字段的值；输入值是值内过滤（`b` → `bash` / `glob`）。
@@ -223,7 +226,7 @@
 | token | 值 | 匹配谁 | 说明 |
 |---|---|---|---|
 | `tool:bash` | 名字 | 只有 `tool` / `subtool` | 等值（忽略大小写）；支持 `*` 通配与 `\|` 并列：`tool:todo*`、`tool:bash\|read` |
-| `type:message` | 类型别名 | 所有记录 | `call` / `tool` / `subtool` / `message` / `assistant` / `user` / `system` / `context` / `compacted` |
+| `type:message` | 类型别名 | 所有记录 | `call` / `tool` / `subtool` / `message` / `assistant` / `user` / `system` / `context` / `compacted`；`kind:` 是等价别名。**不是日志级别**（级别用 `status:`） |
 | `status:error` | ok / error / running | 所有记录 | `\|` 并列；中断（interrupted）算 error |
 | `turn:12` | 数字或 `A-B` | 所有记录 | 区间闭区间 |
 | `ms:>1000` | `>` `<` `>=` `<=` 或 `A-B` | 有耗时的记录 | 消息用生成耗时；没有耗时的记录不匹配 |

@@ -123,6 +123,7 @@
   display: flex;
   align-items: center;
   flex: 1;
+  max-width: 560px;
   min-width: 160px;
   height: 26px;
   padding: 0 6px;
@@ -250,12 +251,15 @@
 
 .chips {
   display: flex;
-  flex: 1;
+  flex: 0 1 auto;
+  min-width: 0;
   align-items: center;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 4px;
-  padding: 2px 0 2px 2px;
+  margin-left: auto;
+  padding: 2px 0 2px 12px;
+  border-left: 1px solid var(--bt-line, #e6e8eb);
 }
 
 .chip {
@@ -459,9 +463,7 @@
   display: flex;
   flex: none;
   align-items: baseline;
-  gap: 10px;
-  color: var(--bt-text-2, #5b6470);
-  font-size: 10.5px;
+  gap: 16px;
   white-space: nowrap;
 }
 
@@ -472,19 +474,17 @@
 .totalsItem {
   display: inline-flex;
   align-items: baseline;
-  gap: 3px;
+  gap: 5px;
 }
 
+/* caption first, value second: the same two-character captions line up, and the
+   numbers sit on a tabular baseline instead of drifting with their unit width */
 .totalsItem b {
   color: var(--bt-text, #1c2128);
   font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 11px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
-}
-
-.totalsItem[data-mono] b {
-  font-size: 10.5px;
 }
 
 .totalsItem i {

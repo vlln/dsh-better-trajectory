@@ -325,24 +325,21 @@ export function QueryBar(props: QueryBarProps) {
       {/* second row: what is loaded on the left, what is filtered on the right */}
       <div className={css.metaRow}>
         <div className={css.totals} data-query={query.trim() === '' ? undefined : 'active'}>
-          <span className={css.totalsItem} title={qt('totals.records')}>
-            <b>{props.totals.records.toLocaleString()}</b>
+          <span className={css.totalsItem}>
             <i>{qt('totals.records')}</i>
+            <b>{props.totals.records.toLocaleString()}</b>
           </span>
-          <span className={css.totalsItem} title={qt('totals.calls')}>
-            <b>{props.totals.calls.toLocaleString()}</b>
+          <span className={css.totalsItem}>
             <i>{qt('totals.calls')}</i>
+            <b>{props.totals.calls.toLocaleString()}</b>
           </span>
-          <span
-            className={css.totalsItem}
-            data-tone={props.totals.errors > 0 ? 'error' : undefined}
-            title={qt('totals.errors')}
-          >
-            <b>{props.totals.errors.toLocaleString()}</b>
+          <span className={css.totalsItem} data-tone={props.totals.errors > 0 ? 'error' : undefined}>
             <i>{qt('totals.errors')}</i>
+            <b>{props.totals.errors.toLocaleString()}</b>
           </span>
           {props.totals.durationMs !== null && (
-            <span className={css.totalsItem} data-mono="" title={qt('totals.duration')}>
+            <span className={css.totalsItem}>
+              <i>{qt('totals.duration')}</i>
               <b>{formatSpan(props.totals.durationMs)}</b>
             </span>
           )}

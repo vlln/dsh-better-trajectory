@@ -239,3 +239,11 @@ test('code:* means the record has an error code', () => {
   assert.equal(matchesCell(cell({ kind: 'tool', outputDetail: 'x' }), query), false)
   assert.equal(matchesCell(cell(), query), false)
 })
+
+test('kind: is an alias of type:', () => {
+  const query = parseQuery('kind:message')
+  assert.equal(query.tokens[0].kind, 'type')
+  assert.equal(matchesCell(cell(), query), true)
+  assert.equal(matchesCell(cell({ kind: 'user' }), query), false)
+  assert.equal(matchesCell(cell({ kind: 'message' }), parseQuery('kind:assistant')), true)
+})

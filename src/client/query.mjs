@@ -15,7 +15,7 @@
 
 /** 已知 token 字段（顺序即文档顺序）。 */
 export const FIELDS = [
-  'tool', 'type', 'status', 'turn', 'ms', 'code', 'args', 'result', 'error', 'text',
+  'tool', 'type', 'kind', 'status', 'turn', 'ms', 'code', 'args', 'result', 'error', 'text',
 ]
 
 /** 文本类字段：值是子串，取反后表示「不包含」。 */
@@ -110,7 +110,8 @@ function parseToken(word) {
   /* a bare word (or a leading `-` with no field) is full-text search; `-word`
      excludes the word instead of searching for the literal hyphen */
   if (colon <= 0) return { kind: 'text', value: body, raw: word, negated, valid: body !== '' }
-  const field = body.slice(0, colon)
+  /* `kind:` is an accepted alias of `type:`; both mean the record kind */
+  const field = body.slice(0, colon) === 'kind' ? 'type' : body.slice(0, colon)
   const value = body.slice(colon + 1)
   if (!FIELDS.includes(field)) {
     /* `http://…` or any unknown `a:b` is still a search term; the `-` keeps
