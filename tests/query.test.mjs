@@ -111,8 +111,10 @@ test('type selects record kinds and accepts assistant as a message alias', () =>
   assert.equal(matchesCell(cell({ kind: 'user' }), query), false)
   assert.equal(matchesCell(cell({ kind: 'tool', toolName: 'bash' }), query), false)
   assert.equal(matchesCell(cell(), parseQuery('type:assistant')), true)
-  assert.equal(matchesCell(cell({ kind: 'subtool' }), parseQuery('type:call')), true)
-  assert.equal(matchesCell(cell({ kind: 'message' }), parseQuery('type:call')), false)
+  assert.equal(matchesCell(cell({ kind: 'subtool' }), parseQuery('type:tool|subtool')), true)
+  assert.equal(matchesCell(cell({ kind: 'message' }), parseQuery('type:tool|subtool')), false)
+  /* `call` was our invention; the closed upstream set has no such kind */
+  assert.equal(parseQuery('type:call').tokens[0].valid, false)
 })
 
 test('type supports alternatives and negation', () => {

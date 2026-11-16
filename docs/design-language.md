@@ -227,7 +227,7 @@
 | token | 值 | 匹配谁 | 说明 |
 |---|---|---|---|
 | `tool:bash` | 名字 | 只有 `tool` / `subtool` | 等值（忽略大小写）；支持 `*` 通配与 `\|` 并列：`tool:todo*`、`tool:bash\|read` |
-| `type:message` | 类型别名 | 所有记录 | `call` / `tool` / `subtool` / `message` / `assistant` / `user` / `system` / `context` / `compacted`；`kind:` 是等价别名。**不是日志级别**（级别用 `status:`） |
+| `type:message` | 台账行类型 | 所有记录 | **就是上游 `TrajectoryCellKind` 的封闭集合**：`tool` / `subtool` / `message` / `user` / `context` / `system` / `compacted`。`assistant` 是上游消息节点的等价别名；`kind:` 是字段别名。「全部调用」写 `type:tool\|subtool` |
 | `status:error` | ok / error / running | 所有记录 | `\|` 并列；中断（interrupted）算 error |
 | `turn:12` | 数字或 `A-B` | 所有记录 | 区间闭区间 |
 | `ms:>1000` | `>` `<` `>=` `<=` 或 `A-B` | 有耗时的记录 | 消息用生成耗时；没有耗时的记录不匹配 |
@@ -238,6 +238,20 @@
 | `text:foo` / `foo` | 文本 | 全字段 | 名称 + 参数 + 结果 + 正文 |
 | `-token` | — | 取反 | 对任何 token 生效，包括裸词（`-success` 排除含 success 的记录） |
 | `"git push"` | 短语 | 同上 | 引号保留空格；写回查询时自动补引号 |
+
+`type:` 的取值来自日志，不是本项目造的词汇：
+
+| 台账行（`type:` 的值） | 来自哪个日志节点（`ConversationNode.kind`） |
+|---|---|
+| `user` | `user` |
+| `message` | `assistant`（含流式 partial） |
+| `tool` / `subtool` | `tool-result`（根调用 / 其中嵌套的子调用） |
+| `context` | `context` |
+| `compacted` | `compaction` |
+| `system` | `system-prompt` 贡献（批次里的提示词快照，不是独立节点） |
+
+- 只接受这 7 个（+ `assistant` 别名）；`type:call` 这种自造词会被标成非法 chip 并忽略——早先版本确实发明过 `call`，已删除。
+- 这 7 个名字来自上游的 `TrajectoryCellKind`（`src/vendor/trajectory/trajectory-record.ts`，fork 自内置包），本项目没有另起一套。
 
 规则与边界：
 

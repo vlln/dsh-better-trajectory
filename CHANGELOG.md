@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- 删掉自造的 `type:call`：`type:` 的取值现在严格等于上游 `TrajectoryCellKind` 的封闭集合（tool / subtool / message / user / context / system / compacted），`assistant` 只是上游消息节点的等价别名。文档里补了「台账行 ← 日志节点」的对照表（`assistant` 行对应 `message`，`tool-result` 对应 `tool`/`subtool`，`compaction` 对应 `compacted`，`system-prompt` 对应 `system`）。「全部调用」写 `type:tool|subtool`。
 - 建议菜单的预选行去掉左侧 2px 色轨（宿主 brand 是近黑，看起来就是一道黑边），只留灰色：6% 底 + 1px 轻阴影 + label 加粗。
 - 工具条排版：搜索框最宽 560px；统计行改成「标签 + 数值」（记录 / 调用 / 错误 / 时长，标签同宽、数值等宽 tabular），筛选区贴右并用 1px 发丝线与统计分开。
 - `kind:` 作为 `type:` 的等价别名；语法速查里写明 **type 是记录类型、不是日志级别**（级别语义在 `status:`）。

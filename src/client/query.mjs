@@ -23,11 +23,14 @@ const TEXT_FIELDS = new Set(['args', 'result', 'error', 'text'])
 
 const STATUSES = new Set(['error', 'running', 'ok'])
 
-/** 记录类型：查询里可写 `type:<别名>`。 */
+/**
+ * 记录类型：`type:` 的取值**就是**上游 `TrajectoryCellKind` 的封闭集合
+ * （`src/vendor/trajectory/trajectory-record.ts`），不是本项目自造的词汇。
+ * `assistant` 是上游会话节点的 kind，作为 `message` 的等价别名保留。
+ */
 const TYPE_ALIASES = new Map([
   ['tool', ['tool']],
   ['subtool', ['subtool']],
-  ['call', ['tool', 'subtool']],
   ['message', ['message']],
   ['assistant', ['message']],
   ['user', ['user']],

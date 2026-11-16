@@ -87,7 +87,7 @@ function buildSuggestions(props: QueryBarProps, lastWord: string): Suggestion[] 
     }
   }
   if (field === '' || field === 'type') {
-    for (const type of ['call', 'message', 'user', 'system', 'context', 'compacted']) {
+    for (const type of ['tool', 'subtool', 'message', 'user', 'system', 'context', 'compacted']) {
       if (wholeGroup('type') || match(type)) out.push({ insert: `type:${type}`, label: type, group: 'type:' })
     }
   }
