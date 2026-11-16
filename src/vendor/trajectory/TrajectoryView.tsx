@@ -775,25 +775,13 @@ export function TrajectoryView({
     setQueryDraft(next)
   }, [preserveScroll])
 
-  /* Enter, or finishing a suggestion: everything typed becomes a condition */
-  const commitQueryDraft = useCallback(() => {
-    const words = tokenizeQuery(queryDraft)
+  /* Enter: everything typed becomes a condition */
+  const commitQueryDraft = useCallback((text: string) => {
+    const words = tokenizeQuery(text)
     if (words.length === 0) return
     preserveScroll()
     setQueryChips(current => [...current, ...words.filter(word => !current.includes(word))])
     setQueryDraft('')
-  }, [preserveScroll, queryDraft])
-
-  const addQueryChip = useCallback((token: string) => {
-    if (token === '') return
-    preserveScroll()
-    setQueryChips(current => (current.includes(token) ? current : [...current, token]))
-    /* the token being completed came from the draft's last word */
-    setQueryDraft((current) => {
-      const words = tokenizeQuery(current)
-      words.pop()
-      return joinQueryTokens(words)
-    })
   }, [preserveScroll])
 
   const removeQueryChip = useCallback((raw: string) => {
@@ -834,7 +822,6 @@ export function TrajectoryView({
         chips={queryChipTokens}
         onDraft={setQueryDraftText}
         onCommit={commitQueryDraft}
-        onAddChip={addQueryChip}
         onRemoveChip={removeQueryChip}
         onClear={clearQuery}
         stats={{

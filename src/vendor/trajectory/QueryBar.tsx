@@ -17,10 +17,8 @@ export interface QueryBarProps {
   /** Committed conditions; editing the draft never removes them. */
   chips: readonly QueryChip[]
   onDraft: (text: string) => void
-  /** Promote the draft to conditions. */
-  onCommit: () => void
-  /** Add one condition (suggestion pick) and drop the word it completed. */
-  onAddChip: (token: string) => void
+  /** Promote a piece of text to conditions. Enter is the only caller. */
+  onCommit: (text: string) => void
   onRemoveChip: (raw: string) => void
   onClear: () => void
   stats: { total: number; matched: number; hidden: number; errors: number; running: number }
@@ -190,11 +188,13 @@ export function QueryBar(props: QueryBarProps) {
     return () => document.removeEventListener('mousedown', onDown)
   }, [open])
 
-  /* a picked suggestion becomes a condition: the draft word it completed leaves
-     the input, the condition stays a chip */
+  /* a suggestion only completes the word being typed; it never becomes a
+     condition on its own — Enter is the only way to add one */
+  const completeWith = (suggestion: Suggestion): string =>
+    [...words.slice(0, -1), suggestion.insert].join(' ')
+
   const pick = (suggestion: Suggestion) => {
-    props.onAddChip(suggestion.insert)
-    setOpen(false)
+    props.onDraft(completeWith(suggestion))
     inputRef.current?.focus()
   }
 
@@ -203,16 +203,24 @@ export function QueryBar(props: QueryBarProps) {
       setOpen(false)
       return
     }
-    if (!open) {
-      if (event.key === 'Enter') { event.preventDefault(); props.onCommit() }
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      /* Enter adds conditions, and it also completes the highlighted suggestion
+         so one keypress is enough */
+      const chosen = open && suggestions.length > 0
+        ? suggestions[active] ?? suggestions[0]
+        : undefined
+      props.onCommit(chosen === undefined ? draft : completeWith(chosen))
+      setOpen(false)
       return
     }
+    if (!open) return
     if (event.key === 'ArrowDown') { event.preventDefault(); setActive(i => Math.min(i + 1, suggestions.length - 1)) }
     else if (event.key === 'ArrowUp') { event.preventDefault(); setActive(i => Math.max(i - 1, 0)) }
-    else if (event.key === 'Enter' || event.key === 'Tab') {
+    else if (event.key === 'Tab') {
+      if (suggestions.length === 0) return
       event.preventDefault()
-      if (suggestions.length > 0) pick(suggestions[active] ?? suggestions[0])
-      else props.onCommit()
+      pick(suggestions[active] ?? suggestions[0])
     }
   }
 

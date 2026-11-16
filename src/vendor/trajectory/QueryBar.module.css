@@ -87,6 +87,9 @@
 
 .metaLeft {
   min-height: 22px;
+  /* the `<` chevron's visible tip sits ~9px inside its 22px hit box; match that
+     so the captions line up with the arrow, not with the button box */
+  padding-left: 8px;
   padding-right: 12px;
 }
 
