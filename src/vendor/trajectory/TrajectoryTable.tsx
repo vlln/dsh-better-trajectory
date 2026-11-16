@@ -3105,7 +3105,6 @@ export function TrajectoryTable({
                       data-level={level}
                       data-has-children={record.hasChildren || undefined}
                       data-has-fold={record.hasFold || undefined}
-                      data-collapsed={record.foldSummary === undefined ? undefined : true}
                       onMouseEnter={(event) => {
                         if (isRequestOnly) return
                         const x = event.clientX
