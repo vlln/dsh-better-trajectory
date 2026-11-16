@@ -25,8 +25,6 @@ const MINIMUM_DRAG_PX = 3
 const EARLIER_TRIGGER_PX = 20
 /** Extra distance the pointer must travel out of the zone before it can load again. */
 const EARLIER_LEAVE_PX = 8
-/** Wheel-driven earlier loads are rate limited, not edge-burst limited. */
-const WHEEL_LOAD_COOLDOWN_MS = 250
 const MINIMUM_ZOOM_OPERATIONS = 4
 const EDGE_PAN_ZONE_FRACTION = 0.08
 const EDGE_PAN_STEP_FRACTION = 0.025
@@ -475,27 +473,21 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
      there. `lastEdgeStart` is what stops the chain — a page that moves model.start
      re-arms it, a page that brings nothing (or the last one) leaves it alone. */
   const edgePointer = useRef(false)
-  /* Progress signal is the span count, not model.start: a page that only extends
-     the ledger can leave the earliest timestamp unchanged, and then the chain
-     stalled after a single page. */
+  /* No timers anywhere: a load is gated by two facts only — nothing is in flight
+     (`loadEarlier` is undefined meanwhile), and the previous page actually added
+     spans. Time-based cooldowns just inserted artificial lag: a wheel or a drag
+     would sit idle while nothing was loading. Span count is the progress signal
+     because a page that only raises the node limit leaves model.start unchanged. */
   const lastEdgeSpans = useRef<number | null>(null)
-  const lastWheelLoadAt = useRef(0)
   const requestEarlier = useCallback((source: 'edge' | 'wheel' | 'marker' = 'marker') => {
     if (loadEarlier === undefined || model === null) return
-    if (source === 'wheel') {
-      const now = performance.now()
-      if (now - lastWheelLoadAt.current < WHEEL_LOAD_COOLDOWN_MS) return
-      lastWheelLoadAt.current = now
+    if (source === 'marker') {
+      /* only the boundary-entry effect calls this, and it arms once per entry */
       loadEarlier()
       return
     }
-    if (source === 'edge') {
-      if (lastEdgeSpans.current === model.spans.length) return
-      lastEdgeSpans.current = model.spans.length
-      loadEarlier()
-      return
-    }
-    /* marker: only the boundary-entry effect below calls this with 'marker' */
+    if (lastEdgeSpans.current === model.spans.length) return
+    lastEdgeSpans.current = model.spans.length
     loadEarlier()
   }, [loadEarlier, model])
   /* still parked at the edge when a page lands → take the next one */
