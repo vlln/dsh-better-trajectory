@@ -17,7 +17,7 @@ import {
 import type { WatchToolResult } from './watch-tool-result.ts'
 import { QueryBar } from './QueryBar.tsx'
 import { buildToolIndex, isErrorStatus, summarizeTools } from '../../client/filter.mjs'
-import { matchesCell, parseQuery } from '../../client/query.mjs'
+import { joinQueryTokens, matchesCell, parseQuery, tokenizeQuery } from '../../client/query.mjs'
 import { TrajectoryTimeline } from './TrajectoryTimeline.tsx'
 import {
   appendTrajectoryPartialLayout, deriveTrajectoryLayout,
@@ -37,6 +37,23 @@ const EMPTY_RECORD_IDS: ReadonlySet<string> = new Set()
 const HISTORY_PAGE_NODES = 50
 const NAV_HISTORY_LIMIT = 50
 const QUERY_STORAGE_PREFIX = 'dsh-better-trajectory:query:'
+
+/** Query state: committed condition chips plus the draft being typed. */
+function readStoredQuery(sessionId: string | undefined): { chips: string[]; draft: string } {
+  try {
+    const raw = window.sessionStorage.getItem(`${QUERY_STORAGE_PREFIX}${sessionId ?? ''}`)
+    if (raw === null) return { chips: [], draft: '' }
+    const parsed = JSON.parse(raw) as { chips?: string[]; draft?: string } | string
+    /* older builds stored the whole query as one string: treat it as chips */
+    if (typeof parsed === 'string') return { chips: tokenizeQuery(parsed), draft: '' }
+    return {
+      chips: Array.isArray(parsed?.chips) ? parsed.chips.filter(chip => typeof chip === 'string') : [],
+      draft: typeof parsed?.draft === 'string' ? parsed.draft : '',
+    }
+  } catch {
+    return { chips: [], draft: '' }
+  }
+}
 
 function containsCall(calls: readonly ToolCallBlock[], callId: string): boolean {
   for (const call of calls) {
@@ -178,20 +195,21 @@ export function TrajectoryView({
   const [timelineSelection, setTimelineSelection] = useState<TrajectoryTimeRange | null>(null)
   const actualDuration = useDuration(value => value)
   const [actualTime, setActualTime] = useState(false)
-  const [queryText, setQueryText] = useState(() => {
-    try {
-      return window.sessionStorage.getItem(`${QUERY_STORAGE_PREFIX}${sessionId ?? ''}`) ?? ''
-    } catch {
-      return ''
-    }
-  })
+  /* the conditions (chips) and the text being typed are two stores: editing or
+     deleting the draft must not delete a condition the user already added */
+  const [queryChips, setQueryChips] = useState<string[]>(() => readStoredQuery(sessionId).chips)
+  const [queryDraft, setQueryDraft] = useState(() => readStoredQuery(sessionId).draft)
+  const queryText = [...queryChips, queryDraft.trim()].filter(part => part !== '').join(' ')
   useEffect(() => {
     try {
-      window.sessionStorage.setItem(`${QUERY_STORAGE_PREFIX}${sessionId ?? ''}`, queryText)
+      window.sessionStorage.setItem(
+        `${QUERY_STORAGE_PREFIX}${sessionId ?? ''}`,
+        JSON.stringify({ chips: queryChips, draft: queryDraft }),
+      )
     } catch {
       // 隐私模式：查询仍生效，只是不跨刷新记住。
     }
-  }, [queryText, sessionId])
+  }, [queryChips, queryDraft, sessionId])
   const [showTime, setShowTime] = useState(true)
   const restoreScroll = useRef(0)
   const [toast, setToast] = useState<{ id: number; text: string; undo?: () => void } | null>(null)
@@ -407,6 +425,10 @@ export function TrajectoryView({
     [partialSearchTurns],
   )
   const query = useMemo(() => parseQuery(queryText), [queryText])
+  const queryChipTokens = useMemo(
+    () => queryChips.flatMap(raw => parseQuery(raw).tokens.map(token => ({ ...token, raw }))),
+    [queryChips],
+  )
   const toolIndex = useMemo(() => buildToolIndex(completeInspection), [completeInspection])
   const callMeta = useMemo(() => {
     const map = new Map<string, { durationMs?: number; time?: number; errorCode?: string }>()
@@ -743,15 +765,54 @@ export function TrajectoryView({
     })
   }, [timelineTurns, toolIndex])
 
-  const changeQuery = useCallback((next: string) => {
+  const preserveScroll = useCallback(() => {
     const pane = document.querySelector('[data-trajectory-scroll]')
     if (pane instanceof HTMLElement) restoreScroll.current = pane.scrollTop
-    if (next === '' && queryText.trim() !== '') {
-      const previous = queryText
-      pushToast(qt('toast.cleared'), () => setQueryText(previous))
-    }
-    setQueryText(next)
-  }, [pushToast, qt, queryText])
+  }, [])
+
+  const setQueryDraftText = useCallback((next: string) => {
+    preserveScroll()
+    setQueryDraft(next)
+  }, [preserveScroll])
+
+  /* Enter, or finishing a suggestion: everything typed becomes a condition */
+  const commitQueryDraft = useCallback(() => {
+    const words = tokenizeQuery(queryDraft)
+    if (words.length === 0) return
+    preserveScroll()
+    setQueryChips(current => [...current, ...words.filter(word => !current.includes(word))])
+    setQueryDraft('')
+  }, [preserveScroll, queryDraft])
+
+  const addQueryChip = useCallback((token: string) => {
+    if (token === '') return
+    preserveScroll()
+    setQueryChips(current => (current.includes(token) ? current : [...current, token]))
+    /* the token being completed came from the draft's last word */
+    setQueryDraft((current) => {
+      const words = tokenizeQuery(current)
+      words.pop()
+      return joinQueryTokens(words)
+    })
+  }, [preserveScroll])
+
+  const removeQueryChip = useCallback((raw: string) => {
+    preserveScroll()
+    setQueryChips(current => current.filter(chip => chip !== raw))
+  }, [preserveScroll])
+
+  const clearQuery = useCallback(() => {
+    preserveScroll()
+    const previousChips = queryChips
+    const previousDraft = queryDraft
+    if (previousChips.length === 0 && previousDraft.trim() === '') return
+    setQueryChips([])
+    setQueryDraft('')
+    pushToast(qt('toast.cleared'), () => {
+      setQueryChips(previousChips)
+      setQueryDraft(previousDraft)
+    })
+  }, [preserveScroll, pushToast, qt, queryChips, queryDraft])
 
   const toggleAllTurnsWithUndo = useCallback(() => {
     const previous = collapsedTurns
@@ -769,9 +830,13 @@ export function TrajectoryView({
   return (
     <div className={`${css.root} bt-trajectory-root`} data-conversation-composer-overlay="">
       <QueryBar
-        query={queryText}
-        onQuery={changeQuery}
-        tokens={query.tokens}
+        draft={queryDraft}
+        chips={queryChipTokens}
+        onDraft={setQueryDraftText}
+        onCommit={commitQueryDraft}
+        onAddChip={addQueryChip}
+        onRemoveChip={removeQueryChip}
+        onClear={clearQuery}
         stats={{
           total: toolStats.total,
           matched: matchedCells.size,
@@ -843,7 +908,7 @@ export function TrajectoryView({
           hiddenIndexes={hiddenIndexes}
           callMeta={callMeta}
           maxDurationMs={maxDurationMs}
-          onShowAll={() => changeQuery('')}
+          onShowAll={clearQuery}
           onSelectedIndexChange={setSelectedTimelineIndex}
           onRecordSelect={handleRecordSelect}
           recordSelection={timelineRecordSelection}

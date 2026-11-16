@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- 工具条改成两列网格：右列是搜索框（与下方筛选条件同一条竖线的位置、右对齐）与 ⓘ，左列是导航/视图开关与窗口统计。
+- 条件与输入拆成两套状态：`Enter` / 采纳建议把输入内容变成 chip，**删除输入内容不再删掉已添加的条件**（原来清空输入框等于清空全部筛选）。
+- 去掉搜索框内的 `×`；「显示全部」改成排在上一个条件后面的 `清除` chip（虚线边、同尺寸），并保留可撤销 toast。
+- 条件 chip 使用语义色：工具橙、助手紫、用户蓝、上下文绿、错误红、成功绿、运行中琥珀。
+- 条件左对齐到竖线、`命中` 保持右对齐；没有条件时不显示 `命中`（原来空查询会显示「命中 0」）。
 - 去掉「无法识别：…（已忽略）」那一行提示：非法 token 在 chip 上标黄已经足够，不再额外占一行。
 - 删掉自造的 `type:call`：`type:` 的取值现在严格等于上游 `TrajectoryCellKind` 的封闭集合（tool / subtool / message / user / context / system / compacted），`assistant` 只是上游消息节点的等价别名。文档里补了「台账行 ← 日志节点」的对照表（`assistant` 行对应 `message`，`tool-result` 对应 `tool`/`subtool`，`compaction` 对应 `compacted`，`system-prompt` 对应 `system`）。「全部调用」写 `type:tool|subtool`。
 - 建议菜单的预选行去掉左侧 2px 色轨（宿主 brand 是近黑，看起来就是一道黑边），只留灰色：6% 底 + 1px 轻阴影 + label 加粗。

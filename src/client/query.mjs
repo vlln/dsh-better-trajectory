@@ -88,7 +88,7 @@ export function tokenizeQuery(text) {
 }
 
 /** 带空格的词写回查询时要补引号。 */
-function joinTokens(words) {
+export function joinQueryTokens(words) {
   return words.map(word => (/\s/.test(word) ? `"${word}"` : word)).join(' ')
 }
 
@@ -408,7 +408,7 @@ export function removeToken(text, raw) {
   const words = tokenizeQuery(text)
   const index = words.lastIndexOf(raw)
   if (index >= 0) words.splice(index, 1)
-  return joinTokens(words)
+  return joinQueryTokens(words)
 }
 
 /**
@@ -422,5 +422,5 @@ export function toggleToken(text, raw) {
   const index = words.lastIndexOf(raw)
   if (index >= 0) words.splice(index, 1)
   else words.push(raw)
-  return joinTokens(words)
+  return joinQueryTokens(words)
 }

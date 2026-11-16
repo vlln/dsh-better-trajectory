@@ -51,9 +51,9 @@
 }
 
 .root {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 560px);
+  align-items: center;
   padding: 4px 8px;
   border-bottom: 1px solid var(--dsw-alias-border-secondary, rgba(0, 0, 0, 0.08));
   background: var(--dsw-alias-bg-layer-1, #fff);
@@ -61,11 +61,40 @@
   z-index: 2;
 }
 
-.row {
+.rowLeft,
+.rowRight,
+.metaLeft,
+.metaRight {
   display: flex;
   align-items: center;
+  min-width: 0;
+}
+
+.rowLeft {
   gap: 8px;
   min-height: 28px;
+  padding-right: 12px;
+}
+
+/* the search sits in the same column as the conditions, and the divider between
+   the two columns is one continuous hairline across both rows */
+.rowRight {
+  gap: 4px;
+  min-height: 28px;
+  padding-left: 12px;
+  border-left: 1px solid var(--bt-line, #e6e8eb);
+}
+
+.metaLeft {
+  min-height: 22px;
+  padding-right: 12px;
+}
+
+.metaRight {
+  gap: 8px;
+  min-height: 22px;
+  padding-left: 12px;
+  border-left: 1px solid var(--bt-line, #e6e8eb);
 }
 
 .actions {
@@ -159,24 +188,6 @@
   color: var(--dsw-alias-label-tertiary, #999);
 }
 
-.clear {
-  flex-shrink: 0;
-  width: 18px;
-  height: 18px;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--dsw-alias-label-tertiary, #888);
-  font-size: 13px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.clear:hover {
-  background: var(--dsw-alias-bg-layer-3, rgba(0, 0, 0, 0.08));
-  color: var(--dsw-alias-label-primary, #111);
-}
-
 .menu {
   position: absolute;
   z-index: 30;
@@ -251,23 +262,85 @@
   min-width: 0;
   align-items: center;
   flex-wrap: wrap;
-  justify-content: flex-end;
   gap: 4px;
-  margin-left: auto;
-  padding: 2px 0 2px 12px;
-  border-left: 1px solid var(--bt-line, #e6e8eb);
 }
 
-.chip {
+.chip,
+.clearChip {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   height: 20px;
   padding: 0 2px 0 6px;
+  border: 0;
   border-radius: 4px;
-  background: color-mix(in srgb, var(--dsw-alias-brand-primary, #4a6cf7) 10%, transparent);
-  color: var(--dsw-alias-label-primary, #111);
+  background: var(--dsw-alias-bg-module-platform);
+  color: var(--dsw-alias-label-secondary);
   font-size: 11px;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.chip[data-tone='tool'] {
+  color: var(--dsw-alias-state-warn-label);
+  background: var(--dsw-alias-state-warn-tertiary);
+}
+
+.chip[data-tone='assistant'] {
+  color: color-mix(
+    in srgb,
+    var(--dsw-alias-brand-primary-new-colorprimary-new-color) 60%,
+    var(--dsw-alias-state-error-secondary)
+  );
+  background: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      var(--dsw-alias-brand-primary-new-colorprimary-new-color) 55%,
+      var(--dsw-alias-state-error-secondary)
+    ) 15%,
+    var(--dsw-alias-bg-layer-1)
+  );
+}
+
+.chip[data-tone='user'] {
+  color: var(--dsw-alias-state-business-primary);
+  background: var(--dsw-alias-state-business-tertiary);
+}
+
+.chip[data-tone='context'],
+.chip[data-tone='ok'] {
+  color: color-mix(
+    in srgb,
+    var(--dsw-alias-state-success-primary) 68%,
+    var(--dsw-alias-label-secondary)
+  );
+  background: var(--dsw-alias-state-success-tertiary);
+}
+
+.chip[data-tone='error'] {
+  color: var(--dsw-alias-state-error-primary);
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 12%, transparent);
+}
+
+.chip[data-tone='warn'] {
+  color: var(--dsw-alias-state-warn-label);
+  background: var(--dsw-alias-state-warn-tertiary);
+}
+
+/* "clear" is a chip too, so it reads as part of the condition row */
+.clearChip {
+  padding: 0 7px;
+  border: 1px dashed var(--bt-line, #e6e8eb);
+  background: transparent;
+  color: var(--bt-text-2, #5b6470);
+  cursor: pointer;
+}
+
+.clearChip:hover {
+  border-style: solid;
+  background: var(--bt-hover, rgba(16, 24, 40, 0.06));
+  color: var(--bt-text, #1c2128);
 }
 
 /* an ignored token is a warning, not a failure: amber, and it stops there */
@@ -306,7 +379,8 @@
 }
 
 .summary {
-  margin-left: 4px;
+  flex: none;
+  margin-left: auto;
   color: var(--dsw-alias-label-secondary, #666);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
@@ -317,22 +391,6 @@
   color: var(--dsw-alias-label-tertiary, #999);
 }
 
-.showAll {
-  flex: none;
-  margin-left: 2px;
-  height: 20px;
-  padding: 0 6px;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--dsw-alias-brand-primary, #4a6cf7);
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.showAll:hover {
-  background: var(--bt-hover, rgba(16, 24, 40, 0.06));
-}
 /* one row per question: row 1 is the query, row 2 is "what is loaded  |  what is
    filtered". Stats lead, conditions trail. */
 .metaRow {
@@ -493,4 +551,21 @@
 
 .totals[data-query] .totalsItem b {
   color: var(--bt-text-2, #5b6470);
+}
+
+@media (max-width: 900px) {
+  .root {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rowRight,
+  .metaRight {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .rowLeft,
+  .metaLeft {
+    padding-right: 0;
+  }
 }

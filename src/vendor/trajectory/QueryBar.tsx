@@ -2,12 +2,27 @@
 /** 查询条：Logfire 风格 token + chip + 建议 + Quick 筛选。 */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { IconSearchOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
-import { removeToken, toggleToken } from '../../client/query.mjs'
 import css from './QueryBar.module.css'
 
+export interface QueryChip {
+  raw: string
+  kind: string
+  valid: boolean
+  negated: boolean
+}
+
 export interface QueryBarProps {
-  query: string
-  onQuery: (next: string) => void
+  /** Text being typed; it filters live but is not a condition yet. */
+  draft: string
+  /** Committed conditions; editing the draft never removes them. */
+  chips: readonly QueryChip[]
+  onDraft: (text: string) => void
+  /** Promote the draft to conditions. */
+  onCommit: () => void
+  /** Add one condition (suggestion pick) and drop the word it completed. */
+  onAddChip: (token: string) => void
+  onRemoveChip: (raw: string) => void
+  onClear: () => void
   stats: { total: number; matched: number; hidden: number; errors: number; running: number }
   /** Always-on totals for the whole loaded window. */
   totals: {
@@ -24,7 +39,6 @@ export interface QueryBarProps {
   onForward: () => void
   showTime: boolean
   onToggleTime: () => void
-  tokens: readonly { kind: string; raw: string; valid: boolean; negated: boolean }[]
   actualDuration: boolean
   onActualDurationChange: (value: boolean) => void
   allTurnsCollapsed: boolean
@@ -58,6 +72,32 @@ interface Suggestion {
   label: string
   detail?: string
   group: string
+}
+
+type ChipTone = 'error' | 'ok' | 'warn' | 'tool' | 'assistant' | 'user' | 'context' | 'neutral'
+
+/**
+ * A condition chip borrows the colour of what it filters: error red, ok green,
+ * running amber, tool orange, assistant violet, user blue, context green — so the
+ * chip row reads as a colour legend for the ledger below.
+ */
+function chipTone(chip: { kind: string; raw: string }): ChipTone {
+  const value = chip.raw.replace(/^-?[a-z]+:/, '').toLowerCase()
+  if (chip.kind === 'status') {
+    if (value.includes('error')) return 'error'
+    if (value.includes('running')) return 'warn'
+    return 'ok'
+  }
+  if (chip.kind === 'type') {
+    if (value === 'message' || value === 'assistant') return 'assistant'
+    if (value === 'tool' || value === 'subtool') return 'tool'
+    if (value === 'context') return 'context'
+    if (value === 'user') return 'user'
+    return 'neutral'
+  }
+  if (chip.kind === 'tool') return 'tool'
+  if (chip.kind === 'code' || chip.kind === 'error') return 'error'
+  return 'neutral'
 }
 
 /** 建议列表：工具（带计数）、状态、轮次、耗时。 */
@@ -106,7 +146,7 @@ function buildSuggestions(props: QueryBarProps, lastWord: string): Suggestion[] 
  */
 export function QueryBar(props: QueryBarProps) {
   const {
-    query, onQuery, stats, tokens, t, qt, showTime, onToggleTime,
+    draft, chips, stats, t, qt, showTime, onToggleTime,
     canGoBack, canGoForward, onBack, onForward,
   } = props
   const [open, setOpen] = useState(false)
@@ -116,7 +156,7 @@ export function QueryBar(props: QueryBarProps) {
   const menuRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
 
-  const words = query.trim() === '' ? [] : query.trim().split(/\s+/)
+  const words = draft.trim() === '' ? [] : draft.trim().split(/\s+/)
   const lastWord = words.at(-1) ?? ''
   const suggestions = useMemo(() => buildSuggestions(props, lastWord), [props, lastWord])
 
@@ -150,33 +190,36 @@ export function QueryBar(props: QueryBarProps) {
     return () => document.removeEventListener('mousedown', onDown)
   }, [open])
 
+  /* a picked suggestion becomes a condition: the draft word it completed leaves
+     the input, the condition stays a chip */
   const pick = (suggestion: Suggestion) => {
-    const next = [...words.slice(0, -1), suggestion.insert].join(' ')
-    onQuery(next)
+    props.onAddChip(suggestion.insert)
     setOpen(false)
     inputRef.current?.focus()
   }
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Escape') {
-      if (query !== '') onQuery('')
       setOpen(false)
       return
     }
-    if (!open) return
+    if (!open) {
+      if (event.key === 'Enter') { event.preventDefault(); props.onCommit() }
+      return
+    }
     if (event.key === 'ArrowDown') { event.preventDefault(); setActive(i => Math.min(i + 1, suggestions.length - 1)) }
     else if (event.key === 'ArrowUp') { event.preventDefault(); setActive(i => Math.max(i - 1, 0)) }
     else if (event.key === 'Enter' || event.key === 'Tab') {
-      if (suggestions.length === 0) { if (event.key === 'Enter') setOpen(false); return }
       event.preventDefault()
-      pick(suggestions[active] ?? suggestions[0])
+      if (suggestions.length > 0) pick(suggestions[active] ?? suggestions[0])
+      else props.onCommit()
     }
   }
 
 
   return (
     <div className={css.root} role="toolbar" aria-label={t('toolbar.aria')}>
-      <div className={css.row} ref={rootRef}>
+      <div className={css.rowLeft} ref={rootRef}>
         <div className={css.history}>
           <button
             type="button"
@@ -235,7 +278,9 @@ export function QueryBar(props: QueryBarProps) {
             {props.allSubCallsCollapsed ? '⊞' : '⊟'} {t('toolbar.subCalls')}
           </button>
         </div>
+      </div>
 
+      <div className={css.rowRight}>
         <div className={css.search}>
           <IconSearchOutlineRegular size={12} className={css.searchIcon} />
           <input
@@ -244,20 +289,15 @@ export function QueryBar(props: QueryBarProps) {
             className={css.input}
             aria-label={qt('query.placeholder')}
             placeholder={qt('query.placeholder')}
-            value={query}
+            value={draft}
             spellCheck={false}
             autoComplete="off"
-            onChange={(event) => { onQuery(event.currentTarget.value); setOpen(true); setActive(0) }}
+            onChange={(event) => { props.onDraft(event.currentTarget.value); setOpen(true); setActive(0) }}
             onFocus={() => setOpen(true)}
             onBlur={() => { window.setTimeout(() => setOpen(false), 120) }}
             onKeyDown={onKeyDown}
           />
-          {query !== '' && (
-            <button type="button" className={css.clear} aria-label={qt('query.clear')} data-tip={qt('query.clear')} onClick={() => { onQuery(''); inputRef.current?.focus() }}>
-              ×
-            </button>
-          )}
-          {open && query.trim() !== '' && suggestions.length > 0 && (
+          {open && draft.trim() !== '' && suggestions.length > 0 && (
             <div className={css.menu} role="listbox" ref={menuRef} aria-label={qt('query.suggestions')}>
               {suggestions.map((suggestion, index) => (
                 <button
@@ -319,12 +359,10 @@ export function QueryBar(props: QueryBarProps) {
             </div>
           )}
         </span>
-
       </div>
 
-      {/* second row: what is loaded on the left, what is filtered on the right */}
-      <div className={css.metaRow}>
-        <div className={css.totals} data-query={query.trim() === '' ? undefined : 'active'}>
+      <div className={css.metaLeft}>
+        <div className={css.totals}>
           <span className={css.totalsItem}>
             <i>{qt('totals.records')}</i>
             <b>{props.totals.records.toLocaleString()}</b>
@@ -344,29 +382,40 @@ export function QueryBar(props: QueryBarProps) {
             </span>
           )}
         </div>
+      </div>
 
-        {tokens.length > 0 && (
+      <div className={css.metaRight}>
+        {chips.length > 0 && (
           <div className={css.chips}>
-            {tokens.map(token => (
-              <span key={token.raw} className={css.chip} data-invalid={!token.valid || undefined}>
-                <span className={css.chipKind}>{token.kind === 'text' ? qt('query.text') : token.kind}</span>
-                <span className={css.chipValue}>{token.raw.replace(/^-?[a-z]+:/, '') || token.raw}</span>
+            {chips.map(chip => (
+              <span
+                key={chip.raw}
+                className={css.chip}
+                data-tone={chipTone(chip)}
+                data-invalid={!chip.valid || undefined}
+              >
+                <span className={css.chipKind}>{chip.kind === 'text' ? qt('query.text') : chip.kind}</span>
+                <span className={css.chipValue}>{chip.raw.replace(/^-?[a-z]+:/, '') || chip.raw}</span>
                 <button
                   type="button"
                   className={css.chipClose}
-                  aria-label={qt('query.removeToken', { token: token.raw })}
-                  onClick={() => onQuery(removeToken(query, token.raw))}
+                  aria-label={qt('query.removeToken', { token: chip.raw })}
+                  onClick={() => props.onRemoveChip(chip.raw)}
                 >
                   ×
                 </button>
               </span>
             ))}
-            <span className={css.summary}>
-              {qt('query.summary', { matched: stats.matched })}
-              {stats.hidden > 0 && <span className={css.hidden}>· {qt('query.hidden', { count: stats.hidden })}</span>}
-            </span>
-            <button type="button" className={css.showAll} onClick={() => onQuery('')}>{qt('query.showAll')}</button>
+            <button type="button" className={css.clearChip} onClick={props.onClear}>
+              {qt('query.clearAll')}
+            </button>
           </div>
+        )}
+        {(chips.length > 0 || draft.trim() !== '') && (
+          <span className={css.summary}>
+            {qt('query.summary', { matched: stats.matched })}
+            {stats.hidden > 0 && <span className={css.hidden}>· {qt('query.hidden', { count: stats.hidden })}</span>}
+          </span>
         )}
       </div>
     </div>
