@@ -2938,3 +2938,66 @@ tr[data-kind='system'] .rowName {
 .split[data-show-time='false'] .event {
   display: none;
 }
+
+.hoverCard {
+  pointer-events: auto;
+}
+
+.hoverActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid var(--bt-line-soft, #f0f2f4);
+}
+
+.hoverAction {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--bt-text-2, #5b6470);
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.hoverAction:hover {
+  border-color: var(--bt-line, #e6e8eb);
+  background: var(--bt-surface-2, #f6f7f9);
+  color: var(--bt-text, #1c2128);
+}
+
+.hoverKey {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--bt-surface-3, #eef0f3);
+  color: var(--bt-text-3, #9aa1ab);
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 9px;
+}
+
+.hoverClose {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: var(--bt-text-3, #9aa1ab);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.hoverAction[data-on] {
+  border-color: var(--bt-accent, #2563eb);
+  color: var(--bt-accent, #2563eb);
+  background: color-mix(in srgb, var(--bt-accent, #2563eb) 8%, transparent);
+}
