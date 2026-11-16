@@ -3314,3 +3314,62 @@ tr[data-level='2']:not([data-has-fold]) .rowLine::after,
 tr[data-level='3']:not([data-has-fold]) .rowLine::after {
   width: 35px;
 }
+
+/* multiple ancestor rails per row */
+.rails {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.rail {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  background: var(--bt-text-2, #5b6470);
+  opacity: 0.45;
+}
+
+/* legacy pseudo rails off; elbows stay */
+tr[data-level='1'] .rowLine::before,
+tr[data-level='2'] .rowLine::before,
+tr[data-level='3'] .rowLine::before {
+  content: none;
+}
+
+/* elbow sits on the first text line, not the vertical middle */
+tr[data-level='1'] .rowLine::after,
+tr[data-level='2'] .rowLine::after,
+tr[data-level='3'] .rowLine::after,
+tr[data-has-children][data-level='0'] .rowLine::after,
+tr[data-has-children][data-level='1'] .rowLine::after {
+  top: 14px;
+  bottom: auto;
+  height: 1px;
+  width: 17px;
+  background: var(--bt-text-2, #5b6470);
+  opacity: 0.45;
+}
+
+tr[data-level='1']:not([data-has-fold]) .rowLine::after,
+tr[data-level='2']:not([data-has-fold]) .rowLine::after,
+tr[data-level='3']:not([data-has-fold]) .rowLine::after {
+  width: 35px;
+}
+
+/* parent drops are vertical, not elbows */
+tr[data-has-children][data-level='0'] .rowLine::after {
+  top: 14px;
+  bottom: -3px;
+  height: auto;
+  width: 1px;
+  left: 9px;
+}
+
+tr[data-has-children][data-level='1'] .rowLine::after {
+  top: 14px;
+  bottom: -3px;
+  height: auto;
+  width: 1px;
+  left: 35px;
+}

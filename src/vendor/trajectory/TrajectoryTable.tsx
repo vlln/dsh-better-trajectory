@@ -3233,6 +3233,19 @@ export function TrajectoryTable({
                               data-mono={toolLike || undefined}
                               style={{ paddingLeft: `${level * 26}px` }}
                             >
+                              <span className={css.rails} aria-hidden="true">
+                                {[1, 2, 3].filter(axisLevel => level >= axisLevel).map(axisLevel => {
+                                  const axis = axisLevel === 1 ? 9 : axisLevel === 2 ? 35 : 61
+                                  const stopsHere = record.childLast === true && level === axisLevel
+                                  return (
+                                    <i
+                                      key={axisLevel}
+                                      className={css.rail}
+                                      style={{ left: axis, bottom: stopsHere ? 14 : 0 }}
+                                    />
+                                  )
+                                })}
+                              </span>
                               {(() => {
                                 const id = trajectoryRecordId(record.cell)
                                 const collapsedHere = record.collapsedSummary !== undefined
