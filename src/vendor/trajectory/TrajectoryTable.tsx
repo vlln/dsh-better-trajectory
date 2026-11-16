@@ -3241,7 +3241,9 @@ export function TrajectoryTable({
                                     <i
                                       key={axisLevel}
                                       className={css.rail}
-                                      style={{ left: axis, bottom: stopsHere ? 14 : 0 }}
+                                      style={stopsHere
+                                        ? { left: axis, top: 0, height: 14, bottom: 'auto' }
+                                        : { left: axis, top: 0, bottom: 0 }}
                                     />
                                   )
                                 })}
