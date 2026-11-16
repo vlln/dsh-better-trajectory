@@ -471,42 +471,51 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
     }
   /* reaching the left edge pages the next chunk in by itself, then the domain
      start moves left and the guard re-arms for the next page */
-  const autoLoadedAtStart = useRef<number | null>(null)
-  /* One page per visit to the edge: the ref resets when the pointer leaves the
-     zone (hysteresis), so a hover loads immediately, a drag loads immediately,
-     and staying on the edge does not chain through the whole history. A timer was
-     wrong here: a drag started right after a hover had to wait out the cooldown. */
-  const edgeLoadDone = useRef(false)
+  /* Parked at the left edge: keep pulling pages for as long as the pointer stays
+     there. `lastEdgeStart` is what stops the chain — a page that moves model.start
+     re-arms it, a page that brings nothing (or the last one) leaves it alone. */
+  const edgePointer = useRef(false)
+  /* Progress signal is the span count, not model.start: a page that only extends
+     the ledger can leave the earliest timestamp unchanged, and then the chain
+     stalled after a single page. */
+  const lastEdgeSpans = useRef<number | null>(null)
   const lastWheelLoadAt = useRef(0)
-  const requestEarlier = useCallback((fromGesture = false, fromWheel = false) => {
+  const requestEarlier = useCallback((source: 'edge' | 'wheel' | 'marker' = 'marker') => {
     if (loadEarlier === undefined || model === null) return
-    if (fromWheel) {
+    if (source === 'wheel') {
       const now = performance.now()
       if (now - lastWheelLoadAt.current < WHEEL_LOAD_COOLDOWN_MS) return
       lastWheelLoadAt.current = now
       loadEarlier()
       return
     }
-    if (fromGesture) {
-      /* A press/drag on the left edge is an explicit "go earlier" gesture: honour
-         it even when the view is zoomed or panned (panning needs pointer movement
-         to reach model.start, and a held finger produces none). */
-      if (edgeLoadDone.current) return
-      edgeLoadDone.current = true
+    if (source === 'edge') {
+      if (lastEdgeSpans.current === model.spans.length) return
+      lastEdgeSpans.current = model.spans.length
       loadEarlier()
       return
     }
-    /* boundary marker: once per model.start, otherwise it would page forever */
-    if (!atEarliest || autoLoadedAtStart.current === model.start) return
-    autoLoadedAtStart.current = model.start
+    /* marker: only the boundary-entry effect below calls this with 'marker' */
     loadEarlier()
-  }, [atEarliest, loadEarlier, model])
+  }, [loadEarlier, model])
+  /* still parked at the edge when a page lands → take the next one */
+  useEffect(() => {
+    if (!edgePointer.current || loadingEarlier) return
+    requestEarlier('edge')
+  }, [loadingEarlier, requestEarlier])
+  /* One page each time the view *enters* the earliest boundary. Guarding on
+     model.start was not enough: every page moves it, so sitting idle at the
+     boundary paged through the entire history on its own. Leaving the boundary
+     re-arms the marker. */
+  const markerArmed = useRef(true)
   useEffect(() => {
     if (!showsEarlierBoundary) {
-      autoLoadedAtStart.current = null
+      markerArmed.current = true
       return
     }
-    requestEarlier()
+    if (!markerArmed.current) return
+    markerArmed.current = false
+    requestEarlier('marker')
   }, [requestEarlier, showsEarlierBoundary])
   const projectedDomainStyle = useMemo(() => (model === null
     ? undefined
@@ -530,12 +539,9 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
       event.preventDefault()
       const track = trackRef.current
       if (track === null || model === null) return
-      /* Plain wheel over the track pages history (up = older), the way the rest of
-         the app scrolls; zoom now needs ⌘/Ctrl so the two cannot fight. */
-      if (!event.ctrlKey && !event.metaKey) {
-        if (event.deltaY < 0) requestEarlier(false, true)
-        return
-      }
+      /* Wheel is zoom, as before: up = zoom in, down = zoom out. Once the view is
+         already fully zoomed out there is nothing left to expand, so further
+         scrolling down pulls the next page of history. */
       setAnimateViewport(false)
       const rect = track.getBoundingClientRect()
       const anchorFraction =
@@ -549,6 +555,7 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
       )
       if (nextDuration >= fullDuration * 0.999) {
         setViewport(null)
+        if (event.deltaY > 0) requestEarlier('wheel')
         return
       }
       const anchorTime = domainStart + anchorFraction * domainDuration
@@ -633,12 +640,17 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
       return
     }
     if (event.button !== 0) return
-    if (hasEarlierRecords) {
-      const trackRect = trackRef.current?.getBoundingClientRect()
-      if (trackRect !== undefined && trackRect !== null) {
-        const distance = event.clientX - trackRect.left
-        if (distance > EARLIER_TRIGGER_PX + EARLIER_LEAVE_PX) edgeLoadDone.current = false
-        else if (distance <= EARLIER_TRIGGER_PX) requestEarlier(true)
+    const trackRect = trackRef.current?.getBoundingClientRect()
+    if (trackRect !== undefined && trackRect !== null) {
+      const distance = event.clientX - trackRect.left
+      if (distance > EARLIER_TRIGGER_PX + EARLIER_LEAVE_PX) {
+        /* clearing must not depend on hasEarlierRecords: once every page is in,
+           that flag goes false and the parked state would stick forever */
+        edgePointer.current = false
+      } else if (hasEarlierRecords && distance <= EARLIER_TRIGGER_PX) {
+        /* pressing on the edge counts as "parked here" and starts the chain */
+        edgePointer.current = true
+        requestEarlier('edge')
       }
     }
     const anchor = fractionAt(event)
@@ -660,10 +672,17 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
     const fraction = fractionAt(event)
-    if (hasEarlierRecords) {
-      const trackRect = trackRef.current?.getBoundingClientRect()
-      if (trackRect !== undefined && trackRect !== null
-        && event.clientX - trackRect.left <= EARLIER_TRIGGER_PX) requestEarlier(true)
+    const trackRect = trackRef.current?.getBoundingClientRect()
+    if (trackRect !== undefined && trackRect !== null) {
+      const distance = event.clientX - trackRect.left
+      if (distance > EARLIER_TRIGGER_PX + EARLIER_LEAVE_PX) {
+        /* clearing must not depend on hasEarlierRecords: once every page is in,
+           that flag goes false and the parked state would stick forever */
+        edgePointer.current = false
+      } else if (hasEarlierRecords && distance <= EARLIER_TRIGGER_PX) {
+        edgePointer.current = true
+        requestEarlier('edge')
+      }
     }
     setHover({ fraction, recordIndex: recordIndexAt(event) })
     const pan = panRef.current
@@ -799,6 +818,7 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
           onPointerUp={onPointerEnd}
           onPointerCancel={onPointerCancel}
           onPointerLeave={() => {
+            edgePointer.current = false
             if (dragRef.current === null && panRef.current === null) setHover(null)
           }}
           onDoubleClick={(event) => {
