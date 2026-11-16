@@ -57,6 +57,15 @@
   fill: none;
 }
 
+.foldIcon {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  stroke-width: 1.3;
+  fill: none;
+}
+
 .search {
   position: relative;
   display: flex;

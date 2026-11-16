@@ -146,6 +146,10 @@ export function QueryBar(props: QueryBarProps) {
             {t('toolbar.duration')}
           </button>
           <button type="button" className={css.fold} aria-pressed={showTime} data-tip={qt('query.timeHint')} onClick={onToggleTime}>
+            <svg className={css.foldIcon} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <rect x="2.25" y="3.25" width="11.5" height="9.5" rx="1.5" />
+              <path d="M6.25 3.25v9.5" />
+            </svg>
             {qt('query.time')}
           </button>
           <button type="button" className={css.fold} aria-pressed={props.allTurnsCollapsed} data-tip={t('toolbar.turns')} onClick={props.onToggleAllTurns}>

@@ -3091,6 +3091,7 @@ export function TrajectoryTable({
                       data-level={level}
                       data-has-children={record.hasChildren || undefined}
                       data-has-fold={record.hasFold || undefined}
+                      data-collapsed={record.foldSummary === undefined ? undefined : true}
                       onMouseEnter={(event) => {
                         if (isRequestOnly) return
                         const x = event.clientX
@@ -3238,8 +3239,7 @@ export function TrajectoryTable({
                               </span>
                               {(() => {
                                 const id = trajectoryRecordId(record.cell)
-                                const collapsedHere = record.collapsedSummary !== undefined
-                                  && collapsedAssistants.has(id)
+                                const collapsedHere = collapsedAssistants.has(id)
                                 const messageFold = record.cell.kind === 'message'
                                   && (collapsedHere || assistantToolCalls(allRecords, record.cell.index).length > 0)
                                 const next = records[position + 1]
@@ -3248,8 +3248,15 @@ export function TrajectoryTable({
                                 if (turnFold) {
                                   const collapsed = collapsedTurns.has(record.turn as number)
                                   return (
-                                    <button
-                                      type="button"
+                                    <span
+                                      role="button"
+                                      tabIndex={0}
+                                      onKeyDown={(event) => {
+                                        if (event.key !== 'Enter' && event.key !== ' ') return
+                                        event.preventDefault()
+                                        event.stopPropagation()
+                                        event.currentTarget.click()
+                                      }}
                                       className={css.rowChevron}
                                       data-folded={collapsed || undefined}
                                       aria-label={sectionLabel(record.turn, t)}
@@ -3262,13 +3269,20 @@ export function TrajectoryTable({
                                       }}
                                     >
                                       <ChevronIcon open={!collapsed} />
-                                    </button>
+                                    </span>
                                   )
                                 }
                                 if (messageFold) {
                                   return (
-                                    <button
-                                      type="button"
+                                    <span
+                                      role="button"
+                                      tabIndex={0}
+                                      onKeyDown={(event) => {
+                                        if (event.key !== 'Enter' && event.key !== ' ') return
+                                        event.preventDefault()
+                                        event.stopPropagation()
+                                        event.currentTarget.click()
+                                      }}
                                       className={css.rowChevron}
                                       data-folded={collapsedHere || undefined}
                                       aria-label={t(collapsedHere ? 'assistant.expand' : 'assistant.collapse')}
@@ -3280,14 +3294,21 @@ export function TrajectoryTable({
                                       }}
                                     >
                                       <ChevronIcon open={!collapsedHere} />
-                                    </button>
+                                    </span>
                                   )
                                 }
                                 if (toolFold) {
                                   const folded = collapsedTools.has(id)
                                   return (
-                                    <button
-                                      type="button"
+                                    <span
+                                      role="button"
+                                      tabIndex={0}
+                                      onKeyDown={(event) => {
+                                        if (event.key !== 'Enter' && event.key !== ' ') return
+                                        event.preventDefault()
+                                        event.stopPropagation()
+                                        event.currentTarget.click()
+                                      }}
                                       className={css.rowChevron}
                                       data-folded={folded || undefined}
                                       aria-label={folded ? t('tool.expandSubCalls') : t('tool.collapseSubCalls')}
@@ -3298,7 +3319,7 @@ export function TrajectoryTable({
                                       }}
                                     >
                                       <ChevronIcon open={!folded} />
-                                    </button>
+                                    </span>
                                   )
                                 }
                                 return <span className={css.rowChevronSpace} />
