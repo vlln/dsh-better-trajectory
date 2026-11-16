@@ -2,8 +2,8 @@
 /** Chrome-Network-style overview timeline for focusing the trajectory ledger. */
 
 import {
-  Fragment, memo, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent,
-  type PointerEvent,
+  Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties,
+  type KeyboardEvent, type PointerEvent,
 } from 'react'
 import { Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TrajectoryTurnModel } from './layout.ts'
@@ -19,6 +19,8 @@ import { HoverCard } from './HoverCard.tsx'
 import css from './TrajectoryTimeline.module.css'
 
 const MINIMUM_DRAG_PX = 3
+/** Pressing/dragging this close to the left edge pulls in the previous page. */
+const EARLIER_TRIGGER_PX = 20
 const MINIMUM_ZOOM_OPERATIONS = 4
 const EDGE_PAN_ZONE_FRACTION = 0.08
 const EDGE_PAN_STEP_FRACTION = 0.025
@@ -319,9 +321,11 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
     )
   const domainDuration = viewport === null ? fullDuration : viewportDuration
   const domainStart = viewport === null ? model?.start ?? 0 : viewportStart
-  const showsEarlierBoundary = hasEarlierRecords
-    && model !== null
-    && domainStart === model.start
+  /* float tolerance: panning clamps to model.start, and exact equality made the
+     marker (and therefore the auto-load) never fire */
+  const atEarliest = model !== null
+    && domainStart - model.start <= Math.max(1e-9, fullDuration * 1e-6)
+  const showsEarlierBoundary = hasEarlierRecords && model !== null && atEarliest
   const loadEarlier = onLoadEarlier === undefined || loadingEarlier
     ? undefined
     : () => {
@@ -331,16 +335,19 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
   /* reaching the left edge pages the next chunk in by itself, then the domain
      start moves left and the guard re-arms for the next page */
   const autoLoadedAtStart = useRef<number | null>(null)
+  const requestEarlier = useCallback(() => {
+    if (loadEarlier === undefined || model === null || !atEarliest) return
+    if (autoLoadedAtStart.current === model.start) return
+    autoLoadedAtStart.current = model.start
+    loadEarlier()
+  }, [atEarliest, loadEarlier, model])
   useEffect(() => {
-    if (!showsEarlierBoundary || loadEarlier === undefined) {
+    if (!showsEarlierBoundary) {
       autoLoadedAtStart.current = null
       return
     }
-    const key = model === null ? null : model.start
-    if (key === null || autoLoadedAtStart.current === key) return
-    autoLoadedAtStart.current = key
-    loadEarlier()
-  }, [loadEarlier, model, showsEarlierBoundary])
+    requestEarlier()
+  }, [requestEarlier, showsEarlierBoundary])
   const projectedDomainStyle = model === null
     ? undefined
     : {
@@ -445,6 +452,10 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
       return
     }
     if (event.button !== 0) return
+    if (hasEarlierRecords) {
+      const rect = event.currentTarget.getBoundingClientRect()
+      if (event.clientX - rect.left <= EARLIER_TRIGGER_PX) requestEarlier()
+    }
     const anchor = fractionAt(event)
     const anchorTime = domainStart + anchor * domainDuration
     const recordIndex = recordIndexAt(event)
@@ -464,6 +475,7 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
     const fraction = fractionAt(event)
+    if (hasEarlierRecords && event.clientX - rect.left <= EARLIER_TRIGGER_PX) requestEarlier()
     setHover({ fraction, recordIndex: recordIndexAt(event) })
     const pan = panRef.current
     if (pan !== null && pan.pointerId === event.pointerId) {

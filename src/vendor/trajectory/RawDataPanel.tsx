@@ -1,6 +1,6 @@
 // @ts-nocheck
 /** Inspector 的「原始」tab：可搜索 JSON 树。 */
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import css from './RawDataPanel.module.css'
 
 interface RawDataPanelProps {
@@ -63,13 +63,39 @@ function preview(value: Json): string {
   return ''
 }
 
-function Leaf({ value }: { value: Json }) {
+/** Highlights every case-insensitive occurrence of the search term. */
+function Highlight({ text, term }: { text: string; term: string }) {
+  if (term === '') return <>{text}</>
+  const lower = text.toLowerCase()
+  const needle = term.toLowerCase()
+  const parts: ReactNode[] = []
+  let cursor = 0
+  for (;;) {
+    const at = lower.indexOf(needle, cursor)
+    if (at === -1) {
+      parts.push(text.slice(cursor))
+      break
+    }
+    if (at > cursor) parts.push(text.slice(cursor, at))
+    parts.push(<mark key={at} className={css.mark}>{text.slice(at, at + needle.length)}</mark>)
+    cursor = at + needle.length
+  }
+  return <>{parts}</>
+}
+
+function Leaf({ value, term }: { value: Json; term: string }) {
   const kind = kindOf(value)
-  if (kind === 'string') return <span className={css.string}>"{String(value)}"</span>
-  if (kind === 'number') return <span className={css.number}>{String(value)}</span>
-  if (kind === 'boolean') return <span className={css.boolean}>{String(value)}</span>
+  if (kind === 'string') {
+    return <span className={css.string}>"<Highlight text={String(value)} term={term} />"</span>
+  }
+  if (kind === 'number') {
+    return <span className={css.number}><Highlight text={String(value)} term={term} /></span>
+  }
+  if (kind === 'boolean') {
+    return <span className={css.boolean}><Highlight text={String(value)} term={term} /></span>
+  }
   if (kind === 'null') return <span className={css.null}>null</span>
-  return <span className={css.other}>{String(value)}</span>
+  return <span className={css.other}><Highlight text={String(value)} term={term} /></span>
 }
 
 /** Copy payload for one node: strings copy verbatim, everything else as JSON. */
@@ -112,9 +138,9 @@ function Node({
         ) : (
           <span className={css.chevronSpace} />
         )}
-        <span className={css.key}>{name}</span>
+        <span className={css.key}><Highlight text={name} term={term} /></span>
         <span className={css.colon}>:</span>
-        {branch ? <span className={css.branch}>{preview(value)}</span> : <Leaf value={value} />}
+        {branch ? <span className={css.branch}>{preview(value)}</span> : <Leaf value={value} term={term} />}
         <button
           type="button"
           className={css.copy}

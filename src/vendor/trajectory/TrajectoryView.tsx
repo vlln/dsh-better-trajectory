@@ -501,10 +501,29 @@ export function TrajectoryView({
       : trajectoryTimelineFocusIndexes(timelineTurns, timelineRange, timelineMode),
     [timelineMode, timelineRange, timelineTurns],
   )
-  /* record navigation history: back / forward over the records the user opened,
-     capped so a long session cannot grow it without bound */
-  const [nav, setNav] = useState<{ entries: number[]; index: number }>({ entries: [], index: -1 })
+  /* navigation history: records opened and timeline ranges committed. A drag on
+     the timeline is one entry (committed once), not one per pointer move. */
+  type NavEntry =
+    | { kind: 'record'; index: number }
+    | { kind: 'range'; range: TrajectoryTimeRange }
+  const [nav, setNav] = useState<{ entries: NavEntry[]; index: number }>({ entries: [], index: -1 })
   const navSuppress = useRef(false)
+  const pushNav = (entry: NavEntry) => {
+    setNav((prev) => {
+      const current = prev.entries[prev.index]
+      if (
+        current !== undefined
+        && current.kind === entry.kind
+        && (entry.kind === 'record'
+          ? current.index === entry.index
+          : current.range.start === entry.range.start && current.range.end === entry.range.end)
+      ) return prev
+      const kept = prev.entries.slice(0, prev.index + 1)
+      kept.push(entry)
+      const trimmed = kept.length > NAV_HISTORY_LIMIT ? kept.slice(kept.length - NAV_HISTORY_LIMIT) : kept
+      return { entries: trimmed, index: trimmed.length - 1 }
+    })
+  }
   const handleRecordSelect = useCallback((index: number) => {
     if (
       timelineFocusIndexes !== null
@@ -517,26 +536,27 @@ export function TrajectoryView({
       navSuppress.current = false
       return
     }
-    setNav((prev) => {
-      if (prev.entries[prev.index] === index) return prev
-      const kept = prev.entries.slice(0, prev.index + 1)
-      kept.push(index)
-      const trimmed = kept.length > NAV_HISTORY_LIMIT ? kept.slice(kept.length - NAV_HISTORY_LIMIT) : kept
-      return { entries: trimmed, index: trimmed.length - 1 }
-    })
+    pushNav({ kind: 'record', index })
   }, [timelineFocusIndexes])
   const navigateRecord = useCallback((delta: number) => {
     const next = nav.index + delta
     if (next < 0 || next >= nav.entries.length) return
-    const index = nav.entries[next]
-    navSuppress.current = true
+    const entry = nav.entries[next]
+    if (entry === undefined) return
     setNav({ entries: nav.entries, index: next })
+    if (entry.kind === 'range') {
+      setTimelineSelection(entry.range)
+      return
+    }
+    navSuppress.current = true
     setTimelineSelection(null)
-    setTimelineRecordSelection({ index })
-    setSelectedTimelineIndex(index)
+    setTimelineRecordSelection({ index: entry.index })
+    setSelectedTimelineIndex(entry.index)
   }, [nav])
   const handleTimelineRangeChange = useCallback((range: TrajectoryTimeRange | null) => {
     setTimelineSelection(range)
+    /* one committed range = one history step; a reset is not a step */
+    if (range !== null) pushNav({ kind: 'range', range })
   }, [])
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

@@ -1028,21 +1028,21 @@
   box-sizing: border-box;
   flex-direction: column;
   padding-bottom: calc(12px + var(--dsh-trajectory-bottom-clearance, 0px));
-  overflow: hidden;
-}
-
-.detailBodySummary > .overview {
-  flex: 0 1 auto;
-  min-height: 0;
-  padding-bottom: 0;
-  overflow: auto;
+  /* one scroll container for the whole summary: long attributes, sections and
+     previews must all be reachable, not clipped below the fold */
+  overflow-y: auto;
   overscroll-behavior: contain;
 }
 
+.detailBodySummary > .overview {
+  flex: none;
+  padding-bottom: 0;
+  overflow: visible;
+}
+
 .detailBodySummary > .compactedSummary {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
+  flex: none;
+  overflow: visible;
 }
 
 .summaryScrollRegion {

@@ -720,20 +720,22 @@ function collapseTurnRecords(
   })
 }
 
-function assistantToolCalls(
-  records: readonly TableRecord[],
-  assistantIndex: number,
-): readonly TableRecord[] {
-  const at = records.findIndex(record => record.cell.index === assistantIndex)
-  if (at === -1 || records[at]?.cell.kind !== 'message') return []
-  const calls: TableRecord[] = []
-  for (let i = at + 1; i < records.length; i++) {
-    const record = records[i]
-    if (record === undefined) break
-    if (record.cell.kind !== 'tool' && record.cell.kind !== 'subtool') break
-    calls.push(record)
+/** Message cell indexes that are followed by at least one tool call. One pass, so
+ *  the fold pass below does not turn into O(messages x records). */
+function messageIndexesWithCalls(records: readonly TableRecord[]): Set<number> {
+  const out = new Set<number>()
+  let message: number | null = null
+  for (const record of records) {
+    const kind = record.cell.kind
+    if (kind === 'message') {
+      message = record.cell.index
+    } else if (kind === 'tool' || kind === 'subtool') {
+      if (message !== null) out.add(message)
+    } else {
+      message = null
+    }
   }
-  return calls
+  return out
 }
 
 function summarizeCalls(
@@ -2409,6 +2411,7 @@ export function TrajectoryTable({
     () => indexRequestNumbers(sessionRequestNumbers),
     [sessionRequestNumbers],
   )
+  const messagesWithCalls = useMemo(() => messageIndexesWithCalls(allRecords), [allRecords])
   const records = useMemo(() => {
     if (searchMatchIndexes !== null) return filterRecords(allRecords, searchMatchIndexes)
     type Summary = { tools: number; steps: Set<string>; names: string[]; durationMs: number | null }
@@ -2530,7 +2533,7 @@ export function TrajectoryTable({
       // must mirror the fold control rendered below, or the connector geometry
       // (elbow stops at the dot) desynchronises from the dot that is actually there
       const hasFold = (record.turnStart && record.turn !== null)
-        || (kind === 'message' && assistantToolCalls(allRecords, record.cell.index).length > 0)
+        || (kind === 'message' && messagesWithCalls.has(record.cell.index))
         || (kind === 'message' && collapsedAssistants.has(trajectoryRecordId(record.cell)))
         || (kind === 'tool' && nextKind === 'subtool')
       if (hasFold) (record as TableRecord).hasFold = true
@@ -2549,7 +2552,7 @@ export function TrajectoryTable({
       }
     }
     return out
-  }, [allRecords, collapsedAssistants, collapsedTools, collapsedTurns, searchMatchIndexes, callMeta])
+  }, [allRecords, collapsedAssistants, collapsedTools, collapsedTurns, messagesWithCalls, searchMatchIndexes, callMeta])
 
   const projectedVirtualRows = useMemo(
     () => groupTrajectoryVirtualRows(records),
@@ -3255,7 +3258,7 @@ export function TrajectoryTable({
                         }
                         if (
                           record.cell.kind === 'message'
-                      && assistantToolCalls(allRecords, record.cell.index).length > 0
+                      && messagesWithCalls.has(record.cell.index)
                         ) {
                           event.preventDefault()
                           onToggleAssistant(trajectoryRecordId(record.cell))
@@ -3276,7 +3279,7 @@ export function TrajectoryTable({
                           event.preventDefault()
                           const id = trajectoryRecordId(record.cell)
                           if (record.cell.kind === 'message' && collapsedAssistants.has(id) === false
-                            && assistantToolCalls(allRecords, record.cell.index).length > 0) {
+                            && messagesWithCalls.has(record.cell.index)) {
                             onToggleAssistant(id)
                             return
                           }
@@ -3362,7 +3365,7 @@ export function TrajectoryTable({
                                 const id = trajectoryRecordId(record.cell)
                                 const collapsedHere = collapsedAssistants.has(id)
                                 const messageFold = record.cell.kind === 'message'
-                                  && (collapsedHere || assistantToolCalls(allRecords, record.cell.index).length > 0)
+                                  && (collapsedHere || messagesWithCalls.has(record.cell.index))
                                 const next = records[position + 1]
                                 const toolFold = toolLike && next !== undefined && next.cell.kind === 'subtool'
                                 const turnFold = record.turnStart && record.turn !== null && !isCollapsedSummary

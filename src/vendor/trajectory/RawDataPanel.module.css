@@ -194,3 +194,14 @@
   cursor: pointer;
   padding: 0;
 }
+/* search hits */
+.mark {
+  padding: 0 1px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--dsw-alias-state-warn-label, #dd8629) 32%, transparent);
+  color: inherit;
+}
+
+.line[data-hit] {
+  background: color-mix(in srgb, var(--dsw-alias-state-warn-label, #dd8629) 8%, transparent);
+}
