@@ -15,7 +15,8 @@
 
 /** 已知 token 字段（顺序即文档顺序）。 */
 export const FIELDS = [
-  'tool', 'type', 'kind', 'status', 'turn', 'ms', 'code', 'args', 'result', 'error', 'text',
+  'role', 'kind', 'type', 'model', 'provider', 'source', 'form', 'step', 'turn',
+  'tool', 'status', 'ms', 'code', 'args', 'result', 'error', 'text',
 ]
 
 /** 文本类字段：值是子串，取反后表示「不包含」。 */
@@ -24,11 +25,12 @@ const TEXT_FIELDS = new Set(['args', 'result', 'error', 'text'])
 const STATUSES = new Set(['error', 'running', 'ok'])
 
 /**
- * 记录类型：`type:` 的取值**就是**上游 `TrajectoryCellKind` 的封闭集合
+ * 行种类：`kind:` 的取值**就是**上游 `TrajectoryCellKind` 的封闭集合
  * （`src/vendor/trajectory/trajectory-record.ts`），不是本项目自造的词汇。
- * `assistant` 是上游会话节点的 kind，作为 `message` 的等价别名保留。
+ * `assistant` 是上游会话节点的 kind，作为 `message` 的等价别名保留；
+ * `type:` 是 `kind:` 的旧名字，解析时归一化。
  */
-const TYPE_ALIASES = new Map([
+const KIND_ALIASES = new Map([
   ['tool', ['tool']],
   ['subtool', ['subtool']],
   ['message', ['message']],
@@ -39,8 +41,20 @@ const TYPE_ALIASES = new Map([
   ['compacted', ['compacted']],
 ])
 
-/** 建议菜单用的类型全集（不含别名）。 */
-export const TYPES = [...TYPE_ALIASES.keys()]
+/** 建议菜单用的行种类全集（不含别名）。 */
+export const KINDS = [...KIND_ALIASES.keys()]
+
+/**
+ * 行的角色：这一行说的是谁发的。上下文注入在日志里就是 `user` 角色的消息，
+ * 所以 `role:user` 同时覆盖用户行与上下文行；只看上下文用 `kind:context`。
+ */
+const ROLES = new Set(['user', 'assistant', 'system', 'tool'])
+
+/** 建议菜单用的角色全集。 */
+export const ROLE_VALUES = [...ROLES]
+
+/** 名字类字段：等值（忽略大小写）或 `*` 通配，`|` 并列。 */
+const NAME_FIELDS = new Set(['model', 'provider', 'source', 'form'])
 
 /** 空查询。 */
 export function emptyQuery() {
@@ -49,9 +63,15 @@ export function emptyQuery() {
     filters: {
       tool: [], notTool: [],
       status: [], notStatus: [],
+      role: [], notRole: [],
+      kind: [], notKind: [],
+      model: [], notModel: [],
+      provider: [], notProvider: [],
+      source: [], notSource: [],
+      form: [], notForm: [],
       turn: [], notTurn: [], turnRanges: [], notTurnRanges: [],
+      step: [], notStep: [], stepRanges: [], notStepRanges: [],
       code: [], notCode: [], codeAll: false, notCodeAll: false,
-      type: [], notType: [],
       msMin: null, msMax: null,
       text: [], notText: [],
       args: [], notArgs: [],
@@ -113,8 +133,9 @@ function parseToken(word) {
   /* a bare word (or a leading `-` with no field) is full-text search; `-word`
      excludes the word instead of searching for the literal hyphen */
   if (colon <= 0) return { kind: 'text', value: body, raw: word, negated, valid: body !== '' }
-  /* `kind:` is an accepted alias of `type:`; both mean the record kind */
-  const field = body.slice(0, colon) === 'kind' ? 'type' : body.slice(0, colon)
+  /* `type:` is the old name of `kind:`; both mean the record kind */
+  const rawField = body.slice(0, colon)
+  const field = rawField === 'type' ? 'kind' : rawField
   const value = body.slice(colon + 1)
   if (!FIELDS.includes(field)) {
     /* `http://…` or any unknown `a:b` is still a search term; the `-` keeps
@@ -143,10 +164,27 @@ function parseToken(word) {
       ? { kind: 'code', value, raw: word, negated, valid: true }
       : { kind: 'code', value, raw: word, negated, valid: false }
   }
-  if (field === 'type') {
-    return value.split('|').every(item => TYPE_ALIASES.has(item))
-      ? { kind: 'type', value, raw: word, negated, valid: true }
-      : { kind: 'type', value, raw: word, negated, valid: false }
+  if (field === 'kind') {
+    return value.split('|').every(item => KIND_ALIASES.has(item))
+      ? { kind: 'kind', value, raw: word, negated, valid: true }
+      : { kind: 'kind', value, raw: word, negated, valid: false }
+  }
+  if (field === 'role') {
+    return value.split('|').every(item => ROLES.has(item))
+      ? { kind: 'role', value, raw: word, negated, valid: true }
+      : { kind: 'role', value, raw: word, negated, valid: false }
+  }
+  if (field === 'step') {
+    const stepRange = /^(\d+)-(\d+)$/.exec(value)
+    const stepSingle = /^\d+$/.exec(value)
+    return stepRange !== null || stepSingle !== null
+      ? { kind: 'step', value, raw: word, negated, valid: true }
+      : { kind: 'step', value, raw: word, negated, valid: false }
+  }
+  if (NAME_FIELDS.has(field)) {
+    return value === ''
+      ? { kind: field, value, raw: word, negated, valid: false }
+      : { kind: field, value, raw: word, negated, valid: true }
   }
   if (TEXT_FIELDS.has(field)) {
     return value === ''
@@ -194,12 +232,40 @@ function applyToken(filters, token) {
       filters[key('code')].push(Number(token.value))
       return
     }
-    case 'type': {
-      const kinds = filters[key('type')]
+    case 'kind': {
+      const kinds = filters[key('kind')]
       for (const alias of token.value.split('|')) {
-        for (const kind of TYPE_ALIASES.get(alias) ?? []) {
+        for (const kind of KIND_ALIASES.get(alias) ?? []) {
           if (!kinds.includes(kind)) kinds.push(kind)
         }
+      }
+      return
+    }
+    case 'role': {
+      const roles = filters[key('role')]
+      for (const role of token.value.split('|')) {
+        if (ROLES.has(role) && !roles.includes(role)) roles.push(role)
+      }
+      return
+    }
+    case 'step': {
+      const range = /^(\d+)-(\d+)$/.exec(token.value)
+      if (range === null) {
+        filters[key('step')].push(Number(token.value))
+      } else {
+        const from = Number(range[1])
+        const to = Number(range[2])
+        filters[key('stepRanges')].push([Math.min(from, to), Math.max(from, to)])
+      }
+      return
+    }
+    case 'model':
+    case 'provider':
+    case 'source':
+    case 'form': {
+      const patterns = filters[key(token.kind)]
+      for (const pattern of token.value.split('|')) {
+        if (pattern !== '' && !patterns.includes(pattern)) patterns.push(pattern)
       }
       return
     }
@@ -271,8 +337,22 @@ const lower = (value) => (typeof value === 'string' ? value.toLowerCase() : '')
 function matchesFilters(subject, filters) {
   const kind = subject.kind ?? ''
   const isTool = kind === 'tool' || kind === 'subtool'
-  if (filters.type.length > 0 && !filters.type.includes(kind)) return false
-  if (filters.notType.includes(kind)) return false
+  if (filters.kind.length > 0 && !filters.kind.includes(kind)) return false
+  if (filters.notKind.includes(kind)) return false
+  const role = subject.role ?? ''
+  if (filters.role.length > 0 && !filters.role.includes(role)) return false
+  if (filters.notRole.includes(role)) return false
+  if (filters.step.length > 0 && !filters.step.includes(subject.step)) return false
+  if (filters.stepRanges.length > 0
+    && !filters.stepRanges.some(([from, to]) => subject.step >= from && subject.step <= to)) return false
+  if (filters.notStep.includes(subject.step)) return false
+  if (filters.notStepRanges.some(([from, to]) => subject.step >= from && subject.step <= to)) return false
+  for (const field of ['model', 'provider', 'source', 'form']) {
+    const wanted = filters[field]
+    if (wanted.length > 0 && !wanted.some(pattern => matchesName(subject[field] ?? '', pattern))) return false
+    const unwanted = filters[`not${field[0].toUpperCase()}${field.slice(1)}`]
+    if (unwanted.length > 0 && unwanted.some(pattern => matchesName(subject[field] ?? '', pattern))) return false
+  }
   /* tool: can only ever match a call; asking for a tool must hide every other
      kind instead of testing the message's display name against it */
   if (filters.tool.length > 0
@@ -362,8 +442,19 @@ function cellSubject(cell, meta) {
   const inputSide = cell.inputDetail ?? ''
   const outputSide = cell.outputDetail ?? cell.result ?? cell.text ?? ''
   const errorText = cell.isError === true ? (cell.outputDetail ?? cell.result ?? cell.text ?? '') : ''
+  /* the row's role: who said it. A context injection is a `user` message in the
+     log, so `role:user` covers both; `kind:context` narrows it. */
+  const role = kind === 'user' || kind === 'context'
+    ? 'user'
+    : kind === 'message' ? 'assistant' : kind === 'system' ? 'system' : isTool ? 'tool' : undefined
   return {
     kind,
+    role,
+    step: meta?.step,
+    model: meta?.model,
+    provider: meta?.provider,
+    source: cell.contextProducer?.label ?? undefined,
+    form: cell.contextForm,
     name: isTool ? (cell.toolName ?? '') : kind,
     status,
     turn: cell.turn ?? meta?.turn,
@@ -389,8 +480,10 @@ function cellSubject(cell, meta) {
  * 一条树记录是否命中当前查询——与工具索引共用同一份判据。
  * @param {any} cell `TrajectoryCellProps`。
  * @param {ReturnType<typeof emptyQuery>} query 解析结果。
- * @param {{durationMs?: number, errorCode?: string, turn?: number}} [meta]
- *   工具索引里的耗时 / 错误码，以及记录所属回合（cell 本身不带 turn）。
+ * @param {{durationMs?: number, errorCode?: string, turn?: number, step?: number,
+ *   model?: string, provider?: string}} [meta]
+ *   工具索引里的耗时 / 错误码，以及记录所属的回合与步骤（cell 本身只带内容与种类），
+ *   还有那一步请求的模型与提供方。
  * @returns {boolean}
  */
 export function matchesCell(cell, query, meta) {

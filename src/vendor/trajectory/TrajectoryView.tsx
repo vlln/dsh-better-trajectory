@@ -454,16 +454,35 @@ export function TrajectoryView({
      message that does not match, otherwise `status:error` leaves the list full
      of irrelevant context rows */
   const allCells = useMemo(() => timelineTurns.flatMap(turn => turn.groups.flatMap(group =>
-    group.cells.map(cell => ({ cell, turn: turn.turn })))), [timelineTurns])
+    group.cells.map(cell => ({ cell, turn: turn.turn, step: group.step ?? null })))), [timelineTurns])
+  /* the request each step made: its model and provider are facts of the step, so a
+     call row answers `model:` with the model that produced it */
+  const requestFacts = useMemo(() => {
+    const facts = new Map<string, { provider?: string; model?: string }>()
+    for (const request of requestNumbers) {
+      if (request.step === 0 || request.turn === null) continue
+      facts.set(`${request.turn}\u0000${request.step}`, {
+        ...(request.provider === undefined ? {} : { provider: request.provider }),
+        ...(request.model === undefined ? {} : { model: request.model }),
+      })
+    }
+    return facts
+  }, [requestNumbers])
   const matchedCells = useMemo(() => {
     const set = new Set<number>()
     if (!query.active) return set
-    for (const { cell, turn } of allCells) {
+    for (const { cell, turn, step } of allCells) {
       const indexed = cell.callId === undefined ? undefined : callMeta.get(cell.callId)
-      if (matchesCell(cell, query, { ...indexed, turn })) set.add(cell.index)
+      const facts = step === null || turn === null ? undefined : requestFacts.get(`${turn}\u0000${step}`)
+      if (matchesCell(cell, query, {
+        ...indexed,
+        turn,
+        ...(step === null ? {} : { step }),
+        ...(facts ?? {}),
+      })) set.add(cell.index)
     }
     return set
-  }, [allCells, callMeta, query])
+  }, [allCells, callMeta, query, requestFacts])
   const toolStats = useMemo(() => {
     let errors = 0
     let running = 0

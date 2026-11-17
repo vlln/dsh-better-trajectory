@@ -47,9 +47,10 @@ fork 里有三个宿主内部值导入，原生包会打包它们，这里用 `s
 
 ### 查询语法
 
-`src/client/query.mjs`（纯函数，21 个单测）：`tool:` / `status:` / `turn:` / `turn:a-b` /
-`ms:>/</a-b` / `code:` / `type:`，`-` 前缀取反，其余词按自由文本 AND。未知字段回退为文本，
-非法值保留 token 但不参与过滤。`src/client/filter.mjs` 提供工具索引与统计（13 个单测）。
+`src/client/query.mjs`（纯函数，25 个单测）：`role:` / `kind:`（`type:` 是旧名）/ `model:` /
+`provider:` / `source:` / `form:` / `step:` / `step:a-b` / `turn:` / `tool:` / `status:` /
+`ms:>/</a-b` / `code:` / `args:` / `result:` / `error:` / `text:`，`-` 前缀取反，其余词按自由文本
+AND。未知字段回退为文本，非法值保留 token 但不参与过滤。`src/client/filter.mjs` 提供工具索引与统计（13 个单测）。
 
 判据只有一份（`matchesFilters`），`matchesQuery`（工具索引）与 `matchesCell`（树记录）都走它。
 

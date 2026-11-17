@@ -127,7 +127,7 @@
 - 统计行左端与第一行 `←` 箭头的**视觉左缘**对齐（箭头在 22px 热区里内缩约 8px，统计行同样内缩 8px，否则文字会顶到热区外沿显得没对齐）。
 - 统计行（第二行）左边是「标签 + 数值」：标签统一 2 字（记录 / 调用 / 错误 / 时长）、灰色 10px，数值等宽 11px、tabular-nums，所以四列天然对齐；错误数在非 0 时整列变红。
 - 筛选区贴右，并在其左侧有一条 1px 发丝线——「窗口里有多少」和「筛出了什么」是两个问题，靠线分开，不靠间距猜。
-- 建议菜单：左侧灰字是**查询语法本身**（`tool:` `status:` `turn:` `ms:` `type:`），保持英文、等宽、不本地化；右侧是值，再右是计数。
+- 建议菜单：左侧灰字是**查询语法本身**（`tool:` `role:` `kind:` `status:` `turn:` `step:` `ms:`），保持英文、等宽、不本地化；右侧是值，再右是计数。
   - 键盘：`↑↓` 移动预选（滚出可视区自动跟随）、`Tab` / `Enter` 采纳、`Esc` 关闭。
   - 预选行只用**灰色**：6% 底 + 1px 轻阴影 + label 加粗。不要左侧色轨——`--bt-accent` 在本主题解析成近黑（`#0f1115`），那条 2px 会变成一道黑边；也不要用 `--dsw-alias-bg-layer-2`（解析成 `#fff`，等于没有预选态）。
   - 输入字段前缀（`ty`、`st`）先列该字段的值；输入值是值内过滤（`b` → `bash` / `glob`）。
@@ -220,7 +220,7 @@
 - **筛选作用于所有记录类型**：工具 / 子调用 / 助手 / 用户 / 上下文 / 压缩点都过同一份判据（`matchesCell`），不命中就隐藏；否则 `status:error` 会留下满屏助手消息，反而看不出筛掉了什么。`tool:` 只可能命中调用，`status:` / `code:` / `ms:` 对消息使用各自的真实字段。
 - **没有「本组 N 条被过滤」行**：过滤后每个组都掉一条时，那行比内容还密；被过滤的总数只在 chip 行说一次。
 - **前进 / 后退**：工具栏最左 `← →`，记录「打开的记录」和「提交的时间轴选区」两类步骤，上限 50 条（超出丢弃最早的）；一次拖拽只记一步（`onRangeChange` 只在提交时触发），输入框内不触发快捷键 `Alt+←` / `Alt+→`。
-- **类型筛选**：`type:call|message|user|system|context|compacted`，支持 `|` 与 `-`；建议菜单有 `type:` 组。`call` = 工具 + 子调用，`assistant` 是 `message` 的别名。
+- **角色与种类是两件事**：`role:` 说这一行是谁发的（user / assistant / system / tool），`kind:` 说它是哪种行（tool / subtool / message / user / context / system / compacted）。`role:user` 同时覆盖用户行与上下文行，`kind:context` 用来收窄。建议菜单两组都有。
 - 工具栏右侧不再放任何「快捷筛选」按钮：`错误 / 运行中 / 慢 / 平铺` 已删除，筛选只走查询条 token（`status:error`、`ms:>1000` 等）。
 
 ### 6.1.0a 查询语法（唯一事实来源）
@@ -230,7 +230,13 @@
 | token | 值 | 匹配谁 | 说明 |
 |---|---|---|---|
 | `tool:bash` | 名字 | 只有 `tool` / `subtool` | 等值（忽略大小写）；支持 `*` 通配与 `\|` 并列：`tool:todo*`、`tool:bash\|read` |
-| `type:message` | 台账行类型 | 所有记录 | **就是上游 `TrajectoryCellKind` 的封闭集合**：`tool` / `subtool` / `message` / `user` / `context` / `system` / `compacted`。`assistant` 是上游消息节点的等价别名；`kind:` 是字段别名。「全部调用」写 `type:tool\|subtool` |
+| `role:assistant` | user / assistant / system / tool | 所有记录 | 这一行说的是谁发的：用户与上下文 → `user`（注入上下文在日志里本来就是 `user` 消息），助手 → `assistant`，系统 → `system`，调用/子调用 → `tool` |
+| `kind:message` | 行种类 | 所有记录 | **就是上游 `TrajectoryCellKind` 的封闭集合**：`tool` / `subtool` / `message` / `user` / `context` / `system` / `compacted`。`assistant` 是消息的等价别名；`type:` 是 `kind:` 的旧名字。「全部调用」写 `kind:tool\|subtool` |
+| `model:gpt-6.1-sol` | 模型名 | 所有记录 | 该行**所在步骤**请求的模型（行继承它那一步的请求）；支持 `*` 与 `\|` |
+| `provider:deepapi` | 提供方 | 所有记录 | 同上，来自步骤的请求 |
+| `source:tool-jobs` | 上下文来源 | 上下文行 | producer 标签（`tool-jobs` / `time-context` / `AGENTS.md`…）；其他行没有这个字段 |
+| `form:notice` | 上下文形式 | 上下文行 | `notice` / `snapshot` / `instructions` / `catalog` / `relay` … |
+| `step:120` | 数字或 `A-B` | 所有记录 | 步骤号，**每轮从 1 重新开始**；区间闭区间 |
 | `status:error` | ok / error / running | 所有记录 | `\|` 并列；中断（interrupted）算 error |
 | `turn:12` | 数字或 `A-B` | 所有记录 | 区间闭区间 |
 | `ms:>1000` | `>` `<` `>=` `<=` 或 `A-B` | 有耗时的记录 | 消息用生成耗时；没有耗时的记录不匹配 |
@@ -255,6 +261,7 @@
 
 - 只接受这 7 个（+ `assistant` 别名）；`type:call` 这种自造词会被标成非法 chip 并忽略——早先版本确实发明过 `call`，已删除。
 - 这 7 个名字来自上游的 `TrajectoryCellKind`（`src/vendor/trajectory/trajectory-record.ts`，fork 自内置包），本项目没有另起一套。
+- **`type:` 不再指日志的事件类型**。日志的 `type` 是两级路径（`user/message`、`tool/call`…），而一行本来就是若干事件合并出来的，拿它当轴粒度反了；`role` / `model` / `provider` / `step` / `source` / `form` 才是行上稳定的字段。`type:` 保留为 `kind:` 的别名，老查询继续可用。
 
 条件与输入是两套状态：
 

@@ -242,10 +242,46 @@ test('code:* means the record has an error code', () => {
   assert.equal(matchesCell(cell(), query), false)
 })
 
-test('kind: is an alias of type:', () => {
+test('type: is the old name of kind:', () => {
   const query = parseQuery('kind:message')
-  assert.equal(query.tokens[0].kind, 'type')
+  assert.equal(query.tokens[0].kind, 'kind')
   assert.equal(matchesCell(cell(), query), true)
   assert.equal(matchesCell(cell({ kind: 'user' }), query), false)
   assert.equal(matchesCell(cell({ kind: 'message' }), parseQuery('kind:assistant')), true)
+  assert.equal(matchesCell(cell({ kind: 'message' }), parseQuery('type:message')), true)
+})
+
+test('role: follows who said the row', () => {
+  assert.equal(matchesCell(cell({ kind: 'user' }), parseQuery('role:user')), true)
+  assert.equal(matchesCell(cell({ kind: 'context' }), parseQuery('role:user')), true)
+  assert.equal(matchesCell(cell({ kind: 'message' }), parseQuery('role:assistant')), true)
+  assert.equal(matchesCell(cell({ kind: 'tool' }), parseQuery('role:tool')), true)
+  assert.equal(matchesCell(cell({ kind: 'message' }), parseQuery('role:user')), false)
+  assert.equal(matchesCell(cell({ kind: 'context' }), parseQuery('kind:context')), true)
+  assert.equal(matchesCell(cell({ kind: 'user' }), parseQuery('kind:context')), false)
+  assert.equal(parseQuery('role:nope').tokens[0].valid, false)
+})
+
+test('step: matches a number or a range', () => {
+  assert.equal(matchesCell(cell(), parseQuery('step:12'), { step: 12 }), true)
+  assert.equal(matchesCell(cell(), parseQuery('step:12'), { step: 13 }), false)
+  assert.equal(matchesCell(cell(), parseQuery('step:10-20'), { step: 13 }), true)
+  assert.equal(matchesCell(cell(), parseQuery('step:10-20'), { step: 21 }), false)
+  assert.equal(matchesCell(cell(), parseQuery('-step:12'), { step: 12 }), false)
+  assert.equal(parseQuery('step:x').tokens[0].valid, false)
+})
+
+test('model:, provider:, source: and form: match by name', () => {
+  const meta = { model: 'gpt-6.1-sol', provider: 'deepapi' }
+  assert.equal(matchesCell(cell(), parseQuery('model:gpt-6.1-sol'), meta), true)
+  assert.equal(matchesCell(cell(), parseQuery('model:gpt-6.1*'), meta), true)
+  assert.equal(matchesCell(cell(), parseQuery('model:gpt-4'), meta), false)
+  assert.equal(matchesCell(cell(), parseQuery('provider:deep*'), meta), true)
+  assert.equal(matchesCell(cell(), parseQuery('-provider:deep*'), meta), false)
+  const context = cell({ kind: 'context', contextProducer: { role: 'inject', label: 'tool-jobs' }, contextForm: 'notice' })
+  assert.equal(matchesCell(context, parseQuery('source:tool-jobs')), true)
+  assert.equal(matchesCell(context, parseQuery('source:time-context')), false)
+  assert.equal(matchesCell(context, parseQuery('form:notice')), true)
+  assert.equal(matchesCell(context, parseQuery('form:snapshot')), false)
+  assert.equal(matchesCell(cell(), parseQuery('source:tool-jobs')), false)
 })

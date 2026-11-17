@@ -133,9 +133,14 @@ function buildSuggestions(props: QueryBarProps, lastWord: string): Suggestion[] 
       if (wholeGroup('turn') || match(String(turn.turn))) out.push({ insert: `turn:${turn.turn}`, label: String(turn.turn), detail: String(turn.count), group: 'turn:' })
     }
   }
-  if (field === '' || field === 'type') {
-    for (const type of ['tool', 'subtool', 'message', 'user', 'system', 'context', 'compacted']) {
-      if (wholeGroup('type') || match(type)) out.push({ insert: `type:${type}`, label: type, group: 'type:' })
+  if (field === '' || field === 'role') {
+    for (const role of ['user', 'assistant', 'system', 'tool']) {
+      if (wholeGroup('role') || match(role)) out.push({ insert: `role:${role}`, label: role, group: 'role:' })
+    }
+  }
+  if (field === '' || field === 'kind' || field === 'type') {
+    for (const kind of ['tool', 'subtool', 'message', 'user', 'system', 'context', 'compacted']) {
+      if (wholeGroup('kind') || wholeGroup('type') || match(kind)) out.push({ insert: `kind:${kind}`, label: kind, group: 'kind:' })
     }
   }
   if (field === '' || field === 'ms') {
@@ -361,9 +366,15 @@ export function QueryBar(props: QueryBarProps) {
               <p className={css.syntaxLead}>{qt('syntax.lead')}</p>
               <dl className={css.syntaxGrid}>
                 <dt>tool:bash</dt><dd>{qt('syntax.tool')}</dd>
-                <dt>type:message</dt><dd>{qt('syntax.type')}</dd>
+                <dt>role:assistant</dt><dd>{qt('syntax.role')}</dd>
+                <dt>kind:context</dt><dd>{qt('syntax.type')}</dd>
+                <dt>model:gpt-6.1</dt><dd>{qt('syntax.model')}</dd>
+                <dt>provider:deepseek</dt><dd>{qt('syntax.provider')}</dd>
+                <dt>source:tool-jobs</dt><dd>{qt('syntax.source')}</dd>
+                <dt>form:notice</dt><dd>{qt('syntax.form')}</dd>
                 <dt>status:error</dt><dd>{qt('syntax.status')}</dd>
                 <dt>turn:2-5</dt><dd>{qt('syntax.turn')}</dd>
+                <dt>step:120-180</dt><dd>{qt('syntax.step')}</dd>
                 <dt>ms:&gt;1000</dt><dd>{qt('syntax.ms')}</dd>
                 <dt>code:401</dt><dd>{qt('syntax.code')}</dd>
                 <dt>args:path</dt><dd>{qt('syntax.args')}</dd>
