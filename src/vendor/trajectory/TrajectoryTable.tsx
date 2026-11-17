@@ -2618,14 +2618,11 @@ export function TrajectoryTable({
              (and the virtual list may unmount it), so its card would freeze over
              the list: scrolling ends the hover */
           if (hoverCard !== null) setHoverCard(null)
-          if (hiddenIndexes === null && pane.scrollTop <= OLDER_LOAD_THRESHOLD_PX) {
-            noteTopIntent()
-          }
+          if (pane.scrollTop <= OLDER_LOAD_THRESHOLD_PX) noteTopIntent()
         }}
         onWheel={(event) => {
           if (event.deltaY >= 0) return
           if (event.currentTarget.scrollTop > OLDER_LOAD_THRESHOLD_PX) return
-          if (hiddenIndexes !== null) return
           noteTopIntent()
         }}
         onClick={(event) => {
