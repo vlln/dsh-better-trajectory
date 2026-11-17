@@ -284,4 +284,8 @@ test('model:, provider:, source: and form: match by name', () => {
   assert.equal(matchesCell(context, parseQuery('form:notice')), true)
   assert.equal(matchesCell(context, parseQuery('form:snapshot')), false)
   assert.equal(matchesCell(cell(), parseQuery('source:tool-jobs')), false)
+  /* a missing field is not a match, `*` included */
+  assert.equal(matchesCell(cell(), parseQuery('source:*')), false)
+  assert.equal(matchesCell(context, parseQuery('source:*')), true)
+  assert.equal(matchesCell(cell(), parseQuery('-source:tool-jobs')), true)
 })

@@ -348,10 +348,13 @@ function matchesFilters(subject, filters) {
   if (filters.notStep.includes(subject.step)) return false
   if (filters.notStepRanges.some(([from, to]) => subject.step >= from && subject.step <= to)) return false
   for (const field of ['model', 'provider', 'source', 'form']) {
+    const value = subject[field] ?? ''
     const wanted = filters[field]
-    if (wanted.length > 0 && !wanted.some(pattern => matchesName(subject[field] ?? '', pattern))) return false
+    /* a row without the field is not a match, `*` included: `source:*` means
+       "has a source", not "is a row" */
+    if (wanted.length > 0 && (value === '' || !wanted.some(pattern => matchesName(value, pattern)))) return false
     const unwanted = filters[`not${field[0].toUpperCase()}${field.slice(1)}`]
-    if (unwanted.length > 0 && unwanted.some(pattern => matchesName(subject[field] ?? '', pattern))) return false
+    if (unwanted.length > 0 && unwanted.some(pattern => matchesName(value, pattern))) return false
   }
   /* tool: can only ever match a call; asking for a tool must hide every other
      kind instead of testing the message's display name against it */
