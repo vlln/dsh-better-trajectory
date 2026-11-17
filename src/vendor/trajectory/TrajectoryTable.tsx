@@ -2863,17 +2863,15 @@ export function TrajectoryTable({
                               style={{ '--bt-level': level } as CSSProperties}
                             >
                               {hiddenIndexes !== null && (
-                                /* a query drops rows, so the tree is gone: the
-                                   row states its own 轮/步 where the connector
-                                   would have been */
-                                <span className={css.rowPosition}>
-                                  {sectionLabel(record.turn, t)}
-                                  {record.step !== null && (
-                                    <>
-                                      <span className={css.rowPositionDot} aria-hidden="true">·</span>
-                                      {t('group.step', { step: record.step })}
-                                    </>
-                                  )}
+                                /* A query drops rows, so the tree is gone: the row
+                                   states its own position where the connector would
+                                   have been. Two numbers, one column, so the tag's
+                                   left edge never moves — the full `第 N 轮 · 第 M 步`
+                                   is in the row's hover card. */
+                                <span className={css.rowPosition} aria-hidden="true">
+                                  <span className={css.rowPositionTurn}>{record.turn ?? '–'}</span>
+                                  <span className={css.rowPositionDot}>·</span>
+                                  {record.step ?? '–'}
                                 </span>
                               )}
                               <span className={css.rails} aria-hidden="true">

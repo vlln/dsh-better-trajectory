@@ -2915,21 +2915,30 @@ tr[data-child-last] .rowLine::before {
 }
 
 /* 筛选态: the tree is replaced by the row's coordinates, in the slot the
-   connectors would have used */
+   connectors would have used. One right-aligned, tabular column: `轮·步`, so the
+   kind tag's left edge is the same on every row. */
 .rowPosition {
   flex: none;
-  margin-right: 8px;
-  color: var(--bt-text-3, #9aa1ab);
+  min-width: 52px;
+  margin-right: 10px;
+  color: var(--bt-text-2, #5b6470);
   font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.01em;
+  text-align: right;
   white-space: nowrap;
 }
 
+/* the turn is the same for a whole block of rows and the step changes on every
+   one: keep the turn quieter so the eye follows the number that moves */
+.rowPositionTurn {
+  opacity: 0.6;
+}
+
 .rowPositionDot {
-  margin: 0 4px;
-  opacity: 0.7;
+  margin: 0 2px;
+  opacity: 0.5;
 }
 
 .rail {
