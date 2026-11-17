@@ -2592,6 +2592,21 @@ tr[data-kind='system'] .rowName {
   color: var(--bt-context, #047857);
 }
 
+/* a context row's producer name reads like a tool's name: same slot, the
+   context identity colour. `display: none` above hides the generic slot for
+   context rows, so this one opts back in explicitly. */
+tr[data-kind='context'] .rowName[data-context-source] {
+  display: inline;
+  flex: none;
+  max-width: 220px;
+  overflow: hidden;
+  color: var(--bt-context, #047857);
+  font-weight: 600;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 tr[data-kind='tool'] .content::before,
 tr[data-kind='subtool'] .content::before {
   z-index: 1;

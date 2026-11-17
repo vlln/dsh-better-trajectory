@@ -568,6 +568,52 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
   /* keep the ref pointing at the latest closure while a hold is running */
   stepEarlierRef.current = stepEarlier
   stepLaterRef.current = stepLater
+  /* Both step arrows sit in the root's side padding, outside the plot: they are
+     always there (a dimmed arrow still says which way is closed), and they never
+     cover a bar or steal a gesture from the track. */
+  const edgeSteps = (
+    <>
+      <button
+        type="button"
+        className={css.edgeStep}
+        data-side="earlier"
+        aria-label={qt('timeline.earlier')}
+        title={qt('timeline.earlier')}
+        disabled={!canStepEarlier}
+        data-loading={loadingEarlier || undefined}
+        onPointerDown={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          if (event.button !== 0) return
+          startHold(() => { stepEarlierRef.current() })
+        }}
+        onPointerUp={stopHold}
+        onPointerLeave={stopHold}
+        onPointerCancel={stopHold}
+      >
+        <span aria-hidden="true">‹</span>
+      </button>
+      <button
+        type="button"
+        className={css.edgeStep}
+        data-side="later"
+        aria-label={qt('timeline.later')}
+        title={qt('timeline.later')}
+        disabled={!showsLaterBoundary}
+        onPointerDown={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          if (event.button !== 0) return
+          startHold(() => { stepLaterRef.current() })
+        }}
+        onPointerUp={stopHold}
+        onPointerLeave={stopHold}
+        onPointerCancel={stopHold}
+      >
+        <span aria-hidden="true">›</span>
+      </button>
+    </>
+  )
   const projectedDomainStyle = useMemo(() => (model === null
     ? undefined
     : {
@@ -654,6 +700,7 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
             </button>
           </div>
         </div>
+        {edgeSteps}
       </section>
     )
   }
@@ -861,45 +908,6 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
             event.preventDefault()
           }}
         >
-          <button
-            type="button"
-            className={css.edgeStep}
-            data-side="earlier"
-            aria-label={qt('timeline.earlier')}
-            title={qt('timeline.earlier')}
-            disabled={!canStepEarlier}
-            data-loading={loadingEarlier || undefined}
-            onPointerDown={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              if (event.button !== 0) return
-              startHold(() => { stepEarlierRef.current() })
-            }}
-            onPointerUp={stopHold}
-            onPointerLeave={stopHold}
-            onPointerCancel={stopHold}
-          >
-            <span aria-hidden="true">‹</span>
-          </button>
-          <button
-            type="button"
-            className={css.edgeStep}
-            data-side="later"
-            aria-label={qt('timeline.later')}
-            title={qt('timeline.later')}
-            disabled={!showsLaterBoundary}
-            onPointerDown={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              if (event.button !== 0) return
-              startHold(() => { stepLaterRef.current() })
-            }}
-            onPointerUp={stopHold}
-            onPointerLeave={stopHold}
-            onPointerCancel={stopHold}
-          >
-            <span aria-hidden="true">›</span>
-          </button>
           {hover !== null && (
             <div
               className={css.hoverLine}
@@ -950,6 +958,7 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
           )}
         </div>
       </div>
+      {edgeSteps}
     </section>
       {hover !== null && !panning && (() => {
         const cursorValue = domainStart + hover.fraction * domainDuration

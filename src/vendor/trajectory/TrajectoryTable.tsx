@@ -2513,13 +2513,12 @@ export function TrajectoryTable({
     if (pane === null) return
     const anchor = olderLoadAnchor.current
     if (anchor !== null && anchor.historyStartSeq !== historyStartSeq) {
-      /* At the top edge the reader is scrolling back through history: keep the
-         view at the top so the rows that just arrived are the ones on screen.
-         Anywhere else the pointer stays on the sentence it was reading, so the
-         prepended height is compensated instead. */
-      if (!anchor.atTop && !virtualizationEnabled) {
-        pane.scrollTop = anchor.scrollTop + pane.scrollHeight - anchor.scrollHeight
-      }
+      /* Prepending must never move the rows on screen: the height that arrived
+         above the viewport is added to scrollTop. This applies to the virtualized
+         list too — a virtual row is absolutely positioned, so the browser's own
+         scroll anchoring does not help there, and skipping it made the list jump
+         by a page under the reader's eyes. */
+      pane.scrollTop = anchor.scrollTop + pane.scrollHeight - anchor.scrollHeight
       olderLoadAnchor.current = null
       followsTableTail.current = false
       return
@@ -2967,6 +2966,12 @@ export function TrajectoryTable({
                                 />
                               </span>
                               {toolLike && <span className={css.rowName}>{rowName}</span>}
+                              {record.cell.kind === 'context'
+                                && (record.cell.contextProducer?.label ?? '') !== '' && (
+                                <span className={css.rowName} data-context-source>
+                                  {record.cell.contextProducer?.label}
+                                </span>
+                              )}
                               {rowTone !== 'ok' && (
                                 <span className={css.rowBadge} data-tone={rowTone}>
                                   {rowTone === 'error' ? qt('row.error') : qt('row.running')}
