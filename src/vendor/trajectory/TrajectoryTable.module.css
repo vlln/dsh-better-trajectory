@@ -2149,9 +2149,10 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
-  /* every row is exactly one 28px line, as in the native table: expanding a
-     node, or a long message, must never change a row's height */
-  height: 28px;
+  /* every row is exactly one line, as in the native table: expanding a node, or a
+     long message, must never change a row's height. The box fills the 30px row so
+     the rails of two neighbouring rows meet instead of leaving a 1px notch. */
+  height: 30px;
   overflow: hidden;
 }
 
@@ -2534,11 +2535,6 @@ tr[data-kind='subtool'] .rowName {
   font-size: 11px;
 }
 
-tr[data-kind='context'] .rowLine,
-tr[data-kind='system'] .rowLine {
-  height: 24px;
-}
-
 tr[data-kind='context'] .rowSub,
 tr[data-kind='system'] .rowSub {
   font-size: 10px;
@@ -2907,7 +2903,7 @@ tr[data-child-last] .rowLine::before {
   --bt-dot: 12px;
   --bt-pad-y: 0px;
   --bt-axis: calc(var(--bt-step) * var(--bt-level, 0) + var(--bt-dot));
-  --bt-marker-y: calc(var(--bt-pad-y) + 14px);
+  --bt-marker-y: calc(var(--bt-pad-y) + 15px);
   padding-left: calc(var(--bt-step) * var(--bt-level, 0));
   position: relative;
 }
@@ -3028,7 +3024,7 @@ tr[data-has-children] .rowLine::after {
   align-items: center;
   justify-content: center;
   width: 24px;
-  height: 28px;
+  height: 30px;
 }
 
 .rowChevron {
@@ -3042,7 +3038,7 @@ tr[data-has-children] .rowLine::after {
   justify-content: center;
   box-sizing: border-box;
   width: 24px;
-  height: 28px;
+  height: 30px;
   border-radius: 0;
   color: var(--bt-text-3, #9aa1ab);
   cursor: pointer;

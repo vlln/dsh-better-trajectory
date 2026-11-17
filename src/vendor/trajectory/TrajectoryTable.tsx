@@ -171,6 +171,8 @@ interface TableRecord {
   turnStart: boolean
   /** One of the rows the turn opens with, before its first assistant message. */
   turnOpening?: boolean
+  /** An opening row below the turn's first request row: it hangs on the turn's spine. */
+  spine?: boolean
   /** This row stands for a whole collapsed turn, so it sits at the turn's own depth. */
   turnSummary?: boolean
   cell: TrajectoryCellProps
@@ -570,20 +572,35 @@ function levelOf(record: TableRecord): number {
 
 function withStructuralLevels(records: readonly TableRecord[]): TableRecord[] {
   const levelled = records.map(record => ({ ...record, level: levelOf(record) }))
-  /* the drop line follows the depth of the next row, not the kind: the last row of
-     a turn's opening drops into its first assistant message, and that is the only
-     way a context source can hand the rail over to the content */
+  let turn: number | null | undefined
+  let rootSeen = false
   for (const [index, record] of levelled.entries()) {
+    if (record.turn !== turn) {
+      turn = record.turn
+      rootSeen = false
+    }
+    const root = record.turnStart === true
+    if (root) rootSeen = true
     const next = levelled[index + 1]
-    if (next !== undefined && next.level > record.level) record.hasChildren = true
-    else delete record.hasChildren
+    const sameTurn = next !== undefined && next.turn === record.turn
+    /* The turn's opening rows are all level 0, so they are siblings and no row is
+       their parent. They still belong to the turn: each one below the turn's first
+       request row hangs on the turn's spine — the vertical line the request row's
+       dot drops into. Without it the opening read as loose rows between the turn
+       marker and the assistant, and the assistant looked attached to the last
+       context source. */
+    record.spine = record.turnOpening === true && !root && rootSeen && sameTurn
+    /* the drop line follows the depth of the next row, not the kind: a message
+       drops into its calls, and the turn's first request row drops into the spine */
+    record.hasChildren = sameTurn
+      && (next.level > record.level || (record.turnStart === true && next.turnOpening === true))
   }
   return levelled
 }
 
 /** A query drops rows, so the tree has no continuity left: one flat level. */
 function withFlatLevels(records: readonly TableRecord[]): TableRecord[] {
-  return records.map(record => ({ ...record, level: 0, hasChildren: undefined }))
+  return records.map(record => ({ ...record, level: 0, hasChildren: false, spine: false }))
 }
 
 function flattenRecords(turns: readonly TrajectoryTurnModel[]): TableRecord[] {
@@ -2860,14 +2877,24 @@ export function TrajectoryTable({
                                 </span>
                               )}
                               <span className={css.rails} aria-hidden="true">
-                                {[1, 2, 3].filter(axisLevel => level >= axisLevel).map(axisLevel => {
+                                {[1, 2, 3]
+                                  .filter(axisLevel => level >= axisLevel
+                                    || (axisLevel === 1 && record.spine === true))
+                                  .map(axisLevel => {
                                   /* one rail per ancestor level. It runs down while a later
                                      row still descends below that ancestor, and stops on the
                                      last one — `childLast` was "I have no children", which cut
                                      the message's rail at every tool and broke the line between
                                      sibling calls. */
-                                  const stopsHere = nextRow === undefined
-                                    || nextLevel <= axisLevel - 1
+                                  /* a rail runs while the next row still hangs on
+                                     it: deeper than the axis, or one of the turn's
+                                     opening rows on the spine. It ends where the
+                                     turn ends. */
+                                  const continues = nextRow !== undefined
+                                    && nextRow.turn === record.turn
+                                    && (nextLevel >= axisLevel
+                                      || (axisLevel === 1 && nextRow.spine === true))
+                                  const stopsHere = !continues
                                   return (
                                     <i
                                       key={axisLevel}
