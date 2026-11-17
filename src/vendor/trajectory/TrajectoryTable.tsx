@@ -1938,12 +1938,6 @@ export function TrajectoryTable({
   const loadingOlder = useRef(false)
   const [olderLoading, setOlderLoading] = useState(false)
   const scrollBaseline = useRef<ScrollBaseline | null>(null)
-  /* The top edge follows *gestures*, not position: `topIntent` is set by an
-     upward scroll/wheel at the edge and consumed by the next page. Sitting at
-     scrollTop 0 therefore loads nothing — only continuing to scroll does. A
-     gesture made while a page is in flight stays latched, so holding the wheel
-     keeps the pages coming one after another. */
-  const topIntent = useRef(false)
   const allRecords = useMemo(() => {
     const records = flattenRecords(turns)
     return hiddenIndexes === null
@@ -2585,23 +2579,6 @@ export function TrajectoryTable({
 
   const olderBusy = olderHistoryLoading || olderLoading
   const showInitialLoading = historyLoading || !tableScrollReady
-  /* One page per gesture: an intent that arrived while a page was in flight is
-     honoured when it lands, an intent already consumed is not repeated. */
-  const [topIntentTick, setTopIntentTick] = useState(0)
-  const noteTopIntent = useCallback(() => {
-    topIntent.current = true
-    setTopIntentTick(value => value + 1)
-  }, [])
-  useEffect(() => {
-    if (olderBusy || !topIntent.current) return
-    const pane = tablePaneRef.current
-    if (pane === null || pane.scrollTop > OLDER_LOAD_THRESHOLD_PX) {
-      topIntent.current = false
-      return
-    }
-    topIntent.current = false
-    requestOlder(pane, true)
-  }, [olderBusy, requestOlder, topIntentTick])
 
   return (
     <div ref={rootRef} className={css.split} style={splitStyle} data-show-time={showTime ? undefined : 'false'}>
@@ -2618,12 +2595,16 @@ export function TrajectoryTable({
              (and the virtual list may unmount it), so its card would freeze over
              the list: scrolling ends the hover */
           if (hoverCard !== null) setHoverCard(null)
-          if (pane.scrollTop <= OLDER_LOAD_THRESHOLD_PX) noteTopIntent()
+          /* Ask on every scroll event, exactly like the native table: the request
+             itself refuses while a page is in flight and when the pane has moved
+             away from the top, so a continuous scroll keeps paging instead of
+             waiting for the gesture to end. */
+          requestOlder(pane, true)
         }}
         onWheel={(event) => {
           if (event.deltaY >= 0) return
           if (event.currentTarget.scrollTop > OLDER_LOAD_THRESHOLD_PX) return
-          noteTopIntent()
+          requestOlder(event.currentTarget, true)
         }}
         onClick={(event) => {
           if (event.target === event.currentTarget) clearAllSelections()
