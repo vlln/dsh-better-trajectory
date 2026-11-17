@@ -73,6 +73,11 @@ AND。未知字段回退为文本，非法值保留 token 但不参与过滤。`
 ## 已验证
 
 - 宿主 **0.2.2-rc.2**（2026-11-14），隔离 web profile，端口 3197。
+- 门禁：`npm run verify` 全绿，43 个单测（query 34 / filter 5 / locales 4）。
+- 发布通道实测（2026-11-16）：`dsh plugin --profile web add github:vlln/dsh-better-trajectory`
+  在干净 `DSH_HOME` 里装上（1m15s），启动后 `/plugins/??dsh-better-trajectory/client.js`
+  返回 200、502 KB，`__ModuleLoader__.load` 的 id 正确；`npm pack` 的 tarball（17 个文件、
+  925 KB）同样装上并起站验证过。
 - 单页签接管：只剩「对话 / 轨迹」，旧的 `Trajectory+`、筛选栏、调试面板、JSON 浮层已删。
 - 查询：`tool:bash` → 36/100（只有调用行，助手/用户/上下文同时隐藏）；大会话本窗口 50 条实测
   `role:assistant` 25 / `role:tool` 23 / `kind:context` 2 / `source:tool-jobs` 1 / `step:170-180` 10 /
