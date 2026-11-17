@@ -3,9 +3,7 @@
   z-index: 1;
   isolation: isolate;
   flex: none;
-  /* one arrow column at each end, flush against the plot and exactly its
-     height; they sit outside the plotted area so they never cover a bar */
-  padding: 0 18px;
+  padding: 0;
   border-bottom: 0.5px solid var(--dsw-alias-border-l2);
   user-select: none;
 }
@@ -22,7 +20,9 @@
 
 .plot {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
+  /* labels · step arrow · plot · step arrow. The arrows are real columns, so
+     they never cover a bar and the three lane labels stay their own block. */
+  grid-template-columns: 44px 18px minmax(0, 1fr) 18px;
   height: 50px;
   overflow: hidden;
   background: var(--dsw-alias-bg-layer-2);
@@ -76,10 +76,8 @@
    going. Hidden until the strip is hovered or focused so the plot stays a plot. */
 .edgeStep {
   all: unset;
-  position: absolute;
+  position: relative;
   z-index: 7;
-  top: 0;
-  bottom: 0;
   display: flex;
   width: 18px;
   align-items: center;
@@ -91,14 +89,6 @@
   font: 500 14px/1 var(--dsw-font-family);
   transition: background-color var(--bt-dur-2, 90ms) var(--bt-ease-std, ease),
     color var(--bt-dur-2, 90ms) var(--bt-ease-std, ease);
-}
-
-.edgeStep[data-side='earlier'] {
-  left: 0;
-}
-
-.edgeStep[data-side='later'] {
-  right: 0;
 }
 
 .edgeStep:hover {

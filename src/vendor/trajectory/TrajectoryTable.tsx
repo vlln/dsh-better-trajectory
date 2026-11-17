@@ -2706,7 +2706,10 @@ export function TrajectoryTable({
                         })}
                       aria-selected={!isCollapsedSummary && !isRequestOnly && selectedIndex === record.cell.index}
                       data-kind={record.cell.kind}
-                      data-group-parity={(record.groupIndex ?? 0) % 2}
+                      /* banding follows the group's own identity, not its
+                         position in the loaded window: a prepended page used to
+                         flip the stripes of every group below it */
+                      data-group-parity={((record.turn ?? 0) + (record.step ?? 0)) % 2}
                       data-child-last={record.childLast || undefined}
                       data-level={level}
                       data-has-children={record.hasChildren || undefined}
