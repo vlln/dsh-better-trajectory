@@ -22,6 +22,13 @@ export interface QueryBarProps {
   onRemoveChip: (raw: string) => void
   onClear: () => void
   stats: { total: number; matched: number; hidden: number; errors: number; running: number }
+  /** Whole-log figures from the host's `sessionStats` projection, when mounted. */
+  whole?: {
+    turns: number
+    steps: number
+    llmMs: number
+    toolMs: number
+  }
   /** Always-on totals for the loaded window. */
   totals: {
     records: number
@@ -372,11 +379,42 @@ export function QueryBar(props: QueryBarProps) {
       </div>
 
       <div className={css.metaLeft}>
+        {props.whole !== undefined && props.totals.partial === true && (
+          /* The window totals are a floor while history is unloaded; the host
+             already knows the whole log's turn/step/time figures, so show both
+             with explicit captions instead of pretending one is the other. */
+          <div className={css.totals} data-whole title={qt('totals.wholeHint')}>
+            <span className={css.totalsCaption}>{qt('totals.whole')}</span>
+            <span className={css.totalsItem}>
+              <i>{qt('totals.turns')}</i>
+              <b>{props.whole.turns.toLocaleString()}</b>
+            </span>
+            <span className={css.totalsItem}>
+              <i>{qt('totals.steps')}</i>
+              <b>{props.whole.steps.toLocaleString()}</b>
+            </span>
+            {props.whole.llmMs > 0 && (
+              <span className={css.totalsItem}>
+                <i>{qt('totals.llm')}</i>
+                <b>{formatSpan(props.whole.llmMs)}</b>
+              </span>
+            )}
+            {props.whole.toolMs > 0 && (
+              <span className={css.totalsItem}>
+                <i>{qt('totals.tool')}</i>
+                <b>{formatSpan(props.whole.toolMs)}</b>
+              </span>
+            )}
+          </div>
+        )}
         <div
           className={css.totals}
           data-partial={props.totals.partial || undefined}
           title={props.totals.partial ? qt('totals.partialHint') : undefined}
         >
+          {props.whole !== undefined && props.totals.partial === true && (
+            <span className={css.totalsCaption}>{qt('totals.window')}</span>
+          )}
           <span className={css.totalsItem}>
             <i>{qt('totals.records')}</i>
             <b>{props.totals.records.toLocaleString()}</b>

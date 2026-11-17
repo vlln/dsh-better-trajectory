@@ -1898,6 +1898,9 @@ export function TrajectoryTable({
   const loadingOlder = useRef(false)
   const [olderLoading, setOlderLoading] = useState(false)
   const olderLoadAnchor = useRef<OlderLoadAnchor | null>(null)
+  /* A page that reports no progress means history is exhausted or the host
+     declined; stop the top-edge chain until the reader scrolls away and back. */
+  const topChainStopped = useRef(false)
   const allRecords = useMemo(() => {
     const records = flattenRecords(turns)
     return hiddenIndexes === null
@@ -2496,7 +2499,9 @@ export function TrajectoryTable({
       atTop: pane.scrollTop <= OLDER_LOAD_THRESHOLD_PX,
     }
     void onLoadOlder().then((advanced) => {
-      if (!advanced) olderLoadAnchor.current = null
+      if (advanced) return
+      olderLoadAnchor.current = null
+      topChainStopped.current = true
     }).finally(() => {
       loadingOlder.current = false
       setOlderLoading(false)
@@ -2516,9 +2521,6 @@ export function TrajectoryTable({
       }
       olderLoadAnchor.current = null
       followsTableTail.current = false
-      /* Still at the top after a page landed → take the next one, so holding at
-         the edge pages continuously instead of stopping after a single page. */
-      if (anchor.atTop && hasOlderRecords) requestOlder(pane, true)
       return
     }
     if (!tableScrollInitialized.current) {
@@ -2544,6 +2546,14 @@ export function TrajectoryTable({
 
   const olderBusy = olderHistoryLoading || olderLoading
   const showInitialLoading = historyLoading || !tableScrollReady
+  /* While the reader sits at the top, keep taking pages until the log runs out:
+     each landed page changes `records.length` and re-arms this effect. */
+  useEffect(() => {
+    const pane = tablePaneRef.current
+    if (pane === null || olderBusy || topChainStopped.current) return
+    if (pane.scrollTop > OLDER_LOAD_THRESHOLD_PX) return
+    requestOlder(pane, true)
+  }, [hasOlderRecords, historyStartSeq, olderBusy, records.length, requestOlder])
 
   return (
     <div ref={rootRef} className={css.split} style={splitStyle} data-show-time={showTime ? undefined : 'false'}>
@@ -2560,6 +2570,14 @@ export function TrajectoryTable({
              (and the virtual list may unmount it), so its card would freeze over
              the list: scrolling ends the hover */
           if (hoverCard !== null) setHoverCard(null)
+          if (pane.scrollTop > OLDER_LOAD_THRESHOLD_PX) topChainStopped.current = false
+          if (hiddenIndexes === null) requestOlder(pane, true)
+        }}
+        onWheel={(event) => {
+          if (event.deltaY >= 0) return
+          const pane = event.currentTarget
+          if (pane.scrollTop > OLDER_LOAD_THRESHOLD_PX) return
+          topChainStopped.current = false
           if (hiddenIndexes === null) requestOlder(pane, true)
         }}
         onClick={(event) => {

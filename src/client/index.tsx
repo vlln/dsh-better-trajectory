@@ -13,10 +13,24 @@ interface ViewEntry {
   options: { id?: string }
 }
 
+/** One projection key's observable face (client-store shape). */
+interface ProjectionFaceLike {
+  getSnapshot(): unknown
+  subscribe(listener: () => void): () => void
+}
+
 interface ClientContext {
   effect(callback: () => (() => void) | void, label?: string): () => void
   slots: {
     entries(name: string): readonly ViewEntry[]
+  }
+  /** Session controller: the projection store is the whole-log read path. */
+  sessions?: {
+    binding(sessionId: string): {
+      session?: {
+        projections?: { faceOf(key: string): ProjectionFaceLike }
+      }
+    } | undefined
   }
   locale: {
     register(namespace: string, dictionaries: { zh: unknown, en: unknown }): () => void
@@ -24,8 +38,8 @@ interface ClientContext {
   }
 }
 
-/** 只依赖槽位与文案；轨迹组件的 session / remote 注入仍由原生条目提供。 */
-export const inject = ['slots', 'locale']
+/** 槽位、文案与会话投影（全量统计）；轨迹组件的其它注入仍由原生条目提供。 */
+export const inject = ['slots', 'locale', 'sessions']
 
 export const name = 'dsh-better-trajectory-client'
 
@@ -43,7 +57,14 @@ export function apply(ctx: ClientContext): void {
   let replaced: ViewEntry | undefined
   let original: unknown
 
-  const Wrapped = (props: Record<string, unknown>) => <ForkView {...props} qt={t} />
+  /* The native trajectory entry does not expose projections, so the whole-log
+     figures are read through this plugin's own session service binding. */
+  const projectionFace = (sessionId: string, key: string): ProjectionFaceLike | undefined =>
+    ctx.sessions?.binding(sessionId)?.session?.projections?.faceOf(key)
+
+  const Wrapped = (props: Record<string, unknown>) => (
+    <ForkView {...props} qt={t} projectionFace={projectionFace} />
+  )
 
   const install = (): void => {
     const entry = ctx.slots.entries('conversation.view')

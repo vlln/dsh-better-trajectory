@@ -605,7 +605,13 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
         ),
       )
       if (nextDuration >= fullDuration * 0.999) {
+        /* Zooming out has reached the whole loaded range. Further wheel-down is
+           the same "keep going back" gesture as scrolling past the top of the
+           ledger, so it pages the next chunk instead of doing nothing. */
         setViewport(null)
+        if (event.deltaY > 0 && domainStart - model.start <= Math.max(1e-9, fullDuration * 1e-6)) {
+          loadEarlier?.()
+        }
         return
       }
       const anchorTime = domainStart + anchorFraction * domainDuration
@@ -617,7 +623,7 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
     }
     root.addEventListener('wheel', onWheel, { passive: false })
     return () => { root.removeEventListener('wheel', onWheel) }
-  }, [domainDuration, domainStart, fullDuration, mode, model])
+  }, [domainDuration, domainStart, fullDuration, loadEarlier, mode, model])
 
   if (model === null) {
     return (

@@ -525,6 +525,20 @@
 }
 
 /* window-scoped totals: the client only counts what it has paged in */
+/* whole-log group: same rhythm, its own caption, a hairline before the
+   window group so the two readings never blur together */
+.totals[data-whole] {
+  margin-right: 4px;
+  padding-right: 12px;
+  border-right: 1px solid var(--bt-line-soft, #f0f2f4);
+}
+
+.totalsCaption {
+  color: var(--bt-text-3, #9aa1ab);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
 .totalsMore {
   color: var(--bt-text-3, #9aa1ab);
   font-size: 10px;

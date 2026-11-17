@@ -154,7 +154,9 @@ function addUsage(
 export function TrajectoryView({
   useSession, useTrajectory, useDuration, watchToolResult, loadOlder, loadImage, setActualDuration,
   viewRequest, completeViewRequest, renderSlot, t, jsonStringWrapping, qt, sessionId,
+  sessionStats: wholeSessionStats,
 }: ConvViewProps
+  & { sessionStats?: { turns: number; steps: number; llmMs: number; toolMs: number } | undefined }
   & Pick<PropsRenderSlots<'conversation.trajectory.images'>, 'renderSlot'>
   & InjectFace<TrajectoryViewInjected>
   & PropsLocale<'trajectory'>) {
@@ -835,6 +837,7 @@ export function TrajectoryView({
           running: toolStats.running,
         }}
         totals={recordStats}
+        whole={wholeSessionStats}
         tools={summarizeTools(toolIndex)}
         turns={queryTurns}
         canGoBack={nav.index > 0}
