@@ -1898,9 +1898,12 @@ export function TrajectoryTable({
   const loadingOlder = useRef(false)
   const [olderLoading, setOlderLoading] = useState(false)
   const olderLoadAnchor = useRef<OlderLoadAnchor | null>(null)
-  /* A page that reports no progress means history is exhausted or the host
-     declined; stop the top-edge chain until the reader scrolls away and back. */
-  const topChainStopped = useRef(false)
+  /* The top edge follows *gestures*, not position: `topIntent` is set by an
+     upward scroll/wheel at the edge and consumed by the next page. Sitting at
+     scrollTop 0 therefore loads nothing — only continuing to scroll does. A
+     gesture made while a page is in flight stays latched, so holding the wheel
+     keeps the pages coming one after another. */
+  const topIntent = useRef(false)
   const allRecords = useMemo(() => {
     const records = flattenRecords(turns)
     return hiddenIndexes === null
@@ -2499,9 +2502,7 @@ export function TrajectoryTable({
       atTop: pane.scrollTop <= OLDER_LOAD_THRESHOLD_PX,
     }
     void onLoadOlder().then((advanced) => {
-      if (advanced) return
-      olderLoadAnchor.current = null
-      topChainStopped.current = true
+      if (!advanced) olderLoadAnchor.current = null
     }).finally(() => {
       loadingOlder.current = false
       setOlderLoading(false)
@@ -2546,14 +2547,23 @@ export function TrajectoryTable({
 
   const olderBusy = olderHistoryLoading || olderLoading
   const showInitialLoading = historyLoading || !tableScrollReady
-  /* While the reader sits at the top, keep taking pages until the log runs out:
-     each landed page changes `records.length` and re-arms this effect. */
+  /* One page per gesture: an intent that arrived while a page was in flight is
+     honoured when it lands, an intent already consumed is not repeated. */
+  const [topIntentTick, setTopIntentTick] = useState(0)
+  const noteTopIntent = useCallback(() => {
+    topIntent.current = true
+    setTopIntentTick(value => value + 1)
+  }, [])
   useEffect(() => {
+    if (olderBusy || !topIntent.current) return
     const pane = tablePaneRef.current
-    if (pane === null || olderBusy || topChainStopped.current) return
-    if (pane.scrollTop > OLDER_LOAD_THRESHOLD_PX) return
+    if (pane === null || pane.scrollTop > OLDER_LOAD_THRESHOLD_PX) {
+      topIntent.current = false
+      return
+    }
+    topIntent.current = false
     requestOlder(pane, true)
-  }, [hasOlderRecords, historyStartSeq, olderBusy, records.length, requestOlder])
+  }, [olderBusy, requestOlder, topIntentTick])
 
   return (
     <div ref={rootRef} className={css.split} style={splitStyle} data-show-time={showTime ? undefined : 'false'}>
@@ -2570,15 +2580,15 @@ export function TrajectoryTable({
              (and the virtual list may unmount it), so its card would freeze over
              the list: scrolling ends the hover */
           if (hoverCard !== null) setHoverCard(null)
-          if (pane.scrollTop > OLDER_LOAD_THRESHOLD_PX) topChainStopped.current = false
-          if (hiddenIndexes === null) requestOlder(pane, true)
+          if (hiddenIndexes === null && pane.scrollTop <= OLDER_LOAD_THRESHOLD_PX) {
+            noteTopIntent()
+          }
         }}
         onWheel={(event) => {
           if (event.deltaY >= 0) return
-          const pane = event.currentTarget
-          if (pane.scrollTop > OLDER_LOAD_THRESHOLD_PX) return
-          topChainStopped.current = false
-          if (hiddenIndexes === null) requestOlder(pane, true)
+          if (event.currentTarget.scrollTop > OLDER_LOAD_THRESHOLD_PX) return
+          if (hiddenIndexes !== null) return
+          noteTopIntent()
         }}
         onClick={(event) => {
           if (event.target === event.currentTarget) clearAllSelections()
