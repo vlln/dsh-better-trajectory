@@ -963,6 +963,15 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
             candidate.start <= activeRange.end && candidate.end >= activeRange.start).length
         const rows = [
           { label: qt('timeline.cursor'), value: formatValue(cursorValue) },
+          /* the axis is relative in duration/sequence mode, so the absolute
+             date of the record under the cursor is the only way to answer
+             "when was this" — always give it when the span knows its start */
+          ...(detail?.startedAt === undefined
+            ? []
+            : [{
+              label: t('timing.started'),
+              value: formatRecordedTime(detail.startedAt),
+            }]),
           ...(span === undefined
             ? []
             : [{
