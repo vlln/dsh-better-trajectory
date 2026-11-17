@@ -489,8 +489,11 @@ export function TrajectoryView({
       calls: toolCells.length,
       errors,
       durationMs: start === null || end === null ? null : Math.max(0, end - start),
+      /* The window is what the client holds; the session may have older events
+         that were never paged in, so the totals are a floor, not the whole log. */
+      partial: sessionHasOlderHistory,
     }
-  }, [allCells, toolCells])
+  }, [allCells, sessionHasOlderHistory, toolCells])
   const queryTurns = useMemo(
     () => [...toolIndex.turns.entries()]
       .sort((left, right) => left[0] - right[0])

@@ -524,6 +524,13 @@
   color: var(--bt-text-3, #9aa1ab);
 }
 
+/* window-scoped totals: the client only counts what it has paged in */
+.totalsMore {
+  color: var(--bt-text-3, #9aa1ab);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+}
+
 .totalsItem {
   display: inline-flex;
   align-items: baseline;

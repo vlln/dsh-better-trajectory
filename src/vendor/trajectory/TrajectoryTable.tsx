@@ -160,6 +160,8 @@ interface TableRecord {
   /** The turn has more than one content row, so folding it actually hides something. */
   turnCollapsible?: boolean
   turn: number | null
+  /** Indent level among the rows actually on screen (see assignConnectorLevels). */
+  level: number
   /** Step number of the group, absent for the turn's leading Message group. */
   step: number | null
   section: number
@@ -287,6 +289,8 @@ interface OlderLoadAnchor {
   readonly historyStartSeq: number | undefined
   readonly scrollHeight: number
   readonly scrollTop: number
+  /** The request came from the top edge: the reader wants to see the new rows. */
+  readonly atTop: boolean
 }
 
 function clampDetailsWidth(width: number, splitWidth: number): number {
@@ -524,12 +528,46 @@ export interface TrajectoryUsage {
   reasoning?: number
 }
 
-/** Indent level of a record kind: turn rows at 0, message/context at 1, calls deeper. */
-function recordLevel(kind: TrajectoryCellKind): number {
-  if (kind === 'subtool') return 3
-  if (kind === 'tool') return 2
-  if (kind === 'user' || kind === 'system' || kind === 'compacted') return 0
-  return 1
+/**
+ * Indent level, computed from what is actually on screen — not from the kind.
+ *
+ * One rule: a row sits one step under the nearest visible row of its parent
+ * kind in the same turn (turn → message/context → call → nested call), and a row
+ * whose parent is not visible is a root. The kind-based constant gave every call
+ * level 2 whether or not its message survived a filter, so filtering left elbows
+ * pointing at an axis with no dot and rails running to nothing.
+ */
+function assignConnectorLevels(records: readonly TableRecord[]): TableRecord[] {
+  let turn: number | null | undefined
+  let turnVisible = false
+  let messageLevel: number | null = null
+  let callLevel: number | null = null
+  return records.map((record) => {
+    const kind = record.cell.kind
+    if (record.turn !== turn) {
+      turn = record.turn
+      turnVisible = false
+      messageLevel = null
+      callLevel = null
+    }
+    let level: number
+    if (kind === 'user' || kind === 'system' || kind === 'compacted') {
+      turnVisible = true
+      messageLevel = null
+      callLevel = null
+      level = 0
+    } else if (kind === 'message' || kind === 'context') {
+      level = turnVisible ? 1 : 0
+      messageLevel = level
+      callLevel = null
+    } else if (kind === 'tool') {
+      level = messageLevel === null ? 0 : messageLevel + 1
+      callLevel = level
+    } else {
+      level = callLevel === null ? (messageLevel ?? 0) : callLevel + 1
+    }
+    return { ...record, level }
+  })
 }
 
 function flattenRecords(turns: readonly TrajectoryTurnModel[]): TableRecord[] {
@@ -538,7 +576,11 @@ function flattenRecords(turns: readonly TrajectoryTurnModel[]): TableRecord[] {
     let firstInSection = true
     const records = turn.groups.flatMap((group) => {
       groupIndex += 1
-      return group.cells.map((cell, index) => {
+      /* A request-only cell was a placeholder for the request marker; the marker
+         is gone, so the row would render as an empty 30px line that also breaks
+         the connector rails around it. */
+      const cells = group.cells.filter(cell => cell.requestOnly !== true)
+      return cells.map((cell, index) => {
         const turnStart = firstInSection
           && cell.requestOnly !== true
           && cell.kind !== 'system'
@@ -546,6 +588,7 @@ function flattenRecords(turns: readonly TrajectoryTurnModel[]): TableRecord[] {
         if (turnStart) firstInSection = false
         return {
           turn: turn.turn,
+          level: 0,
           step: group.step ?? null,
           section,
           group: group.title,
@@ -1911,7 +1954,9 @@ export function TrajectoryTable({
   )
   const messagesWithCalls = useMemo(() => messageIndexesWithCalls(allRecords), [allRecords])
   const records = useMemo(() => {
-    if (searchMatchIndexes !== null) return filterRecords(allRecords, searchMatchIndexes)
+    if (searchMatchIndexes !== null) {
+      return assignConnectorLevels(filterRecords(allRecords, searchMatchIndexes))
+    }
     type Summary = { tools: number; steps: Set<string>; names: string[]; durationMs: number | null }
     const emptySummary = (): Summary => ({ tools: 0, steps: new Set(), names: [], durationMs: null })
     const addToSummary = (summary: Summary, record: TableRecord) => {
@@ -2078,7 +2123,7 @@ export function TrajectoryTable({
         if (endsTurn) (record as TableRecord).childLast = true
       }
     }
-    return out
+    return assignConnectorLevels(out)
   }, [allRecords, collapsedAssistants, collapsedTools, collapsedTurns, messagesWithCalls, searchMatchIndexes, callMeta, requestGroups])
 
   const projectedVirtualRows = useMemo(
@@ -2448,6 +2493,7 @@ export function TrajectoryTable({
       historyStartSeq,
       scrollHeight: pane.scrollHeight,
       scrollTop: pane.scrollTop,
+      atTop: pane.scrollTop <= OLDER_LOAD_THRESHOLD_PX,
     }
     void onLoadOlder().then((advanced) => {
       if (!advanced) olderLoadAnchor.current = null
@@ -2461,11 +2507,18 @@ export function TrajectoryTable({
     if (pane === null) return
     const anchor = olderLoadAnchor.current
     if (anchor !== null && anchor.historyStartSeq !== historyStartSeq) {
-      if (!virtualizationEnabled) {
+      /* At the top edge the reader is scrolling back through history: keep the
+         view at the top so the rows that just arrived are the ones on screen.
+         Anywhere else the pointer stays on the sentence it was reading, so the
+         prepended height is compensated instead. */
+      if (!anchor.atTop && !virtualizationEnabled) {
         pane.scrollTop = anchor.scrollTop + pane.scrollHeight - anchor.scrollHeight
       }
       olderLoadAnchor.current = null
       followsTableTail.current = false
+      /* Still at the top after a page landed → take the next one, so holding at
+         the edge pages continuously instead of stopping after a single page. */
+      if (anchor.atTop && hasOlderRecords) requestOlder(pane, true)
       return
     }
     if (!tableScrollInitialized.current) {
@@ -2480,8 +2533,10 @@ export function TrajectoryTable({
     if (!followsTableTail.current) return
     if (!virtualizationEnabled) pane.scrollTop = pane.scrollHeight
   }, [
+    hasOlderRecords,
     historyLoading,
     historyStartSeq,
+    requestOlder,
     rowVirtualizer,
     virtualRowStructure,
     virtualizationEnabled,
@@ -2590,9 +2645,9 @@ export function TrajectoryTable({
                     : metaInfo?.durationMs
                   const rowStartedAt = record.cell.startedAt ?? metaInfo?.time
                   const toolLike = record.cell.kind === 'tool' || record.cell.kind === 'subtool'
-                  const level = recordLevel(record.cell.kind)
+                  const level = record.level
                   const nextRow = records[position + 1]
-                  const nextLevel = nextRow === undefined ? -1 : recordLevel(nextRow.cell.kind)
+                  const nextLevel = nextRow === undefined ? -1 : nextRow.level
                   const rowName = toolLike
                     ? (record.cell.toolName ?? 'tool')
                     : record.cell.kind === 'message'

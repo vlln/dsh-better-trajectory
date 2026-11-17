@@ -22,12 +22,14 @@ export interface QueryBarProps {
   onRemoveChip: (raw: string) => void
   onClear: () => void
   stats: { total: number; matched: number; hidden: number; errors: number; running: number }
-  /** Always-on totals for the whole loaded window. */
+  /** Always-on totals for the loaded window. */
   totals: {
     records: number
     calls: number
     errors: number
     durationMs: number | null
+    /** Older events exist but were never paged in, so every number is a floor. */
+    partial?: boolean
   }
   tools: readonly { name: string; calls?: number; count?: number }[]
   turns: readonly { turn: number; count: number }[]
@@ -370,7 +372,11 @@ export function QueryBar(props: QueryBarProps) {
       </div>
 
       <div className={css.metaLeft}>
-        <div className={css.totals}>
+        <div
+          className={css.totals}
+          data-partial={props.totals.partial || undefined}
+          title={props.totals.partial ? qt('totals.partialHint') : undefined}
+        >
           <span className={css.totalsItem}>
             <i>{qt('totals.records')}</i>
             <b>{props.totals.records.toLocaleString()}</b>
@@ -388,6 +394,9 @@ export function QueryBar(props: QueryBarProps) {
               <i>{qt('totals.duration')}</i>
               <b>{formatSpan(props.totals.durationMs)}</b>
             </span>
+          )}
+          {props.totals.partial && (
+            <span className={css.totalsMore} aria-hidden="true">{qt('totals.partial')}</span>
           )}
         </div>
       </div>

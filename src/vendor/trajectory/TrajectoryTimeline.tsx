@@ -23,6 +23,16 @@ const EDGE_STEP_FRACTION = 2 / 3
 /** Holding an arrow waits this long before repeating, then repeats this often. */
 const HOLD_DELAY_MS = 420
 const HOLD_REPEAT_MS = 140
+/**
+ * Above this many visible spans the strip draws pixel buckets instead of one
+ * element per record: at full zoom-out a 5,000-record session put 5,000
+ * absolutely positioned spans (each with ten inline custom properties) inside a
+ * 1,100px track, which is invisible detail at four spans per pixel. Buckets are
+ * one element per (lane, column) and drop back to real spans as soon as the
+ * window is zoomed in.
+ */
+const BUCKET_SPAN_LIMIT = 1600
+const BUCKET_COLUMNS = 900
 const MINIMUM_ZOOM_OPERATIONS = 4
 const EDGE_PAN_ZONE_FRACTION = 0.08
 const EDGE_PAN_STEP_FRACTION = 0.025
@@ -242,6 +252,52 @@ const TimelineLanes = memo(function TimelineLanes({
   detailByIndex: Map<number, TimelineRecordDetail | undefined>
   mode: TrajectoryTimelineMode
 }) {
+  const domainEnd = domainStart + domainDuration
+  const visibleSpans = model.spans.filter(span =>
+    span.index === selectedIndex
+    || (span.end >= domainStart && span.start <= domainEnd))
+  const bucketed = visibleSpans.length > BUCKET_SPAN_LIMIT
+  /* One representative element per (lane, pixel column): the union of the spans
+     that land there, so no record disappears — only its individual rectangle. */
+  const buckets = bucketed
+    ? (() => {
+      const map = new Map<string, {
+        lane: number
+        start: number
+        end: number
+        isError: boolean
+        kind: TrajectoryCellKind
+        selected: boolean
+        hovered: boolean
+        search: boolean
+      }>()
+      for (const span of visibleSpans) {
+        const column = Math.floor((span.start - model.start) / fullDuration * BUCKET_COLUMNS)
+        const key = `${span.lane}\u0000${column}`
+        const existing = map.get(key)
+        if (existing === undefined) {
+          map.set(key, {
+            lane: span.lane,
+            start: span.start,
+            end: span.end,
+            isError: span.isError,
+            kind: span.kind,
+            selected: span.index === selectedIndex,
+            hovered: hoveredIndex === span.index,
+            search: searchMatchIndexes?.has(span.index) === true,
+          })
+          continue
+        }
+        if (span.start < existing.start) existing.start = span.start
+        if (span.end > existing.end) existing.end = span.end
+        if (span.isError) existing.isError = true
+        if (span.index === selectedIndex) existing.selected = true
+        if (hoveredIndex === span.index) existing.hovered = true
+        if (searchMatchIndexes?.has(span.index) === true) existing.search = true
+      }
+      return [...map.values()]
+    })()
+    : null
   return (
     <>
       <div
@@ -273,55 +329,78 @@ const TimelineLanes = memo(function TimelineLanes({
         data-timeline-domain
         style={domainStyle}
       >
-        {model.spans
-          .filter(span =>
-            span.index === selectedIndex
-            || (span.end >= domainStart && span.start <= domainStart + domainDuration))
-          .map((span) => {
-            const left = (span.start - model.start) / fullDuration
-            const width = (span.end - span.start) / fullDuration
-            const widthPercent = width * 100
-            const detail = detailByIndex.get(span.index)
-            const ttftMs = detail?.ttftMs
-            const decodingMs = detail?.decodingMs
-            const ttftFraction = ttftMs === undefined
-              || decodingMs === undefined
-              || ttftMs + decodingMs <= 0
-              ? null
-              : ttftMs / (ttftMs + decodingMs)
-            return (
-              <Fragment key={span.index}>
-                <span
-                  aria-hidden="true"
-                  className={css.span}
-                  data-timeline-span={span.kind}
-                  data-timeline-record-index={span.index}
-                  data-assistant-timing={ttftFraction === null ? undefined : 'true'}
-                  data-error={span.isError || undefined}
-                  data-equal-duration={mode === 'time' || undefined}
-                  data-current={span.index === selectedIndex || undefined}
-                  data-hovered={hoveredIndex === span.index || undefined}
-                  data-search-match={searchMatchIndexes === null
-                    ? undefined
-                    : searchMatchIndexes.has(span.index) ? 'true' : 'false'}
-                  data-selected={activeRange === null
-                    ? undefined
-                    : span.start <= activeRange.end && span.end >= activeRange.start
-                      ? 'true'
-                      : 'false'}
-                  style={{
-                    '--trajectory-span-left': `${left * 100}%`,
-                    '--trajectory-span-width': `${widthPercent}%`,
-                    '--trajectory-span-gap': `min(${widthPercent * 0.08}%, 1px)`,
-                    '--trajectory-span-lane': span.lane,
-                    ...(ttftFraction === null
-                      ? {}
-                      : { '--trajectory-assistant-ttft': `${ttftFraction * 100}%` }),
-                  } as CSSProperties}
-                />
-              </Fragment>
-            )
-          })}
+        {(buckets === null ? visibleSpans : []).map((span) => {
+          const left = (span.start - model.start) / fullDuration
+          const width = (span.end - span.start) / fullDuration
+          const widthPercent = width * 100
+          const detail = detailByIndex.get(span.index)
+          const ttftMs = detail?.ttftMs
+          const decodingMs = detail?.decodingMs
+          const ttftFraction = ttftMs === undefined
+            || decodingMs === undefined
+            || ttftMs + decodingMs <= 0
+            ? null
+            : ttftMs / (ttftMs + decodingMs)
+          return (
+            <Fragment key={span.index}>
+              <span
+                aria-hidden="true"
+                className={css.span}
+                data-timeline-span={span.kind}
+                data-timeline-record-index={span.index}
+                data-assistant-timing={ttftFraction === null ? undefined : 'true'}
+                data-error={span.isError || undefined}
+                data-equal-duration={mode === 'time' || undefined}
+                data-current={span.index === selectedIndex || undefined}
+                data-hovered={hoveredIndex === span.index || undefined}
+                data-search-match={searchMatchIndexes === null
+                  ? undefined
+                  : searchMatchIndexes.has(span.index) ? 'true' : 'false'}
+                data-selected={activeRange === null
+                  ? undefined
+                  : span.start <= activeRange.end && span.end >= activeRange.start
+                    ? 'true'
+                    : 'false'}
+                style={{
+                  '--trajectory-span-left': `${left * 100}%`,
+                  '--trajectory-span-width': `${widthPercent}%`,
+                  '--trajectory-span-gap': `min(${widthPercent * 0.08}%, 1px)`,
+                  '--trajectory-span-lane': span.lane,
+                  ...(ttftFraction === null
+                    ? {}
+                    : { '--trajectory-assistant-ttft': `${ttftFraction * 100}%` }),
+                } as CSSProperties}
+              />
+            </Fragment>
+          )
+        })}
+        {buckets !== null && buckets.map(bucket => (
+          <span
+            key={`${bucket.lane}:${bucket.start}:${bucket.end}`}
+            aria-hidden="true"
+            className={css.span}
+            data-timeline-span={bucket.kind}
+            data-bucket="true"
+            data-error={bucket.isError || undefined}
+            data-equal-duration={mode === 'time' || undefined}
+            data-current={bucket.selected || undefined}
+            data-hovered={bucket.hovered || undefined}
+            data-search-match={bucket.search || undefined}
+            data-selected={activeRange === null
+              ? undefined
+              : bucket.start <= activeRange.end && bucket.end >= activeRange.start
+                ? 'true'
+                : 'false'}
+            style={{
+              '--trajectory-span-left':
+                `${(bucket.start - model.start) / fullDuration * 100}%`,
+              '--trajectory-span-width':
+                `${Math.max((bucket.end - bucket.start) / fullDuration * 100, 0.1)}%`,
+              '--trajectory-span-gap': '1px',
+              '--trajectory-span-lane': bucket.lane,
+            } as CSSProperties}
+          />
+        ))}
       </div>
     </>
   )
