@@ -3,7 +3,6 @@
 
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
-import { assertNever, type JsonValue } from '../host/util-values.ts'
 import { KindTag } from './KindTag.tsx'
 import { DetailSection, DetailText } from './DetailSection.tsx'
 import { CopyButton } from './CopyButton.tsx'
@@ -13,18 +12,11 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import {
   CodeBlock,
   FileTypeIcon,
-  fileExtension,
-  fileSizeText,
   IconChevronRightOutlineRegular,
-  IconCodeOutlineRegular,
   IconWrapLinesOutlineRegular,
-  IconSettingsOutlineRegular,
-  IconSparkleRegular,
-  IconUserOutlineRegular,
   JsonTree,
   MarkdownText,
   StateDot,
-  writeClipboard,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { JsonTreeLabels, JsonTreeProps, MarkdownLabels } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
@@ -44,7 +36,7 @@ import type { TrajectoryTurnModel } from './layout.ts'
 import { trajectoryPreviewText } from './trajectory-preview.ts'
 import type { TrajectoryKey, TrajectoryTranslate } from './locales.ts'
 import { COMPACTION_INTERRUPTED_ERROR } from './copy-codes.ts'
-import { codeProgram, PTC_TOOL_NAME, type CodeProgram } from './code-program.ts'
+import { codeProgram, PTC_TOOL_NAME } from './code-program.ts'
 import css from './TrajectoryTable.module.css'
 import { RawDataPanel, payloadBadge } from './RawDataPanel.tsx'
 
@@ -79,77 +71,6 @@ function ChevronIcon({ open }: { open: boolean }): ReactNode {
   )
 }
 
-function ToolWrenchIcon(): ReactNode {
-  return (
-    <svg
-      width="13"
-      height="13"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      data-role-icon="wrench"
-      aria-hidden="true"
-    >
-      <path d="M14 3.3a3.8 3.8 0 0 1-4.8 4.8l-5.1 5.1a1.6 1.6 0 1 1-2.3-2.3l5.1-5.1A3.8 3.8 0 0 1 11.7 1l-2.3 2.3 2.3 2.3L14 3.3Z" />
-    </svg>
-  )
-}
-
-function InformationIcon(): ReactNode {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.4"
-      strokeLinecap="round"
-      data-role-icon="information"
-      aria-hidden="true"
-    >
-      <circle cx="8" cy="8" r="6.7" />
-      <circle cx="8" cy="5.5" r=".85" fill="currentColor" stroke="none" />
-      <path d="M8 7.75v3.4" strokeWidth="1.8" />
-    </svg>
-  )
-}
-
-function CompactedIcon(): ReactNode {
-  return (
-    <svg
-      width="13"
-      height="13"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      data-role-icon="compacted"
-      aria-hidden="true"
-    >
-      <path d="m2.5 2.5 3.75 3.75M3 6.25h3.25V3" />
-      <path d="m13.5 2.5-3.75 3.75M13 6.25H9.75V3" />
-      <path d="m2.5 13.5 3.75-3.75M3 9.75h3.25V13" />
-      <path d="m13.5 13.5-3.75-3.75M13 9.75H9.75V13" />
-    </svg>
-  )
-}
-
-const KIND_ICON: Record<TrajectoryCellKind, ReactNode> = {
-  system: <IconSettingsOutlineRegular size={13} />,
-  user: <IconUserOutlineRegular size={13} />,
-  context: <InformationIcon />,
-  compacted: <CompactedIcon />,
-  message: <IconSparkleRegular size={13} />,
-  tool: <ToolWrenchIcon />,
-  subtool: <ToolWrenchIcon />,
-}
-
 interface TableRecord {
   /** Children hidden by an explicit collapse, shown as +N on the parent row. */
   foldedCount?: number
@@ -166,7 +87,6 @@ interface TableRecord {
   step: number | null
   section: number
   group: string
-  groupIndex?: number
   groupStart: boolean
   turnStart: boolean
   /** One of the rows the turn opens with, before its first assistant message. */
@@ -177,14 +97,6 @@ interface TableRecord {
   turnSummary?: boolean
   cell: TrajectoryCellProps
   turnEnd: boolean
-  collapsedSummary?: string
-  collapsedSummaryKind?: 'turn' | 'assistant' | 'tool'
-}
-
-const COLLAPSED_SUMMARY_LABEL_KEY: Record<NonNullable<TableRecord['collapsedSummaryKind']>, TrajectoryKey> = {
-  turn: 'request.collapsedTurn',
-  assistant: 'request.collapsedAssistant',
-  tool: 'request.collapsedTool',
 }
 
 interface VirtualRowStructure {
@@ -235,14 +147,6 @@ interface ToolCallTextParts {
   program: boolean
   name: string
   args?: string
-}
-
-interface DetailsResizeDrag {
-  pointerId: number
-  startX: number
-  startWidth: number
-  splitWidth: number
-  startToolRequestOffset: number
 }
 
 const DETAILS_MIN_WIDTH = 360
@@ -620,12 +524,10 @@ function withFlatLevels(records: readonly TableRecord[]): TableRecord[] {
 }
 
 function flattenRecords(turns: readonly TrajectoryTurnModel[]): TableRecord[] {
-  let groupIndex = -1
   return turns.flatMap((turn, section) => {
     let firstInSection = true
     let opening = true
     const records = turn.groups.flatMap((group) => {
-      groupIndex += 1
       /* A request-only cell was a placeholder for the request marker; the marker
          is gone, so the row would render as an empty 30px line that also breaks
          the connector rails around it. */
@@ -646,7 +548,6 @@ function flattenRecords(turns: readonly TrajectoryTurnModel[]): TableRecord[] {
           step: group.step ?? null,
           section,
           group: group.title,
-          groupIndex,
           groupStart: index === 0,
           turnStart,
           turnOpening,
@@ -721,33 +622,6 @@ function requestErrorMessage(
   return request.error
 }
 
-function RequestOptions({
-  options,
-  preview = false,
-  stringWrapping,
-  t,
-}: {
-  options: AssistantRequestConfig | undefined
-  preview?: boolean
-  stringWrapping: JsonTreeProps['stringWrapping']
-  t: TrajectoryTranslate
-}) {
-  if (options === undefined) {
-    return <p className={css.noPayload}>{t('options.notRecorded')}</p>
-  }
-  return (
-    <JsonTree
-      data={options}
-      stringWrapping={stringWrapping}
-      collapsedStringLines={preview ? 3 : 12}
-      label={t('options.json')}
-      labels={jsonTreeLabels(t)}
-      className={preview ? css.jsonPreview : css.jsonPayload}
-    />
-  )
-}
-
-/** Producer-declared context forms this UI knows how to name. */
 const CONTEXT_FORM_KEYS = {
   instructions: 'context.form.instructions',
   catalog: 'context.form.catalog',
@@ -774,34 +648,6 @@ function contextFormLabel(
     : CONTEXT_FORM_KEYS[form as keyof typeof CONTEXT_FORM_KEYS] === undefined
       ? undefined
       : qt(CONTEXT_FORM_KEYS[form as keyof typeof CONTEXT_FORM_KEYS])
-}
-
-function MessageSource({ record, stringWrapping, t }: {
-  record: TableRecord
-  stringWrapping: JsonTreeProps['stringWrapping']
-  t: TrajectoryTranslate
-}) {
-  const source = record.cell.messageSource
-  if (source === undefined) return <p className={css.noPayload}>{t('source.notRecorded')}</p>
-  const data = typeof source === 'object' && source !== null
-    ? source
-    : { value: source }
-  return (
-    <JsonTree
-      data={data}
-      stringWrapping={stringWrapping}
-      collapsedStringLines={12}
-      label={t('source.messageJson')}
-      labels={jsonTreeLabels(t)}
-      className={css.jsonPayload}
-    />
-  )
-}
-
-function isMarkdownRecord(record: TableRecord): boolean {
-  return record.cell.kind === 'user'
-    || record.cell.kind === 'context'
-    || record.cell.kind === 'message'
 }
 
 function parentRecords(
@@ -1019,33 +865,6 @@ function RecordPresentation({
     toolCallOnly,
     toolCallText,
   })
-}
-
-function RecordListText({
-  displayText,
-  toolCallOnly,
-  toolCallText,
-  t,
-}: Pick<RecordPresentationValue, 'displayText' | 'toolCallOnly' | 'toolCallText'> & {
-  t: TrajectoryTranslate
-}) {
-  if (toolCallOnly) {
-    return <span className={css.toolCallOnly}>{t('record.toolCallOnly')}</span>
-  }
-  if (toolCallText === undefined) return displayText || '—'
-  return (
-    <>
-      <span className={css.toolCallNameTypeface}>
-        {toolCallText.program && <IconCodeOutlineRegular className={css.programIcon} size={12} />}
-        {toolCallText.name || '—'}
-      </span>
-      {toolCallText.args !== undefined && (
-        <span className={toolCallText.program ? css.programSummary : css.toolCallPayload}>
-          {toolCallText.args}
-        </span>
-      )}
-    </>
-  )
 }
 
 function MarkdownFragment({
@@ -1721,49 +1540,6 @@ function RecordPayload({
   )
 }
 
-function RecordSchema({
-  record,
-  preview = false,
-  stringWrapping,
-  t,
-}: {
-  record: TableRecord
-  preview?: boolean
-  stringWrapping: JsonTreeProps['stringWrapping']
-  t: TrajectoryTranslate
-}) {
-  if (!record.cell.schemaDetail) {
-    return <p className={css.noPayload}>{t('record.schemaUnavailable')}</p>
-  }
-  const schema = parseToolSchema(record.cell.schemaDetail)
-  if (schema !== undefined) {
-    return (
-      <div className={preview ? `${css.schema} ${css.schemaPreview}` : css.schema}>
-        <header className={css.schemaIntro}>
-          <h3 className={css.schemaName}>{schema.name}</h3>
-          <p className={css.schemaDescription}>{schema.description}</p>
-        </header>
-        <section className={css.schemaParameters}>
-          <h4 className={css.schemaParametersTitle}>{t('record.parameters')}</h4>
-          <JsonTree
-            data={schema.parameters}
-            stringWrapping={stringWrapping}
-            collapsedStringLines={preview ? 3 : 12}
-            label={t('record.namedParametersJson', { name: schema.name })}
-            labels={jsonTreeLabels(t)}
-            className={css.schemaTree}
-          />
-        </section>
-      </div>
-    )
-  }
-  return (
-    <pre className={`${css.payload} ${preview ? css.payloadPreview : ''}`}>
-      {record.cell.schemaDetail}
-    </pre>
-  )
-}
-
 interface ParsedToolSchema {
   name: string
   description: string
@@ -1936,10 +1712,15 @@ export function TrajectoryTable({
   const [detailsWidth, setDetailsWidth] = useState<number | null>(null)
   const [snapping, setSnapping] = useState(false)
   const [hoverCard, setHoverCard] = useState<{ x: number; y: number; record: TableRecord } | null>(null)
-  const hoverTimer = useRef<number | null>(null)
   const [toolRequestOffset, setToolRequestOffset] = useState<number | null>(null)
-  const detailsResizeDrag = useRef<DetailsResizeDrag | null>(null)
-  const detailsResizeMoved = useRef(false)
+  /* window listeners and snap timers live outside React; an unmount mid-drag
+     would otherwise leave both behind */
+  const dragCleanup = useRef<(() => void) | null>(null)
+  const snapTimers = useRef<number[]>([])
+  useEffect(() => () => {
+    dragCleanup.current?.()
+    for (const timer of snapTimers.current) window.clearTimeout(timer)
+  }, [])
   const appliedRecordSelection = useRef<TrajectoryTableProps['recordSelection']>(null)
   const appliedRecordFocus = useRef<TrajectoryTableProps['recordFocus']>(null)
   const tabHistory = useRef<Set<DetailTab>>(new Set(['overview']))
@@ -2222,9 +2003,7 @@ export function TrajectoryTable({
     const indexes = new Map<string, number>()
     for (const [virtualIndex, row] of projectedVirtualRows.entries()) {
       for (const entry of row.entries) {
-        if (entry.record.collapsedSummary === undefined) {
-          indexes.set(trajectoryRecordId(entry.record.cell), virtualIndex)
-        }
+        indexes.set(trajectoryRecordId(entry.record.cell), virtualIndex)
       }
     }
     return indexes
@@ -2418,22 +2197,6 @@ export function TrajectoryTable({
     if (target !== undefined) openRecordSummary(target)
   }
 
-  const expandSummary = (record: TableRecord, kind: NonNullable<TableRecord['collapsedSummaryKind']>) => {
-    switch (kind) {
-      case 'turn':
-        if (record.turn !== null) onToggleTurn(record.turn)
-        return
-      case 'tool':
-        onToggleTool(trajectoryRecordId(record.cell))
-        return
-      case 'assistant':
-        onToggleAssistant(trajectoryRecordId(record.cell))
-        return
-      default:
-        assertNever(kind)
-    }
-  }
-
   // Cross-view inspect handoff: resolve the requested call to its record,
   // open its summary, and remember the row to scroll once the un-collapsed
   // ledger has rendered. Not-found leaves the request pending (`turns` in the
@@ -2451,8 +2214,7 @@ export function TrajectoryTable({
   useEffect(() => {
     const id = pendingScrollRecordId.current
     if (id === null) return
-    const position = records.findIndex(record =>
-      trajectoryRecordId(record.cell) === id && record.collapsedSummary === undefined)
+    const position = records.findIndex(record => trajectoryRecordId(record.cell) === id)
     if (position === -1) return
     if (virtualizationEnabled) {
       const virtualIndex = virtualIndexByRecordId.get(id)
@@ -2476,11 +2238,7 @@ export function TrajectoryTable({
   useEffect(() => {
     if (timelineFocusIndexes === null || timelineFocusIndexes.size === 0) return
     const focusedPositions = records.flatMap((record, position) =>
-      record.collapsedSummary === undefined
-      && record.cell.requestOnly !== true
-      && timelineFocusIndexes.has(record.cell.index)
-        ? [position]
-        : [])
+      timelineFocusIndexes.has(record.cell.index) ? [position] : [])
     const first = focusedPositions.at(0)
     const last = focusedPositions.at(-1)
     if (first === undefined || last === undefined) return
@@ -2699,9 +2457,6 @@ export function TrajectoryTable({
                 t={t}
               >
                 {({ displayText, listDisplayText, resultText, toolCallOnly, toolCallText }) => {
-                  const summaryKind = record.collapsedSummaryKind
-                  const isCollapsedSummary = summaryKind !== undefined
-                  const isRequestOnly = record.cell.requestOnly === true
                   const isInitialSystem = record.cell.kind === 'system'
                 && record.cell.index === allRecords[0]?.cell.index
                   const sectionActive = record.turn === null
@@ -2749,18 +2504,13 @@ export function TrajectoryTable({
                     && record.cell.sourceBlocks.every(block => block.type === 'tool-addition' || block.type === 'tool-removal')
                   return (
                     <tr
-                      tabIndex={isRequestOnly || singleToolNotice ? -1 : 0}
+                      tabIndex={singleToolNotice ? -1 : 0}
                       aria-rowindex={position + 1}
-                      aria-label={isCollapsedSummary
-                        ? t('request.collapsedSummary', {
-                          kind: t(COLLAPSED_SUMMARY_LABEL_KEY[summaryKind]),
-                          summary: record.collapsedSummary,
-                        })
-                        : t('request.rowAria', {
-                          kind: t(KIND_LABEL_KEY[record.cell.kind]),
-                          content: listDisplayText || t('request.noContent'),
-                        })}
-                      aria-selected={!isCollapsedSummary && !isRequestOnly && selectedIndex === record.cell.index}
+                      aria-label={t('request.rowAria', {
+                        kind: t(KIND_LABEL_KEY[record.cell.kind]),
+                        content: listDisplayText || t('request.noContent'),
+                      })}
+                      aria-selected={selectedIndex === record.cell.index}
                       data-kind={record.cell.kind}
                       /* the stripe belongs to the step, not to the row's place in
                          the list: a prepended page used to flip every stripe below
@@ -2773,40 +2523,25 @@ export function TrajectoryTable({
                       data-has-children={record.hasChildren || undefined}
                       data-has-fold={(record.hasFold === true && hiddenIndexes === null) || undefined}
                       onMouseEnter={(event) => {
-                        if (isRequestOnly) return
-                        const x = event.clientX
-                        const y = event.clientY
-                        if (hoverTimer.current !== null) window.clearTimeout(hoverTimer.current)
-                        setHoverCard({ x, y, record })
+                        setHoverCard({ x: event.clientX, y: event.clientY, record })
                       }}
-                      onMouseLeave={() => {
-                        if (hoverTimer.current !== null) window.clearTimeout(hoverTimer.current)
-                        setHoverCard(null)
-                      }}
+                      onMouseLeave={() => { setHoverCard(null) }}
                       data-trajectory-row-key={trajectoryVirtualRecordKey(record)}
                       data-virtual-position={virtualizationEnabled ? position : undefined}
-                      data-record-index={!isCollapsedSummary && !isRequestOnly
-                        ? record.cell.index
-                        : undefined}
-                      data-request-only={isRequestOnly || undefined}
+                      data-record-index={record.cell.index}
                       data-terminal-request-boundary={terminalRequestBoundary || undefined}
                       data-group-start={record.groupStart || undefined}
                       data-turn-start={record.turnStart || undefined}
                       data-error={record.cell.isError || undefined}
                       data-running={stateOf(record) === 'running' || undefined}
                       data-turn-end={record.turnEnd || undefined}
-                      data-collapsed-summary={record.collapsedSummaryKind}
-                      data-selected={!isCollapsedSummary && selectedIndex === record.cell.index || undefined}
-                      data-timeline-focus={isCollapsedSummary || timelineFocusIndexes === null
+                      data-selected={selectedIndex === record.cell.index || undefined}
+                      data-timeline-focus={timelineFocusIndexes === null
                         ? undefined
                         : timelineFocusIndexes.has(record.cell.index) ? 'inside' : 'outside'}
-                      onClick={isRequestOnly || singleToolNotice
-                        ? undefined
-                        : isCollapsedSummary
-                          ? () => { expandSummary(record, summaryKind) }
-                          : () => { selectRecord(record.cell.index) }}
+                      onClick={singleToolNotice ? undefined : () => { selectRecord(record.cell.index) }}
                       onDoubleClick={(event) => {
-                        if (isCollapsedSummary || isRequestOnly || singleToolNotice) return
+                        if (singleToolNotice) return
                         if (record.turn !== null && collapsedTurns.has(record.turn)) {
                           event.preventDefault()
                           onToggleTurn(record.turn)
@@ -2830,7 +2565,7 @@ export function TrajectoryTable({
                         onToggleTurn(record.turn)
                       }}
                       onKeyDown={(event) => {
-                        if (isRequestOnly || singleToolNotice) return
+                        if (singleToolNotice) return
                         if (event.key === 'ArrowLeft') {
                           event.preventDefault()
                           const id = trajectoryRecordId(record.cell)
@@ -2880,10 +2615,6 @@ export function TrajectoryTable({
                         }
                         if (event.key !== 'Enter' && event.key !== ' ') return
                         event.preventDefault()
-                        if (isCollapsedSummary) {
-                          expandSummary(record, summaryKind)
-                          return
-                        }
                         selectRecord(record.cell.index)
                       }}
                     >
@@ -2893,9 +2624,7 @@ export function TrajectoryTable({
                         </span>
                       </td>
                       <td className={css.content}>
-                        {isRequestOnly
-                          ? null
-                          : (
+                        {(
                             <span
                               className={css.rowLine}
                               data-tone={rowTone}
@@ -2957,7 +2686,6 @@ export function TrajectoryTable({
                                 const next = records[position + 1]
                                 const toolFold = toolLike && next !== undefined && next.cell.kind === 'subtool'
                                 const turnFold = record.turnStart && record.turn !== null
-                                  && !isCollapsedSummary
                                   && record.turnCollapsible === true
                                 /* the filtered list has no tree: no fold dot (the turn
                                    start it invents is the first row that survived the
@@ -3075,7 +2803,7 @@ export function TrajectoryTable({
                                 </span>
                               )}
                               <span className={css.rowSub}>
-                                {record.collapsedSummary !== undefined ? record.collapsedSummary : rowSub}
+                                {rowSub}
                               </span>
                               {/* no native title: the row already opens its own
                                   card, and the browser tooltip duplicated the
@@ -3139,7 +2867,7 @@ export function TrajectoryTable({
               setSnapping(true)
               setDetailsWidth(null)
               setToolRequestOffset(null)
-              window.setTimeout(() => setSnapping(false), 240)
+              snapTimers.current.push(window.setTimeout(() => setSnapping(false), 240))
             }}
             onMouseDown={(event) => {
               if (event.button !== 0) return
@@ -3163,6 +2891,7 @@ export function TrajectoryTable({
                 setToolRequestOffset(startToolRequestOffset + (latest - startWidth) * TOOL_REQUEST_SHARE)
               }
               const onUp = () => {
+                dragCleanup.current = null
                 window.removeEventListener('mousemove', onMove)
                 window.removeEventListener('mouseup', onUp)
                 details.removeAttribute('data-dragging')
@@ -3173,16 +2902,20 @@ export function TrajectoryTable({
                 if (Math.abs(nearest - latest) <= 40) {
                   details.setAttribute('data-snapping', '')
                   details.style.width = `${nearest}px`
-                  window.setTimeout(() => {
+                  snapTimers.current.push(window.setTimeout(() => {
                     setDetailsWidth(nearest)
-                    window.setTimeout(() => {
+                    snapTimers.current.push(window.setTimeout(() => {
                       details.removeAttribute('data-snapping')
                       setSnapping(false)
-                    }, 240)
-                  }, 30)
+                    }, 240))
+                  }, 30))
                 }
               }
               details.setAttribute('data-dragging', '')
+              dragCleanup.current = () => {
+                window.removeEventListener('mousemove', onMove)
+                window.removeEventListener('mouseup', onUp)
+              }
               window.addEventListener('mousemove', onMove)
               window.addEventListener('mouseup', onUp)
               event.preventDefault()
@@ -3468,7 +3201,7 @@ export function TrajectoryTable({
                             )
                             : isBranch(args)
                               ? <RawDataPanel data={args} qt={qt} bare />
-                              : <DetailText text={argsText} full />}
+                              : <DetailText text={argsText} />}
                         </DetailSection>
                       )}
                       {toolLike && isBranch(schema) && (

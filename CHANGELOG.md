@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.1 — 2026-11-17
+
+- 修「概述里的 `参数` / `来源内容` 这类块太矮」：内联 JSON 树的高度上限原来写死 260px（约 9 行），现在随视口走（`min(56vh, 480px)`；1440×960 下实测 480px，原来 260px）。文字载荷那层 132px 裁切也去掉了——那个 `full` 开关的唯一调用方一直传 `true`，等于从未生效。
+- 删掉一整批不可达代码（bundle 490.4 → 467.7 KB）：
+  - `RequestOptions` / `MessageSource` / `RecordSchema` / `RecordListText` / `isMarkdownRecord` / `KIND_ICON` 与只被它用的三个图标（196 行）；
+  - `collapsedSummary` 整套（字段从来没有被赋值，`expandSummary`、摘要行的 aria 与点击分支都在它的下游）、`requestOnly` 的下游分支（这类行在构建时就被过滤掉了）、`groupIndex`（只写不读）；
+  - `actualTime` 状态与它的两个 prop（唯一 setter 在从未渲染的组件上）、`hoverTimer`（从未被设置，只在两处 clear）、`detailsResizeDrag` / `detailsResizeMoved`、`stats.total` / `errors` / `running`、`formatTimelineOffset`、`stringLimit` / `MAX_PREVIEW`（穿透到叶子节点后并不裁剪字符串）。
+- `原始` 面板的「复制 JSON」改走 `CopyButton`：不再自己调 `navigator.clipboard`（没有「已复制 / 失败」反馈），复制只有一份实现。
+- 定时器与监听器在卸载时收口：toast 的 4s 计时器、查询框失焦的 120ms 计时器、详情面板拖拽挂的 window `mousemove`/`mouseup` 与吸附的两段计时器。
+
 ## 0.3.0 — 2026-11-16
 
 首个对外版本。读者视角的四条：

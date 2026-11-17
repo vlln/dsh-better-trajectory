@@ -5,9 +5,11 @@
   height: 100%;
 }
 
-/* inline mode inside an inspector section */
+/* Inline mode inside an inspector section. The cap only exists so one huge
+   payload cannot push the next section off the panel; it scales with the
+   viewport instead of showing a fixed nine lines. */
 .tree[data-bare] {
-  max-height: 260px;
+  max-height: min(56vh, 480px);
   overflow: auto;
   padding: 2px 0 0;
 }

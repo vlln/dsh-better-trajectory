@@ -22,7 +22,7 @@ export interface QueryBarProps {
   onCommit: (text: string) => void
   onRemoveChip: (raw: string) => void
   onClear: () => void
-  stats: { total: number; matched: number; hidden: number; errors: number; running: number }
+  stats: { matched: number; hidden: number }
   /** Whole-log figures from the host's `sessionStats` projection, when mounted. */
   whole?: {
     turns: number
@@ -169,6 +169,11 @@ export function QueryBar(props: QueryBarProps) {
   const rootRef = useRef<HTMLDivElement | null>(null)
   const menuRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const blurTimer = useRef<number | null>(null)
+
+  useEffect(() => () => {
+    if (blurTimer.current !== null) window.clearTimeout(blurTimer.current)
+  }, [])
 
   const words = draft.trim() === '' ? [] : draft.trim().split(/\s+/)
   const lastWord = words.at(-1) ?? ''
@@ -318,7 +323,10 @@ export function QueryBar(props: QueryBarProps) {
             autoComplete="off"
             onChange={(event) => { props.onDraft(event.currentTarget.value); setOpen(true); setActive(0) }}
             onFocus={() => setOpen(true)}
-            onBlur={() => { window.setTimeout(() => setOpen(false), 120) }}
+            onBlur={() => {
+              if (blurTimer.current !== null) window.clearTimeout(blurTimer.current)
+              blurTimer.current = window.setTimeout(() => setOpen(false), 120)
+            }}
             onKeyDown={onKeyDown}
           />
           {open && draft.trim() !== '' && suggestions.length > 0 && (

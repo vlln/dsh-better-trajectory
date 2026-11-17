@@ -16,7 +16,7 @@ import {
 } from './TrajectoryTable.tsx'
 import type { WatchToolResult } from './watch-tool-result.ts'
 import { QueryBar } from './QueryBar.tsx'
-import { buildToolIndex, isErrorStatus, summarizeTools } from '../../client/filter.mjs'
+import { buildToolIndex, summarizeTools } from '../../client/filter.mjs'
 import { matchesCell, parseQuery, tokenizeQuery } from '../../client/query.mjs'
 import { TrajectoryTimeline } from './TrajectoryTimeline.tsx'
 import {
@@ -198,7 +198,6 @@ export function TrajectoryView({
   }, [foldKey, collapsedTurns, collapsedAssistants, collapsedTools])
   const [timelineSelection, setTimelineSelection] = useState<TrajectoryTimeRange | null>(null)
   const actualDuration = useDuration(value => value)
-  const [actualTime, setActualTime] = useState(false)
   /* the conditions (chips) and the text being typed are two stores: editing or
      deleting the draft must not delete a condition the user already added */
   const [queryChips, setQueryChips] = useState<string[]>(() => readStoredQuery(sessionId).chips)
@@ -420,8 +419,8 @@ export function TrajectoryView({
     [finalized, timelinePartial, t],
   )
   const timelineMode: TrajectoryTimelineMode = actualDuration
-    ? actualTime ? 'actual' : 'duration'
-    : actualTime ? 'time' : 'sequence'
+    ? 'duration'
+    : 'sequence'
   const partialSearchTurns = useMemo(
     () => appendTrajectoryPartialLayout([], partial, finalized.lastIndex, t),
     [finalized.lastIndex, partial, t],
@@ -485,15 +484,6 @@ export function TrajectoryView({
     }
     return set
   }, [allCells, callMeta, query, requestFacts])
-  const toolStats = useMemo(() => {
-    let errors = 0
-    let running = 0
-    for (const { cell } of toolCells) {
-      if (cell.isError === true) errors += 1
-      else if (cell.timeSeconds === null && !cell.isError) running += 1
-    }
-    return { total: toolCells.length, errors, running }
-  }, [toolCells])
   /* always-on totals for the query bar: one pass over every record */
   const recordStats = useMemo(() => {
     let errors = 0
@@ -750,6 +740,10 @@ export function TrajectoryView({
     setToast(null)
   }, [])
 
+  useEffect(() => () => {
+    if (toastTimer.current !== null) window.clearTimeout(toastTimer.current)
+  }, [])
+
   const pushToast = useCallback((text: string, undo?: () => void) => {
     if (toastTimer.current !== null) window.clearTimeout(toastTimer.current)
     const id = ++toastSeq.current
@@ -853,11 +847,8 @@ export function TrajectoryView({
         onRemoveChip={removeQueryChip}
         onClear={clearQuery}
         stats={{
-          total: toolStats.total,
           matched: matchedCells.size,
           hidden: query.active ? hiddenIndexes?.size ?? 0 : 0,
-          errors: toolStats.errors,
-          running: toolStats.running,
         }}
         totals={recordStats}
         whole={wholeSessionStats}
@@ -872,11 +863,6 @@ export function TrajectoryView({
         actualDuration={actualDuration}
         onActualDurationChange={(nextActualDuration) => {
           setActualDuration(nextActualDuration)
-          setTimelineSelection(null)
-        }}
-        actualTime={actualTime}
-        onActualTimeChange={(nextActualTime) => {
-          setActualTime(nextActualTime)
           setTimelineSelection(null)
         }}
         allTurnsCollapsed={allTurnsCollapsed}

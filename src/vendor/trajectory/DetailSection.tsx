@@ -50,24 +50,15 @@ export function DetailSection({
   )
 }
 
-/** Plain-text payload with a collapsed height cap. */
-export function DetailText({
-  text,
-  full = false,
-  tone,
-}: {
+/** Plain-text payload; the section body scrolls, so it is never clipped. */
+export function DetailText({ text, tone }: {
   text: string
-  full?: boolean
   /** `error` renders the native red payload treatment. */
   tone?: 'error'
 }) {
   return (
-    <pre className={css.text} data-full={full || undefined} data-tone={tone}>
+    <pre className={css.text} data-tone={tone}>
       {text}
     </pre>
   )
-}
-
-export function DetailEmpty({ children }: { children: ReactNode }) {
-  return <p className={css.empty}>{children}</p>
 }

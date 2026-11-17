@@ -88,10 +88,9 @@
   padding: 0 0 8px;
 }
 
-/* plain-text payload (bash output and friends): clipped while collapsed */
+/* plain-text payload (bash output and friends) */
 .text {
   margin: 0;
-  max-height: 132px;
   padding: 8px 10px;
   overflow: auto;
   border: 1px solid var(--bt-line, #e6e8eb);
@@ -103,10 +102,6 @@
   line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
-}
-
-.text[data-full] {
-  max-height: none;
 }
 
 /* failed tool payload: the native treatment is red text on the error surface,

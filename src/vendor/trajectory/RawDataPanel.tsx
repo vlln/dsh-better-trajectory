@@ -9,11 +9,8 @@ interface RawDataPanelProps {
   qt: (key: string, params?: Record<string, string | number>) => string
   /** Inline mode: no toolbar and no root row, so the section header is the title. */
   bare?: boolean
-  /** Max string length shown inline before the "more" toggle (default 220, 120 when bare). */
-  stringLimit?: number
 }
 
-const MAX_PREVIEW = 220
 const ARRAY_PAGE = 50
 
 type Json = unknown
@@ -105,7 +102,7 @@ function copyTextFor(value: Json): string {
 }
 
 function Node({
-  name, value, path, depth, expanded, toggle, term, qt, stringLimit,
+  name, value, path, depth, expanded, toggle, term, qt,
 }: {
   name: string
   value: Json
@@ -115,7 +112,6 @@ function Node({
   toggle: (path: string) => void
   term: string
   qt: RawDataPanelProps['qt']
-  stringLimit?: number
 }) {
   const kind = kindOf(value)
   const branch = kind === 'array' || kind === 'object'
@@ -163,7 +159,6 @@ function Node({
               toggle={toggle}
               term={term}
               qt={qt}
-              stringLimit={stringLimit}
             />
           ))}
           {entries.length > limit && (
@@ -199,8 +194,7 @@ export function payloadBadge(
  * @param props 数据与翻译函数。
  * @returns 原始数据面板。
  */
-export function RawDataPanel({ data, qt, bare = false, stringLimit }: RawDataPanelProps) {
-  const limit = stringLimit ?? (bare ? 120 : MAX_PREVIEW)
+export function RawDataPanel({ data, qt, bare = false }: RawDataPanelProps) {
   const [term, setTerm] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(() => {
     const initial = new Set<string>([''])
@@ -273,7 +267,6 @@ export function RawDataPanel({ data, qt, bare = false, stringLimit }: RawDataPan
             toggle={toggle}
             term={query}
             qt={qt}
-            stringLimit={limit}
           />
         ))}
       </div>
@@ -292,11 +285,17 @@ export function RawDataPanel({ data, qt, bare = false, stringLimit }: RawDataPan
         />
         <button type="button" className={css.button} onClick={expandAll}>{qt('raw.expandAll')}</button>
         <button type="button" className={css.button} onClick={() => setExpanded(new Set(['']))}>{qt('raw.collapseAll')}</button>
-        <button type="button" className={css.button} onClick={() => { void navigator.clipboard?.writeText(JSON.stringify(data, null, 2)) }}>{qt('raw.copyAll')}</button>
+        <CopyButton
+          text={JSON.stringify(data, null, 2)}
+          label={qt('raw.copyAll')}
+          copiedLabel={qt('copied')}
+          failedLabel={qt('copy.failed')}
+          reveal="always"
+        />
         {matched !== null && <span className={css.count}>{qt('raw.matches', { count: matched.size })}</span>}
       </div>
       <div className={css.tree}>
-        <Node name="root" value={data} path="" depth={0} expanded={visible} toggle={toggle} term={query} qt={qt} stringLimit={limit} />
+        <Node name="root" value={data} path="" depth={0} expanded={visible} toggle={toggle} term={query} qt={qt} />
       </div>
     </div>
   )

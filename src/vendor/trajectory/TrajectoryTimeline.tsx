@@ -684,9 +684,11 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
       event.preventDefault()
       const track = trackRef.current
       if (track === null || model === null) return
-      /* Wheel is zoom only: up = zoom in, down = zoom out. At full zoom-out
-         there is nothing left to expand, and paging history is the left arrow's
-         job — a scroll must never fetch on its own. */
+      /* Wheel is zoom: up = zoom in, down = zoom out. The one exception is the
+         bottom end — once the window already covers everything loaded, another
+         wheel-down is the same "keep going back" gesture as scrolling past the
+         top of the ledger, so it pages the next chunk instead of doing
+         nothing. */
       setAnimateViewport(false)
       const rect = track.getBoundingClientRect()
       const anchorFraction =
