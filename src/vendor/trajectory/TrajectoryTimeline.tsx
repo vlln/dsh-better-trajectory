@@ -32,7 +32,7 @@ const HOLD_REPEAT_MS = 140
  * window is zoomed in.
  */
 const BUCKET_SPAN_LIMIT = 1600
-const BUCKET_COLUMNS = 900
+const BUCKET_COLUMNS = 360
 const MINIMUM_ZOOM_OPERATIONS = 4
 const EDGE_PAN_ZONE_FRACTION = 0.08
 const EDGE_PAN_STEP_FRACTION = 0.025
@@ -530,21 +530,32 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
     loadEarlier?.()
   }, [loadEarlier, panWindow])
   const stepLater = useCallback(() => { panWindow(1) }, [panWindow])
+  const stepEarlierRef = useRef<() => void>(() => {})
+  const stepLaterRef = useRef<() => void>(() => {})
   const canStepEarlier = viewport !== null || (hasEarlierRecords && loadEarlier !== undefined)
-  /* Hold to repeat: one step on press, then a steady repeat after a short delay. */
+  /* Hold to repeat: one step on press, then a steady repeat after a short delay.
+     The interval reads the *current* step from a ref: a page load re-renders and
+     recreates the callback, and an interval holding the first closure would keep
+     calling a step whose `loadEarlier` has gone stale (the chain died after one
+     page). */
   const holdTimer = useRef<number | null>(null)
+  const holdStep = useRef<() => void>(() => {})
   const stopHold = useCallback(() => {
-    if (holdTimer.current !== null) window.clearInterval(holdTimer.current)
+    if (holdTimer.current !== null) window.clearTimeout(holdTimer.current)
     holdTimer.current = null
   }, [])
   const startHold = useCallback((step: () => void) => {
     stopHold()
+    holdStep.current = step
     step()
     holdTimer.current = window.setTimeout(() => {
-      holdTimer.current = window.setInterval(step, HOLD_REPEAT_MS)
+      holdTimer.current = window.setInterval(() => { holdStep.current() }, HOLD_REPEAT_MS)
     }, HOLD_DELAY_MS)
   }, [stopHold])
   useEffect(() => stopHold, [stopHold])
+  /* keep the ref pointing at the latest closure while a hold is running */
+  stepEarlierRef.current = stepEarlier
+  stepLaterRef.current = stepLater
   const projectedDomainStyle = useMemo(() => (model === null
     ? undefined
     : {
@@ -615,7 +626,7 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
                 event.preventDefault()
                 event.stopPropagation()
                 if (event.button !== 0) return
-                startHold(stepEarlier)
+                startHold(() => { stepEarlierRef.current() })
               }}
               onPointerUp={stopHold}
               onPointerLeave={stopHold}
@@ -844,7 +855,7 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
               event.preventDefault()
               event.stopPropagation()
               if (event.button !== 0) return
-              startHold(stepEarlier)
+              startHold(() => { stepEarlierRef.current() })
             }}
             onPointerUp={stopHold}
             onPointerLeave={stopHold}
@@ -863,7 +874,7 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
               event.preventDefault()
               event.stopPropagation()
               if (event.button !== 0) return
-              startHold(stepLater)
+              startHold(() => { stepLaterRef.current() })
             }}
             onPointerUp={stopHold}
             onPointerLeave={stopHold}
