@@ -285,12 +285,11 @@ type VirtualSpacerStyle = CSSProperties & {
   '--trajectory-virtual-spacer-height': string
 }
 
-interface OlderLoadAnchor {
+interface ScrollBaseline {
+  /** First loaded event seq; a change means rows were prepended. */
   readonly historyStartSeq: number | undefined
+  /** Content height at that moment, so the arrived height can be compensated. */
   readonly scrollHeight: number
-  readonly scrollTop: number
-  /** The request came from the top edge: the reader wants to see the new rows. */
-  readonly atTop: boolean
 }
 
 function clampDetailsWidth(width: number, splitWidth: number): number {
@@ -1897,7 +1896,7 @@ export function TrajectoryTable({
   const pendingScrollRecordId = useRef<string | null>(null)
   const loadingOlder = useRef(false)
   const [olderLoading, setOlderLoading] = useState(false)
-  const olderLoadAnchor = useRef<OlderLoadAnchor | null>(null)
+  const scrollBaseline = useRef<ScrollBaseline | null>(null)
   /* The top edge follows *gestures*, not position: `topIntent` is set by an
      upward scroll/wheel at the edge and consumed by the next page. Sitting at
      scrollTop 0 therefore loads nothing — only continuing to scroll does. A
@@ -2495,15 +2494,7 @@ export function TrajectoryTable({
     ) return
     loadingOlder.current = true
     setOlderLoading(true)
-    olderLoadAnchor.current = {
-      historyStartSeq,
-      scrollHeight: pane.scrollHeight,
-      scrollTop: pane.scrollTop,
-      atTop: pane.scrollTop <= OLDER_LOAD_THRESHOLD_PX,
-    }
-    void onLoadOlder().then((advanced) => {
-      if (!advanced) olderLoadAnchor.current = null
-    }).finally(() => {
+    void onLoadOlder().finally(() => {
       loadingOlder.current = false
       setOlderLoading(false)
     })
@@ -2511,18 +2502,18 @@ export function TrajectoryTable({
   useLayoutEffect(() => {
     const pane = tablePaneRef.current
     if (pane === null) return
-    const anchor = olderLoadAnchor.current
-    if (anchor !== null && anchor.historyStartSeq !== historyStartSeq) {
-      /* Prepending must never move the rows on screen: the height that arrived
-         above the viewport is added to scrollTop. This applies to the virtualized
-         list too — a virtual row is absolutely positioned, so the browser's own
-         scroll anchoring does not help there, and skipping it made the list jump
-         by a page under the reader's eyes. */
-      pane.scrollTop = anchor.scrollTop + pane.scrollHeight - anchor.scrollHeight
-      olderLoadAnchor.current = null
-      followsTableTail.current = false
+    const baseline = scrollBaseline.current
+    /* A prepend is visible in the log itself: `historyStartSeq` moves earlier.
+       Compensating here — rather than in the loader's own promise — means every
+       trigger is covered, including the strip's arrows and wheel, which page
+       history without going through this component's request path. */
+    if (baseline !== null && baseline.historyStartSeq !== historyStartSeq) {
+      const arrived = pane.scrollHeight - baseline.scrollHeight
+      if (arrived > 0) pane.scrollTop += arrived
+      scrollBaseline.current = { historyStartSeq, scrollHeight: pane.scrollHeight }
       return
     }
+    scrollBaseline.current = { historyStartSeq, scrollHeight: pane.scrollHeight }
     if (!tableScrollInitialized.current) {
       if (historyLoading) return
       tableScrollInitialized.current = true

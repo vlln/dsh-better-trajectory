@@ -3,8 +3,9 @@
   z-index: 1;
   isolation: isolate;
   flex: none;
-  /* room outside the plot for the two step arrows, so they never cover data */
-  padding: 0 20px;
+  /* one arrow column at each end, flush against the plot and exactly its
+     height; they sit outside the plotted area so they never cover a bar */
+  padding: 0 18px;
   border-bottom: 0.5px solid var(--dsw-alias-border-l2);
   user-select: none;
 }
@@ -77,37 +78,36 @@
   all: unset;
   position: absolute;
   z-index: 7;
-  top: 50%;
+  top: 0;
+  bottom: 0;
   display: flex;
-  width: 16px;
-  height: 28px;
+  width: 18px;
   align-items: center;
   justify-content: center;
-  border-radius: 5px;
-  background: var(--bt-surface-2, #f6f7f9);
-  color: var(--bt-text-2, #5b6470);
+  border-radius: 0;
+  background: transparent;
+  color: var(--bt-text-3, #9aa1ab);
   cursor: pointer;
-  font: 600 13px/1 var(--dsw-font-family);
-  transform: translateY(-50%);
+  font: 500 14px/1 var(--dsw-font-family);
   transition: background-color var(--bt-dur-2, 90ms) var(--bt-ease-std, ease),
     color var(--bt-dur-2, 90ms) var(--bt-ease-std, ease);
 }
 
 .edgeStep[data-side='earlier'] {
-  left: 1px;
+  left: 0;
 }
 
 .edgeStep[data-side='later'] {
-  right: 1px;
+  right: 0;
 }
 
 .edgeStep:hover {
-  background: var(--bt-surface-3, #eef0f3);
+  background: var(--bt-surface-2, #f6f7f9);
   color: var(--bt-text, #1c2128);
 }
 
 .edgeStep:active {
-  background: var(--bt-line-soft, #f0f2f4);
+  background: var(--bt-surface-3, #eef0f3);
 }
 
 .edgeStep:focus-visible {
