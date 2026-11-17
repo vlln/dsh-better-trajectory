@@ -2918,12 +2918,11 @@ export function TrajectoryTable({
                                 const turnFold = record.turnStart && record.turn !== null
                                   && !isCollapsedSummary
                                   && record.turnCollapsible === true
-                                /* the filtered list has no tree, so no fold dot: the
-                                   turn start it invents is the first row that survived
-                                   the query, and its circle only looked like a hole */
-                                if (hiddenIndexes !== null) {
-                                  return <span className={css.rowChevronSpace} />
-                                }
+                                /* the filtered list has no tree: no fold dot (the turn
+                                   start it invents is the first row that survived the
+                                   query) and no empty 24px control slot either — it
+                                   pushed the kind tag 32px away from the position */
+                                if (hiddenIndexes !== null) return null
                                 if (turnFold) {
                                   const collapsed = collapsedTurns.has(record.turn as number)
                                   return (

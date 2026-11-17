@@ -2922,7 +2922,7 @@ tr[data-child-last] .rowLine::before {
   flex: none;
   align-items: center;
   gap: 4px;
-  margin-right: 10px;
+  margin-right: 2px;
 }
 
 .rowPositionChip {
