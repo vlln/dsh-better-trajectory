@@ -2494,8 +2494,10 @@ tr[data-kind='user'] .rowSub {
   font-size: 12px;
 }
 
-/* group bands: assistant + its tools share one tint */
-tr[data-group-parity='1']:not([data-kind='user']) {
+/* band per step: every row of the step carries it, so a call and its message
+   share one tint. The turn's opening block has no band — it is the turn's
+   header, and the 2px rule above it already marks the boundary. */
+tr[data-band='1'] {
   background: color-mix(in srgb, var(--bt-surface-2, #f6f7f9) 55%, transparent);
 }
 
@@ -2517,8 +2519,7 @@ tr[data-kind='user'][data-selected='true'] > td {
   }
 }
 
-tr[data-group-parity='1']:hover,
-tr[data-group-parity='0']:hover {
+tr:hover {
   background: var(--bt-active, rgba(16, 24, 40, 0.1));
 }
 
@@ -2915,6 +2916,24 @@ tr[data-child-last] .rowLine::before {
   position: absolute;
   inset: 0;
   pointer-events: none;
+}
+
+/* 筛选态: the tree is replaced by the row's coordinates, in the slot the
+   connectors would have used */
+.rowPosition {
+  flex: none;
+  margin-right: 8px;
+  color: var(--bt-text-3, #9aa1ab);
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.rowPositionDot {
+  margin: 0 4px;
+  opacity: 0.7;
 }
 
 .rail {

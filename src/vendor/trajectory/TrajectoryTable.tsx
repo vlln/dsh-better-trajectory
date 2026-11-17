@@ -169,6 +169,8 @@ interface TableRecord {
   groupIndex?: number
   groupStart: boolean
   turnStart: boolean
+  /** One of the rows the turn opens with, before its first assistant message. */
+  turnOpening?: boolean
   /** This row stands for a whole collapsed turn, so it sits at the turn's own depth. */
   turnSummary?: boolean
   cell: TrajectoryCellProps
@@ -530,85 +532,65 @@ export interface TrajectoryUsage {
 }
 
 /**
- * Depth of a record inside its turn, from the record alone.
+ * Depth of a record inside its turn, from the log's own boundaries.
  *
- * The turn is level 0 — its system prompt, its user message and a compaction all
- * sit there. A message or a context source is one step under the turn, a call one
- * step under its message, a nested call one step further.
+ * `turn/start` … `step/start` → inputs → `assistant/message` → `tool/call` …
+ * `step/end` … `turn/end`. So:
  *
- * Reading the depth off the kind keeps a list that starts in the middle of a turn
- * — which the loaded history does, the window is cut by record count, not by turn
- * — indented like the same rows further down: the parent is off the top edge, not
- * missing. Deriving it from the rows on screen instead made every turn of such a
- * window a root, so the whole ledger lost a level and a continuation turn (one
- * that opens with a context source because no user message ever arrived) looked
- * like it had two rows at different depths.
+ * - level 0 — the rows the turn opens with: the system prompt and every input the
+ *   turn's first request carried (user message, injected contexts). The log puts
+ *   them all before the turn's first assistant message, and that is the only
+ *   boundary needed: `系统` lands here without being a special case. A context
+ *   that arrives later (a step's own input) is level 1 like any other message.
+ * - level 1 — the assistant messages and everything else the turn says after it.
+ * - level 2 — its calls, level 3 — the calls inside those.
+ *
+ * Reading the depth off the record rather than off the rows on screen keeps a list
+ * that starts in the middle of a turn — which the loaded history does, the window
+ * is cut by record count — indented like the same rows further down: the turn's
+ * opening is off the top edge, not missing.
  */
-const STRUCTURAL_LEVEL: Record<TrajectoryCellKind, number> = {
-  system: 0,
-  user: 0,
-  compacted: 0,
-  message: 1,
-  context: 1,
-  tool: 2,
-  subtool: 3,
+function levelOf(record: TableRecord): number {
+  /* a collapsed turn is the turn, not a child of it: the same row sits at level 0
+     when the turn opens with a user message, so the summary must too */
+  if (record.turnSummary === true) return 0
+  if (record.turnOpening === true) return 0
+  switch (record.cell.kind) {
+    case 'tool':
+      return 2
+    case 'subtool':
+      return 3
+    case 'system':
+    case 'compacted':
+      return 0
+    default:
+      return 1
+  }
 }
 
 function withStructuralLevels(records: readonly TableRecord[]): TableRecord[] {
-  return records.map(record => ({
-    ...record,
-    /* a collapsed turn is the turn, not a child of it: the same row sits at level
-       0 when the turn opens with a user message, so the summary must too */
-    level: record.turnSummary === true ? 0 : STRUCTURAL_LEVEL[record.cell.kind],
-  }))
+  const levelled = records.map(record => ({ ...record, level: levelOf(record) }))
+  /* the drop line follows the depth of the next row, not the kind: the last row of
+     a turn's opening drops into its first assistant message, and that is the only
+     way a context source can hand the rail over to the content */
+  for (const [index, record] of levelled.entries()) {
+    const next = levelled[index + 1]
+    if (next !== undefined && next.level > record.level) record.hasChildren = true
+    else delete record.hasChildren
+  }
+  return levelled
 }
 
-/**
- * Indent level for a *filtered* list, where ancestors are deliberately absent.
- *
- * A row sits one step under the nearest row of its parent kind in the same turn
- * that the filter kept, and a row whose parent was filtered out is a root — a
- * kind-based constant left elbows pointing at an axis with no dot and rails
- * running to nothing. Unfiltered lists use withStructuralLevels: there the
- * parent is merely above the window, so it still holds its children.
- */
-function assignVisibleParentLevels(records: readonly TableRecord[]): TableRecord[] {
-  let turn: number | null | undefined
-  let turnVisible = false
-  let messageLevel: number | null = null
-  let callLevel: number | null = null
-  return records.map((record) => {
-    const kind = record.cell.kind
-    if (record.turn !== turn) {
-      turn = record.turn
-      turnVisible = false
-      messageLevel = null
-      callLevel = null
-    }
-    let level: number
-    if (kind === 'user' || kind === 'system' || kind === 'compacted') {
-      turnVisible = true
-      messageLevel = null
-      callLevel = null
-      level = 0
-    } else if (kind === 'message' || kind === 'context') {
-      level = turnVisible ? 1 : 0
-      messageLevel = level
-      callLevel = null
-    } else if (kind === 'tool') {
-      level = messageLevel === null ? 0 : messageLevel + 1
-      callLevel = level
-    } else {
-      level = callLevel === null ? (messageLevel ?? 0) : callLevel + 1
-    }
-    return { ...record, level }
-  })
+/** A query drops rows, so the tree has no continuity left: one flat level. */
+function withFlatLevels(records: readonly TableRecord[]): TableRecord[] {
+  return records.map(record => ({ ...record, level: 0, hasChildren: undefined }))
 }
 
 function flattenRecords(turns: readonly TrajectoryTurnModel[]): TableRecord[] {
   let groupIndex = -1
   return turns.flatMap((turn, section) => {
     let firstInSection = true
+    let opening = true
     const records = turn.groups.flatMap((group) => {
       groupIndex += 1
       /* A request-only cell was a placeholder for the request marker; the marker
@@ -621,6 +603,10 @@ function flattenRecords(turns: readonly TrajectoryTurnModel[]): TableRecord[] {
           && cell.kind !== 'system'
           && (cell.kind !== 'compacted' || turn.turn === null)
         if (turnStart) firstInSection = false
+        /* the turn's opening ends at its first assistant message — everything the
+           first request carried sits above it (see levelOf) */
+        const turnOpening = opening && cell.kind !== 'message'
+        if (cell.kind === 'message') opening = false
         return {
           turn: turn.turn,
           level: 0,
@@ -630,6 +616,7 @@ function flattenRecords(turns: readonly TrajectoryTurnModel[]): TableRecord[] {
           groupIndex,
           groupStart: index === 0,
           turnStart,
+          turnOpening,
           cell,
           turnEnd: false,
         }
@@ -2096,14 +2083,7 @@ export function TrajectoryTable({
       }
       flushAssistant()
       flushTool()
-      const nextRecord = allRecords[recordIndex + 1]
-      const kind = record.cell.kind
-      const nextKind = nextRecord?.cell.kind
-      const hasChildren = (kind === 'message' || ((kind === 'user' || kind === 'system') && false))
-        ? nextKind === 'tool' || nextKind === 'subtool'
-        : (kind === 'user' && nextRecord?.turn === record.turn && nextKind !== undefined)
-      if (hasChildren) out.push({ ...record, hasChildren: true })
-      else out.push(record)
+      out.push(record)
     }
     flushAssistant()
     flushTool()
@@ -2136,12 +2116,11 @@ export function TrajectoryTable({
         if (endsTurn) (record as TableRecord).childLast = true
       }
     }
-    /* A query hides rows on purpose, so a call whose message was filtered out
-       becomes a root; an unfiltered list only has its *window* cut, and the
-       parent above the window still holds its children. */
+    /* A query drops rows on purpose, so the tree has no continuity left: the list
+       is flat and every row carries its 轮/步 instead of a connector */
     return hiddenIndexes === null
       ? withStructuralLevels(out)
-      : assignVisibleParentLevels(out)
+      : withFlatLevels(out)
   }, [allRecords, collapsedAssistants, collapsedTools, collapsedTurns, messagesWithCalls, hiddenIndexes, callMeta, requestGroups])
 
   const projectedVirtualRows = useMemo(
@@ -2677,6 +2656,12 @@ export function TrajectoryTable({
                   const rowStartedAt = record.cell.startedAt ?? metaInfo?.time
                   const toolLike = record.cell.kind === 'tool' || record.cell.kind === 'subtool'
                   const level = record.level
+                  /* stripes are a property of the step, independent of the window
+                     and of the depth the row happens to sit at */
+                  const banded = record.turnOpening !== true
+                    && record.turnSummary !== true
+                    && record.cell.kind !== 'user'
+                    && (record.step ?? 0) % 2 === 1
                   const nextRow = records[position + 1]
                   const nextLevel = nextRow === undefined ? -1 : nextRow.level
                   const rowName = toolLike
@@ -2719,10 +2704,12 @@ export function TrajectoryTable({
                         })}
                       aria-selected={!isCollapsedSummary && !isRequestOnly && selectedIndex === record.cell.index}
                       data-kind={record.cell.kind}
-                      /* banding follows the group's own identity, not its
-                         position in the loaded window: a prepended page used to
-                         flip the stripes of every group below it */
-                      data-group-parity={((record.turn ?? 0) + (record.step ?? 0)) % 2}
+                      /* the stripe belongs to the step, not to the row's place in
+                         the list: a prepended page used to flip every stripe below
+                         it. It starts on every turn's first step, and it skips the
+                         rows the turn opens with — that block is the turn's header,
+                         not content. */
+                      data-band={banded ? '1' : undefined}
                       data-child-last={record.childLast || undefined}
                       data-level={level}
                       data-has-children={record.hasChildren || undefined}
@@ -2858,6 +2845,20 @@ export function TrajectoryTable({
                               // CSS owns the geometry; markup only says which level this row is
                               style={{ '--bt-level': level } as CSSProperties}
                             >
+                              {hiddenIndexes !== null && (
+                                /* a query drops rows, so the tree is gone: the
+                                   row states its own 轮/步 where the connector
+                                   would have been */
+                                <span className={css.rowPosition}>
+                                  {sectionLabel(record.turn, t)}
+                                  {record.step !== null && (
+                                    <>
+                                      <span className={css.rowPositionDot} aria-hidden="true">·</span>
+                                      {t('group.step', { step: record.step })}
+                                    </>
+                                  )}
+                                </span>
+                              )}
                               <span className={css.rails} aria-hidden="true">
                                 {[1, 2, 3].filter(axisLevel => level >= axisLevel).map(axisLevel => {
                                   /* one rail per ancestor level. It runs down while a later
