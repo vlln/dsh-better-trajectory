@@ -208,7 +208,7 @@ function useStableVirtualRowStructure(
  * what it cost, what it literally is. Request rows keep their own four, because
  * a request is not a record.
  */
-type DetailTab = 'overview' | 'preview' | 'timing' | 'raw' | 'options' | 'usage'
+type DetailTab = 'overview' | 'preview' | 'timing' | 'raw'
 type RecordState = 'complete' | 'running' | 'error'
 
 interface DetailTabItem {
@@ -227,10 +227,6 @@ interface ToolCallTextParts {
   program: boolean
   name: string
   args?: string
-}
-
-interface SelectedRequest {
-  identity: string
 }
 
 interface DetailsResizeDrag {
@@ -255,12 +251,6 @@ const RECORD_TABS: readonly DetailTabItem[] = [
   { id: 'preview', labelKey: 'tab.preview', custom: true },
   { id: 'timing', labelKey: 'tab.stats', custom: true },
   { id: 'raw', labelKey: 'tab.raw', custom: true },
-]
-const REQUEST_TABS: readonly DetailTabItem[] = [
-  { id: 'overview', labelKey: 'tab.summary' },
-  { id: 'options', labelKey: 'tab.options' },
-  { id: 'usage', labelKey: 'tab.usage' },
-  { id: 'timing', labelKey: 'tab.stats', custom: true },
 ]
 
 function jsonTreeLabels(t: TrajectoryTranslate): JsonTreeLabels {
@@ -287,10 +277,6 @@ function markdownLabels(t: TrajectoryTranslate): MarkdownLabels {
 
 type TrajectorySplitStyle = CSSProperties & {
   '--trajectory-tool-request-width': string
-}
-
-type RequestBoundaryStyle = CSSProperties & {
-  '--request-boundary-offset': string
 }
 
 type VirtualSpacerStyle = CSSProperties & {
@@ -606,27 +592,6 @@ function requestKey(turn: number | null, group: string): string {
   return `${turn}\u0000${group}`
 }
 
-function requestIdentity(request: TrajectoryRequestNumber): string {
-  return request.purpose === 'compaction'
-    ? `compaction\u0000${request.seq}`
-    : `assistant\u0000${request.turn}\u0000${request.step}`
-}
-
-function indexRequestBoundaries(
-  records: readonly TableRecord[],
-  requestGroups: ReadonlySet<string>,
-): ReadonlyMap<string, number> {
-  const boundaries = new Map<string, number>()
-  for (const record of records) {
-    const key = requestKey(record.turn, record.group)
-    if (!requestGroups.has(key)) continue
-    if (boundaries.has(key)) continue
-    if (record.cell.kind === 'user' || record.cell.kind === 'context' || record.cell.kind === 'system') continue
-    boundaries.set(key, record.cell.index)
-  }
-  return boundaries
-}
-
 function sectionLabel(turn: number | null, t: TrajectoryTranslate): string {
   return turn === null ? t('section.betweenTurns') : t('turn.label', { turn })
 }
@@ -639,29 +604,6 @@ function indexRequestNumbers(
     numbers.set(requestKey(request.turn, request.group), request.number)
   }
   return numbers
-}
-
-function indexRequestBoundaryRuns(
-  records: readonly TableRecord[],
-  requestGroups: ReadonlySet<string>,
-): ReadonlyMap<number, number> {
-  const indexes = new Map<number, number>()
-  let runLength = 0
-  for (const record of records) {
-    if (record.cell.requestOnly === true) {
-      indexes.set(record.cell.index, runLength++)
-      continue
-    }
-    if (
-      runLength > 0
-      && record.groupStart
-      && requestGroups.has(requestKey(record.turn, record.group))
-    ) {
-      indexes.set(record.cell.index, runLength)
-    }
-    runLength = 0
-  }
-  return indexes
 }
 
 function messageIndexesWithCalls(records: readonly TableRecord[]): Set<number> {
@@ -706,86 +648,6 @@ function requestErrorMessage(
   return request.error
 }
 
-function inputTotal(usage: TrajectoryUsage): number | undefined {
-  if (
-    usage.input === undefined
-    && usage.cacheRead === undefined
-    && usage.cacheWrite === undefined
-  ) return undefined
-  return (usage.input ?? 0) + (usage.cacheRead ?? 0) + (usage.cacheWrite ?? 0)
-}
-
-function UsageRows({ usage, t }: { usage: TrajectoryUsage | undefined; t: TrajectoryTranslate }) {
-  if (usage === undefined) return <p className={css.noPayload}>{t('usage.notReported')}</p>
-  const totalInput = inputTotal(usage)
-  const otherOutput = usage.output !== undefined && usage.reasoning !== undefined
-    ? usage.output - usage.reasoning
-    : undefined
-  return (
-    <dl className={css.overview}>
-      {totalInput !== undefined && (
-        <div><dt>{t('usage.input')}</dt><dd>{t('unit.tokens', { value: totalInput })}</dd></div>
-      )}
-      {usage.cacheRead !== undefined && (
-        <div className={css.requestTokenDetail}>
-          <dt>{t('usage.cached')}</dt>
-          <dd>{t('unit.tokens', { value: usage.cacheRead })}</dd>
-        </div>
-      )}
-      {usage.cacheWrite !== undefined && (
-        <div className={css.requestTokenDetail}>
-          <dt>{t('usage.cacheCreated')}</dt>
-          <dd>{t('unit.tokens', { value: usage.cacheWrite })}</dd>
-        </div>
-      )}
-      {usage.input !== undefined && (
-        <div className={css.requestTokenDetail}>
-          <dt>{t('usage.other')}</dt>
-          <dd>{t('unit.tokens', { value: usage.input })}</dd>
-        </div>
-      )}
-      {usage.output !== undefined && (
-        <div><dt>{t('usage.output')}</dt><dd>{t('unit.tokens', { value: usage.output })}</dd></div>
-      )}
-      {usage.reasoning !== undefined && (
-        <div className={css.requestTokenDetail}>
-          <dt>{t('usage.reasoning')}</dt>
-          <dd>{t('unit.tokens', { value: usage.reasoning })}</dd>
-        </div>
-      )}
-      {otherOutput !== undefined && (
-        <div className={css.requestTokenDetail}>
-          <dt>{t('usage.content')}</dt>
-          <dd>{t('unit.tokens', { value: otherOutput })}</dd>
-        </div>
-      )}
-    </dl>
-  )
-}
-
-function RequestUsagePanel({
-  usage,
-  cumulative,
-  t,
-}: {
-  usage: TrajectoryUsage | undefined
-  cumulative: TrajectoryUsage | undefined
-  t: TrajectoryTranslate
-}) {
-  return (
-    <div className={css.usagePanel}>
-      <section className={css.usageGroup}>
-        <h4 className={css.usageHeading}>{t('usage.thisRequest')}</h4>
-        <UsageRows usage={usage} t={t} />
-      </section>
-      <section className={css.usageGroup}>
-        <h4 className={css.usageHeading}>{t('usage.sessionCumulative')}</h4>
-        <UsageRows usage={cumulative} t={t} />
-      </section>
-    </div>
-  )
-}
-
 function RequestOptions({
   options,
   preview = false,
@@ -821,6 +683,13 @@ const CONTEXT_FORM_KEYS = {
   relay: 'context.form.relay',
   recall: 'context.form.recall',
 } as const
+
+/** The source object as a tree: a foreign producer may log a bare scalar. */
+function contextSourceTree(source: unknown): unknown {
+  return typeof source === 'object' && source !== null && !Array.isArray(source)
+    ? source
+    : { value: source }
+}
 
 /** Friendly name for a durable context form; unknown forms stay unnamed. */
 function contextFormLabel(
@@ -909,24 +778,6 @@ function markdownSource(record: TableRecord): string | undefined {
 function parseMaybeJson(text: string | undefined): unknown {
   if (text === undefined || text === '') return undefined
   try { return JSON.parse(text) } catch { return text }
-}
-
-/** One-line identity for the inspector header: the command, or the record text. */
-function primarySubject(record: TableRecord): string {
-  const cell = record.cell
-  if (cell.kind === 'tool' || cell.kind === 'subtool') {
-    const args = parseMaybeJson(cell.inputDetail)
-    const fromArgs = args !== null && typeof args === 'object'
-      ? (args as Record<string, unknown>).command
-        ?? (args as Record<string, unknown>).description
-        ?? (args as Record<string, unknown>).path
-      : undefined
-    const text = typeof fromArgs === 'string' && fromArgs !== ''
-      ? fromArgs
-      : String(cell.inputDetail ?? '')
-    return text.replace(/\s+/g, ' ').trim()
-  }
-  return String(cell.text ?? '').replace(/\s+/g, ' ').trim()
 }
 
 /**
@@ -1671,48 +1522,6 @@ function RecordTiming({
     )
 }
 
-function RequestTiming({
-  assistant,
-  anchor,
-  request,
-  preview = false,
-  t,
-}: {
-  assistant: TableRecord | undefined
-  anchor: TableRecord | undefined
-  request: TrajectoryRequestNumber | undefined
-  preview?: boolean
-  t: TrajectoryTranslate
-}) {
-  if (assistant !== undefined) return <RecordTiming record={assistant} preview={preview} t={t} />
-  if (request?.startedAt !== undefined) {
-    const duration = request.completedAt === null || request.completedAt === undefined
-      ? null
-      : Math.max(0, (request.completedAt - request.startedAt) / 1000)
-    return (
-      <dl className={css.overview}>
-        <div><dt>{t('timing.started')}</dt><StartedAtValue timestamp={request.startedAt} t={t} /></div>
-        <div><dt>{t('timing.duration')}</dt><dd>{formatElapsedSeconds(duration, t)}</dd></div>
-        {!preview && (
-          <div>
-            <dt>{t('timing.source')}</dt>
-            <dd>{duration === null ? t('timing.sessionTimestampsRunning') : t('timing.sessionTimestamps')}</dd>
-          </div>
-        )}
-      </dl>
-    )
-  }
-  return (
-    <dl className={css.overview}>
-      <div>
-        <dt>{t('timing.started')}</dt>
-        <StartedAtValue timestamp={anchor?.cell.startedAt ?? null} t={t} />
-      </div>
-      <div><dt>{t('timing.duration')}</dt><dd>{formatElapsedSeconds(null, t)}</dd></div>
-    </dl>
-  )
-}
-
 function RecordPayload({
   record,
   direction,
@@ -1985,66 +1794,6 @@ function ProgramOutput({ record, stringWrapping, t }: {
   )
 }
 
-function OverviewSection({
-  label,
-  onOpen,
-  actions,
-  children,
-}: {
-  label: string
-  onOpen: () => void
-  actions?: ReactNode
-  children: ReactNode
-}) {
-  const previewRef = useRef<HTMLDivElement>(null)
-  const [hasMore, setHasMore] = useState(false)
-  const measureOverflow = useCallback((preview: HTMLElement) => {
-    setHasMore(preview.scrollHeight - preview.clientHeight - preview.scrollTop > 1)
-  }, [])
-
-  useLayoutEffect(() => {
-    const preview = previewRef.current as HTMLDivElement
-    const measure = () => { measureOverflow(preview) }
-    measure()
-    if (typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(measure)
-    observer.observe(preview)
-    for (const child of preview.children) observer.observe(child)
-    return () => { observer.disconnect() }
-  }, [children, measureOverflow])
-
-  return (
-    <section className={css.overviewSection}>
-      <h3 className={css.overviewHeading}>
-        <button
-          type="button"
-          className={css.overviewTitle}
-          onClick={onOpen}
-        >
-          <span>{label}</span>
-          <IconChevronRightOutlineRegular className={css.overviewTitleIcon} size={12} />
-        </button>
-        {actions}
-      </h3>
-      <div
-        ref={previewRef}
-        className={`${css.overviewPreview} ${css.summaryScrollRegion}`}
-        data-summary-scroll-region=""
-        data-scroll-more={hasMore || undefined}
-        onScroll={(event) => { measureOverflow(event.currentTarget) }}
-      >
-        {children}
-      </div>
-    </section>
-  )
-}
-
-/**
- * Render trajectory events as a dense ledger with turn and step separators.
- * Clicking ledger whitespace clears the active record or request selection.
- * @param props - Grouped trajectory data and whole-ledger fold state.
- * @returns The ledger and an optional local record inspector.
- */
 export function TrajectoryTable({
   qt = (key: string) => key,
   watchToolResult,
@@ -2084,7 +1833,6 @@ export function TrajectoryTable({
   onInspectApplied,
 }: TrajectoryTableProps) {
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null)
-  const [selectedRequest, setSelectedRequest] = useState<SelectedRequest | null>(null)
   const [activeTab, setActiveTab] = useState<DetailTab>('overview')
   const [codeWrappingOnOpen, setCodeWrappingOnOpen] = useState(false)
   const [thinkingDisclosure, setThinkingDisclosure] = useState<{ recordId: string; expanded: boolean }>()
@@ -2157,10 +1905,6 @@ export function TrajectoryTable({
   const requestGroups = useMemo(() => new Set(
     (sessionRequestNumbers ?? []).map(request => requestKey(request.turn, request.group)),
   ), [sessionRequestNumbers])
-  const requestBoundaries = useMemo(
-    () => indexRequestBoundaries(allRecords, requestGroups),
-    [allRecords, requestGroups],
-  )
   const requestNumbers = useMemo(
     () => indexRequestNumbers(sessionRequestNumbers),
     [sessionRequestNumbers],
@@ -2236,6 +1980,13 @@ export function TrajectoryTable({
     for (const [recordIndex, record] of allRecords.entries()) {
       const isToolRow = record.cell.kind === 'tool' || record.cell.kind === 'subtool'
       if (record.turn !== null && collapsedTurns.has(record.turn)) {
+        /* A system prompt is turn-scoped but not part of the fold: it is the
+           request's context, not the turn's content, and it sits above the user
+           row. Folding must not make it disappear with the content. */
+        if (record.cell.kind === 'system') {
+          out.push(record)
+          continue
+        }
         if (seenTurns.has(record.turn)) continue
         seenTurns.add(record.turn)
         flushAssistant()
@@ -2429,10 +2180,6 @@ export function TrajectoryTable({
       terminalRequestBoundary:
         record.cell.requestOnly === true && position === records.length - 1,
     }))
-  const requestBoundaryRuns = useMemo(
-    () => indexRequestBoundaryRuns(records, requestGroups),
-    [records, requestGroups],
-  )
   const selectedPrompt = selected?.cell.kind === 'system'
     ? selected.cell.promptDetail
     : undefined
@@ -2440,80 +2187,9 @@ export function TrajectoryTable({
     ? selected.cell.previousPromptDetail
     : undefined
   const selectedState = selected === undefined ? undefined : stateOf(selected)
-  const selectedRequestInfo = selectedRequest === null
-    ? undefined
-    : sessionRequestNumbers?.find(request =>
-      requestIdentity(request) === selectedRequest.identity)
-  const selectedRequestRecordTemplates = useMemo(() => selectedRequestInfo === undefined
-    ? []
-    : allRecords.filter(record =>
-      record.turn === selectedRequestInfo.turn
-        && record.group === selectedRequestInfo.group,
-    ), [allRecords, selectedRequestInfo])
-  const selectedRequestRecords = selectedRequestRecordTemplates.map(currentRecord)
-  const selectedRequestAssistant = selectedRequestRecords.find(
-    record => record.cell.kind === 'message' && record.cell.requestOnly !== true,
-  )
-  const selectedRequestAnchor = selectedRequestAssistant ?? selectedRequestRecords[0]
-  const selectedRequestNumber = selectedRequestInfo?.number
-  const selectedRequestState: RecordState | undefined = selectedRequestInfo === undefined
-    ? undefined
-    : selectedRequestInfo.status
-      ?? (selectedRequestAssistant?.cell.assistantMetrics?.completedTime === null
-        ? 'running'
-        : selectedRequestAssistant === undefined
-          && selectedRequestRecords.some(record => stateOf(record) === 'running')
-          ? 'running'
-          : 'complete')
-  const selectedRequestToolCalls = selectedRequestRecords.filter(
-    record => record.cell.kind === 'tool',
-  ).length
-  const selectedRequestSubtoolCalls = selectedRequestRecords.filter(
-    record => record.cell.kind === 'subtool',
-  ).length
-  const selectedRequestResultTemplate = selectedRequestInfo?.resultSeq === undefined
-    ? selectedRequestAssistant
-    : allRecords.find(record => record.cell.sourceSeq === selectedRequestInfo.resultSeq)
-  const selectedRequestResult = selectedRequestResultTemplate === undefined
-    ? undefined
-    : currentRecord(selectedRequestResultTemplate)
-  const selectedRequestUsage = selectedRequestInfo?.usage ?? (
-    selectedRequestAssistant === undefined
-      ? undefined
-      : {
-        ...(selectedRequestAssistant.cell.input === undefined
-          ? {}
-          : { input: selectedRequestAssistant.cell.input }),
-        ...(selectedRequestAssistant.cell.cacheRead === undefined
-          ? {}
-          : { cacheRead: selectedRequestAssistant.cell.cacheRead }),
-        ...(selectedRequestAssistant.cell.cacheWrite === undefined
-          ? {}
-          : { cacheWrite: selectedRequestAssistant.cell.cacheWrite }),
-        ...(selectedRequestAssistant.cell.output === undefined
-          ? {}
-          : { output: selectedRequestAssistant.cell.output }),
-        ...(selectedRequestAssistant.cell.think === undefined
-          ? {}
-          : { reasoning: selectedRequestAssistant.cell.think }),
-      }
-  )
-  const selectedRequestCumulativeUsage =
-    selectedRequestInfo?.cumulativeUsage ?? selectedRequestUsage
-  const selectedRequestOptions = selectedRequestInfo?.requestConfig
-  const activeTurn = selectedRequestInfo === undefined ? selected?.turn : selectedRequestInfo.turn
-  const activeSection = selectedRequestInfo === undefined
-    ? selected?.section
-    : selectedRequestRecords[0]?.section
-  const selectedTabs = selectedRequestInfo !== undefined
-    ? REQUEST_TABS.filter(tab => tab.id !== 'options' || selectedRequestOptions !== undefined)
-    : selected === undefined ? [] : RECORD_TABS
-  /* switching to a record whose tabs no longer include the active one must not
-     leave an empty panel (tabs differ per record kind) */
-  useEffect(() => {
-    if (selectedTabs.length === 0) return
-    if (!selectedTabs.some(tab => tab.id === activeTab)) setActiveTab('overview')
-  }, [activeTab, selectedTabs])
+  const selectedTabs = selected === undefined ? [] : RECORD_TABS
+  const activeTurn = selected?.turn
+  const activeSection = selected?.section
   const selectedParents: ParentRecords = selected === undefined
     ? {}
     : parentRecords(allRecords, selected)
@@ -2528,10 +2204,13 @@ export function TrajectoryTable({
   const selectedRecordRequestInfo = selectedRecordRequest === undefined
     ? undefined
     : sessionRequestNumbers?.find(request => request.number === selectedRecordRequest)
-  const selectedRecordRequestTarget: SelectedRequest | undefined =
-    selectedRecordRequestInfo === undefined
-      ? undefined
-      : { identity: requestIdentity(selectedRecordRequestInfo) }
+  /* Requests are a property of the two rows that own them: the user message that
+     opened the step, and the assistant message it produced. A call inherits the
+     step, but it does not have a request of its own to report. */
+  const selectedRequestInfo = selectedRecordRequestInfo !== undefined
+    && (selected?.cell.kind === 'message' || selected?.cell.kind === 'user')
+    ? selectedRecordRequestInfo
+    : undefined
   const hasSelectedHierarchy = selectedParents.message !== undefined
     || selectedParents.tool !== undefined
   const splitStyle: TrajectorySplitStyle | undefined = toolRequestOffset === null
@@ -2557,11 +2236,10 @@ export function TrajectoryTable({
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [selectedRecordId, selectedRequest])
+  }, [selectedRecordId])
 
   const clearInspectorSelection = () => {
     setSelectedRecordId(null)
-    setSelectedRequest(null)
   }
 
   const clearAllSelections = () => {
@@ -2573,7 +2251,6 @@ export function TrajectoryTable({
     setCodeWrappingOnOpen(stringWrapping?.getDefault() ?? false)
     const record = allRecords.find(candidate => candidate.cell.index === index)
     onRecordSelect?.(index)
-    setSelectedRequest(null)
     setSelectedRecordId(record === undefined ? null : trajectoryRecordId(record.cell))
     if (record === undefined) return
     /* every record has the same four faces, so the last used face is always
@@ -2602,15 +2279,6 @@ export function TrajectoryTable({
       : trajectoryRecordId(record.cell)
   }, [allRecords, recordFocus])
 
-  const selectRequest = (
-    request: SelectedRequest,
-    tab: 'overview' | 'timing' = 'overview',
-  ) => {
-    setSelectedRecordId(null)
-    setSelectedRequest(request)
-    activateTab(tab)
-  }
-
   const openRecordSummary = (target: TableRecord) => {
     const targetAt = allRecords.findIndex(record => record.cell.index === target.cell.index)
     if (target.turn !== null && collapsedTurns.has(target.turn)) onToggleTurn(target.turn)
@@ -2635,7 +2303,6 @@ export function TrajectoryTable({
         break
       }
     }
-    setSelectedRequest(null)
     setSelectedRecordId(trajectoryRecordId(target.cell))
     activateTab('overview')
   }
@@ -2914,28 +2581,6 @@ export function TrajectoryTable({
                   const isRequestOnly = record.cell.requestOnly === true
                   const isInitialSystem = record.cell.kind === 'system'
                 && record.cell.index === allRecords[0]?.cell.index
-                  const key = requestKey(record.turn, record.group)
-                  const request = requestBoundaries.get(key) === record.cell.index
-                && !isCollapsedSummary
-                && (record.turn === null || !collapsedTurns.has(record.turn))
-                    ? requestNumbers.get(key)
-                    : undefined
-                  const requestInfo = request === undefined
-                    ? undefined
-                    : sessionRequestNumbers?.find(candidate => candidate.number === request)
-                  const requestStatus = requestInfo?.status
-                ?? (record.cell.isError === true ? 'error' : undefined)
-                  const requestRunIndex = requestBoundaryRuns.get(record.cell.index) ?? 0
-                  const requestBoundaryStyle: RequestBoundaryStyle = {
-                    '--request-boundary-offset': `${requestRunIndex * 8}px`,
-                  }
-                  const requestLabel = request === undefined
-                    ? undefined
-                    : t(requestInfo?.purpose === 'compaction'
-                      ? 'request.labelCompaction'
-                      : 'request.label', { request })
-                  const requestSelected = requestInfo !== undefined
-                && selectedRequest?.identity === requestIdentity(requestInfo)
                   const sectionActive = record.turn === null
                     ? activeSection === record.section
                     : activeTurn === record.turn
@@ -2982,13 +2627,10 @@ export function TrajectoryTable({
                           kind: t(COLLAPSED_SUMMARY_LABEL_KEY[summaryKind]),
                           summary: record.collapsedSummary,
                         })
-                        : isRequestOnly
-                          ? t('request.rowAriaCompaction', { request: request ?? '' })
-                          : t('request.rowAria', {
-                            request: request === undefined ? '' : t('request.rowPrefix', { request }),
-                            kind: t(KIND_LABEL_KEY[record.cell.kind]),
-                            content: listDisplayText || t('request.noContent'),
-                          })}
+                        : t('request.rowAria', {
+                          kind: t(KIND_LABEL_KEY[record.cell.kind]),
+                          content: listDisplayText || t('request.noContent'),
+                        })}
                       aria-selected={!isCollapsedSummary && !isRequestOnly && selectedIndex === record.cell.index}
                       data-kind={record.cell.kind}
                       data-group-parity={(record.groupIndex ?? 0) % 2}
@@ -3263,8 +2905,11 @@ export function TrajectoryTable({
                               <span className={css.rowSub}>
                                 {record.collapsedSummary !== undefined ? record.collapsedSummary : rowSub}
                               </span>
+                              {/* no native title: the row already opens its own
+                                  card, and the browser tooltip duplicated the
+                                  same text on top of it */}
                               {rowErrorText !== '' && (
-                                <span className={css.rowResult} title={rowErrorText}>
+                                <span className={css.rowResult}>
                                   <span className={css.rowResultArrow} aria-hidden="true">→</span>
                                   <span className={css.rowResultText}>{rowErrorText}</span>
                                 </span>
@@ -3303,8 +2948,7 @@ export function TrajectoryTable({
           </tbody>
         </table>
       </div>
-      {(selectedRequestInfo !== undefined
-        || (selected !== undefined && selectedState !== undefined)) && (
+      {selected !== undefined && selectedState !== undefined && (
         <aside
           className={css.details}
           aria-label={t('details.event')}
@@ -3399,49 +3043,35 @@ export function TrajectoryTable({
           />
           <div className={css.detailsHeader}>
             <div className={css.detailsTitle}>
-              {selectedRequestInfo !== undefined
-                ? (
-                  <>
-                    <span className={css.requestDetailsDot} aria-hidden="true" />
-                    <span className={css.requestDetailsName}>
-                      {t('request.label', { request: selectedRequestNumber ?? '—' })}
-                    </span>
-                    <span className={css.detailsLocation}>
-                      {selectedRequestInfo.purpose === 'compaction'
-                        ? t('request.compaction', { section: sectionLabel(selectedRequestInfo.turn, t) })
-                        : sectionLabel(selectedRequestInfo.turn, t)}
-                    </span>
-                  </>
-                )
-                : selected !== undefined && (
-                    <>
-                      <span className={`${css.kindTag} ${
-                        selected.cell.kind === 'context'
-                          ? css.contextGreen
-                          : selected.cell.kind === 'compacted'
-                            ? css.compacted
-                            : selected.cell.kind === 'tool'
-                              ? css.toolAmber
-                              : selected.cell.kind === 'message'
-                                ? css.assistantVioletBright
-                                : selected.cell.kind === 'subtool'
-                                  ? css.subtoolAmber
-                                  : css[selected.cell.kind]
-                      }`}
-                      >
-                        {selected.cell.kind === 'tool' || selected.cell.kind === 'subtool'
-                          ? (selected.cell.toolName ?? t(KIND_LABEL_KEY[selected.cell.kind]))
-                          : t(KIND_LABEL_KEY[selected.cell.kind])}
-                      </span>
-                      <span className={css.detailsLocation}>
-                        {selected.cell.kind === 'compacted'
-                          ? sectionLabel(selected.turn, t)
-                          : `${sectionLabel(selected.turn, t)} · ${selected.group}`}
-                      </span>
-                    </>
-                  )}
+              {selected !== undefined && (
+                <>
+                  <span className={`${css.kindTag} ${
+                    selected.cell.kind === 'context'
+                      ? css.contextGreen
+                      : selected.cell.kind === 'compacted'
+                        ? css.compacted
+                        : selected.cell.kind === 'tool'
+                          ? css.toolAmber
+                          : selected.cell.kind === 'message'
+                            ? css.assistantVioletBright
+                            : selected.cell.kind === 'subtool'
+                              ? css.subtoolAmber
+                              : css[selected.cell.kind]
+                  }`}
+                  >
+                    {selected.cell.kind === 'tool' || selected.cell.kind === 'subtool'
+                      ? (selected.cell.toolName ?? t(KIND_LABEL_KEY[selected.cell.kind]))
+                      : t(KIND_LABEL_KEY[selected.cell.kind])}
+                  </span>
+                  <span className={css.detailsLocation}>
+                    {selected.cell.kind === 'compacted'
+                      ? sectionLabel(selected.turn, t)
+                      : `${sectionLabel(selected.turn, t)} · ${selected.group}`}
+                  </span>
+                </>
+              )}
             </div>
-            {selected !== undefined && selectedRequestInfo === undefined && (() => (
+            {selected !== undefined && (() => (
               <span className={css.headActions}>
                 <button
                   type="button"
@@ -3463,22 +3093,6 @@ export function TrajectoryTable({
               <span aria-hidden="true">×</span>
             </button>
           </div>
-          {selected !== undefined && selectedRequestInfo === undefined
-            && primarySubject(selected) !== '' && (
-            <div className={css.detailsSubject} data-copy-reveal>
-              <span className={css.detailsSubjectText}>{primarySubject(selected)}</span>
-              {(selected.cell.kind === 'tool' || selected.cell.kind === 'subtool')
-                && selected.cell.inputDetail !== undefined
-                && selected.cell.inputDetail !== '' && (
-                <CopyButton
-                  text={selected.cell.inputDetail}
-                  label={qt('head.copyArgs')}
-                  copiedLabel={qt('copied')}
-                  failedLabel={qt('copy.failed')}
-                />
-              )}
-            </div>
-          )}
           <div className={css.detailTabs} role="tablist" aria-label={t('details.event')}>
             {selectedTabs.map(tab => (
               <button
@@ -3506,151 +3120,7 @@ export function TrajectoryTable({
             role="tabpanel"
             aria-labelledby={`trajectory-detail-${activeTab}`}
           >
-            {selectedRequestInfo !== undefined
-              && selectedRequestState !== undefined
-              && activeTab === 'overview' && (
-              <>
-                <dl
-                  className={`${css.overview} ${css.summaryScrollRegion}`}
-                  data-summary-scroll-region=""
-                >
-                  <div>
-                    <dt>{qt('chip.status')}</dt>
-                    <dd className={selectedRequestState === 'error' ? css.error : undefined}>
-                      {statusLabel(selectedRequestState, t)}
-                    </dd>
-                  </div>
-                  {selectedRequestInfo.purpose === 'compaction' && (
-                    <div>
-                      <dt>{t('details.purpose')}</dt>
-                      <dd>{t('request.compactionPurpose')}</dd>
-                    </div>
-                  )}
-                  {(selectedRequestInfo.provider
-                    ?? selectedRequestInfo.requestConfig?.provider) !== undefined && (
-                    <div>
-                      <dt>{t('details.provider')}</dt>
-                      <dd>
-                        {selectedRequestInfo.provider
-                          ?? selectedRequestInfo.requestConfig?.provider}
-                      </dd>
-                    </div>
-                  )}
-                  {(selectedRequestInfo.model
-                    ?? selectedRequestInfo.requestConfig?.model) !== undefined && (
-                    <div>
-                      <dt>{t('details.model')}</dt>
-                      <dd>
-                        {selectedRequestInfo.model
-                          ?? selectedRequestInfo.requestConfig?.model}
-                      </dd>
-                    </div>
-                  )}
-                  <div>
-                    <dt>{t('details.toolCalls')}</dt>
-                    <dd>{selectedRequestToolCalls}</dd>
-                  </div>
-                  {selectedRequestSubtoolCalls > 0 && (
-                    <div>
-                      <dt>{t('details.subtoolCalls')}</dt>
-                      <dd>{selectedRequestSubtoolCalls}</dd>
-                    </div>
-                  )}
-                  {selectedRequestInfo.error !== undefined && (
-                    <div>
-                      <dt>{t(selectedRequestState !== 'error' && selectedRequestInfo.retry !== undefined
-                        ? 'details.lastAttemptError'
-                        : 'details.error')}</dt>
-                      <dd className={selectedRequestState === 'error' ? css.error : undefined}>
-                        {requestErrorMessage(selectedRequestInfo, t)}
-                      </dd>
-                    </div>
-                  )}
-                  {selectedRequestInfo.retry !== undefined && (
-                    <div>
-                      <dt>{t('details.retry')}</dt>
-                      <dd>
-                        {selectedRequestInfo.maxRetries === undefined
-                          ? selectedRequestInfo.retry
-                          : t('request.retryProgress', {
-                            retry: selectedRequestInfo.retry,
-                            maximum: selectedRequestInfo.maxRetries,
-                          })}
-                      </dd>
-                    </div>
-                  )}
-                  {selectedRequestInfo.retryDelayMs !== undefined && (
-                    <div>
-                      <dt>{t('details.retryDelay')}</dt>
-                      <dd>{formatDurationMs(selectedRequestInfo.retryDelayMs, t)}</dd>
-                    </div>
-                  )}
-                  {selectedRequestResult !== undefined && (
-                    <div>
-                      <dt>{t('details.result')}</dt>
-                      <dd className={css.overviewParentLinks}>
-                        <button
-                          type="button"
-                          className={css.overviewHierarchyNavLink}
-                          onClick={() => {
-                            openRecordSummary(selectedRequestResult)
-                          }}
-                        >
-                          <span>
-                            {selectedRequestInfo.purpose === 'compaction'
-                              ? t('details.compacted')
-                              : t('details.assistantMessage')}
-                          </span>
-                          <IconChevronRightOutlineRegular
-                            className={css.overviewHierarchyJumpIconTight}
-                            size={11}
-                          />
-                        </button>
-                      </dd>
-                    </div>
-                  )}
-                </dl>
-                <div className={css.overviewSections}>
-                  {selectedRequestOptions !== undefined && (
-                    <OverviewSection label={t('tab.options')} onOpen={() => { activateTab('options') }}>
-                      <RequestOptions options={selectedRequestOptions} preview stringWrapping={stringWrapping} t={t} />
-                    </OverviewSection>
-                  )}
-                  <OverviewSection label={t('tab.usage')} onOpen={() => { activateTab('usage') }}>
-                    <UsageRows usage={selectedRequestUsage} t={t} />
-                  </OverviewSection>
-                  <OverviewSection label={qt('tab.stats')} onOpen={() => { activateTab('timing') }}>
-                    <RequestTiming
-                      assistant={selectedRequestAssistant}
-                      anchor={selectedRequestAnchor}
-                      request={selectedRequestInfo}
-                      preview
-                      t={t}
-                    />
-                  </OverviewSection>
-                </div>
-              </>
-            )}
-            {selectedRequestInfo !== undefined && activeTab === 'options' && (
-              <RequestOptions options={selectedRequestOptions} stringWrapping={stringWrapping} t={t} />
-            )}
-            {selectedRequestInfo !== undefined && activeTab === 'usage' && (
-              <RequestUsagePanel
-                usage={selectedRequestUsage}
-                cumulative={selectedRequestCumulativeUsage}
-                t={t}
-              />
-            )}
-            {selectedRequestInfo !== undefined && activeTab === 'timing' && (
-              <RequestTiming
-                assistant={selectedRequestAssistant}
-                anchor={selectedRequestAnchor}
-                request={selectedRequestInfo}
-                t={t}
-              />
-            )}
-            {selectedRequestInfo === undefined && selected !== undefined
-              && selectedState !== undefined && (() => {
+            {selected !== undefined && selectedState !== undefined && (() => {
                 const cell = selected.cell
                 const toolLike = cell.kind === 'tool' || cell.kind === 'subtool'
                 const argsText = cell.inputDetail ?? ''
@@ -3689,7 +3159,7 @@ export function TrajectoryTable({
                         )}
                         {cell.startedAt != null && (
                           <Field label={t('timing.started')}>
-                            {formatClock(cell.startedAt)}
+                            {formatStartedAt(cell.startedAt, t)}
                           </Field>
                         )}
                         {cell.timeSeconds !== null && (
@@ -3719,16 +3189,43 @@ export function TrajectoryTable({
                             {contextFormLabel(cell.contextForm, qt)}
                           </Field>
                         )}
-                        {selectedRecordRequestTarget !== undefined && (
-                          <Field label={qt('field.request')}>
-                            <button
-                              type="button"
-                              className={css.metaLink}
-                              onClick={() => { selectRequest(selectedRecordRequestTarget) }}
-                            >
-                              {`#${selectedRecordRequest ?? '—'}`}
-                              <IconChevronRightOutlineRegular size={11} aria-hidden="true" />
-                            </button>
+                        {selectedRequestInfo !== undefined && (
+                          <Field label={qt('field.request')}>{`#${selectedRequestInfo.number}`}</Field>
+                        )}
+                        {selectedRequestInfo !== undefined
+                          && (selectedRequestInfo.provider
+                            ?? selectedRequestInfo.requestConfig?.provider) !== undefined && (
+                          <Field label={t('details.provider')}>
+                            {selectedRequestInfo.provider
+                              ?? selectedRequestInfo.requestConfig?.provider}
+                          </Field>
+                        )}
+                        {selectedRequestInfo !== undefined
+                          && (selectedRequestInfo.model
+                            ?? selectedRequestInfo.requestConfig?.model) !== undefined && (
+                          <Field label={t('details.model')}>
+                            {selectedRequestInfo.model
+                              ?? selectedRequestInfo.requestConfig?.model}
+                          </Field>
+                        )}
+                        {selectedRequestInfo?.purpose === 'compaction' && (
+                          <Field label={t('details.purpose')}>
+                            {t('request.compactionPurpose')}
+                          </Field>
+                        )}
+                        {selectedRequestInfo?.error !== undefined && (
+                          <Field label={t('details.error')} tone="error" wrap>
+                            {requestErrorMessage(selectedRequestInfo, t)}
+                          </Field>
+                        )}
+                        {selectedRequestInfo?.retry !== undefined && (
+                          <Field label={t('details.retry')}>
+                            {selectedRequestInfo.maxRetries === undefined
+                              ? selectedRequestInfo.retry
+                              : t('request.retryProgress', {
+                                retry: selectedRequestInfo.retry,
+                                maximum: selectedRequestInfo.maxRetries,
+                              })}
                           </Field>
                         )}
                         {hasSelectedHierarchy && (
@@ -3778,6 +3275,14 @@ export function TrajectoryTable({
                           badge={payloadBadge(isBranch(args) ? args : argsText, qt)}
                           defaultOpen
                           bare={selectedProgram === undefined && isBranch(args)}
+                          actions={(
+                            <CopyButton
+                              text={argsText}
+                              label={qt('head.copyArgs')}
+                              copiedLabel={qt('copied')}
+                              failedLabel={qt('copy.failed')}
+                            />
+                          )}
                         >
                           {selectedProgram !== undefined
                             ? (
@@ -3802,6 +3307,20 @@ export function TrajectoryTable({
                           bare
                         >
                           <RawDataPanel data={schema} qt={qt} bare />
+                        </DetailSection>
+                      )}
+                      {cell.kind === 'context' && cell.messageSource !== undefined && (
+                        <DetailSection
+                          title={qt('context.source')}
+                          badge={payloadBadge(cell.messageSource, qt)}
+                          defaultOpen
+                          bare
+                        >
+                          <RawDataPanel
+                            data={contextSourceTree(cell.messageSource)}
+                            qt={qt}
+                            bare
+                          />
                         </DetailSection>
                       )}
                       {cell.kind === 'system' && selectedPrompt !== undefined && (
@@ -3911,7 +3430,10 @@ export function TrajectoryTable({
           { label: qt('chip.turn'), value: `#${record.turn ?? '—'} · ${record.group}` },
           { label: qt('chip.duration'), value: ms == null ? '—' : compactDuration(ms) },
         ]
-        if (meta?.time !== undefined) rows.push({ label: '开始', value: formatClock(meta.time) })
+        const startedAt = record.cell.startedAt ?? meta?.time
+        if (startedAt != null) {
+          rows.push({ label: t('timing.started'), value: formatStartedAt(startedAt, t) })
+        }
         return (
           <HoverCard
             x={card.x}

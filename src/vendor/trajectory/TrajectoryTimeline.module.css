@@ -67,64 +67,63 @@
   cursor: grabbing;
 }
 
-.earlierHistory {
+
+
+/* One arrow per end: a press is a decision to move (or page), a hold keeps
+   going. Hidden until the strip is hovered or focused so the plot stays a plot. */
+.edgeStep {
+  all: unset;
   position: absolute;
-  z-index: 5;
-  top: 0;
-  bottom: 0;
-  left: 0;
+  z-index: 7;
+  top: 2px;
+  bottom: 2px;
   display: flex;
-  width: 12px;
+  width: 16px;
   align-items: center;
   justify-content: center;
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.14);
+  background: var(--bt-surface, #fff);
+  color: var(--bt-text-2, #5b6470);
+  cursor: pointer;
+  font: 600 12px/1 var(--dsw-font-family);
+  opacity: 0;
+  transition: opacity var(--bt-dur-2, 90ms) var(--bt-ease-std, ease);
+}
+
+.edgeStep[data-side='earlier'] {
+  left: 1px;
+}
+
+.edgeStep[data-side='later'] {
+  right: 1px;
+}
+
+.root:hover .edgeStep,
+.edgeStep:focus-visible {
+  opacity: 1;
+}
+
+.edgeStep:hover {
+  color: var(--bt-text, #1c2128);
+}
+
+.edgeStep:active {
+  background: var(--bt-surface-2, #f6f7f9);
+}
+
+.edgeStep:focus-visible {
+  outline: 2px solid var(--bt-accent, #2563eb);
+  outline-offset: 0;
+}
+
+.edgeStep:disabled {
+  opacity: 0;
   pointer-events: none;
 }
 
-.laterHistory {
-  position: absolute;
-  z-index: 5;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  width: 12px;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-}
-
-.laterDot {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--bt-text-3, #9aa1ab);
-  opacity: 0.55;
-}
-
-.earlierDot {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--bt-text-3, #9aa1ab);
-  opacity: 0.55;
-}
-
-.earlierDot[data-loading] {
-  animation: bt-earlier-pulse 900ms ease-in-out infinite;
-}
-
-@keyframes bt-earlier-pulse {
-  0%, 100% { opacity: 0.25; }
-  50% { opacity: 0.9; }
-}
-
-.empty {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: var(--dsw-alias-label-caption);
-  font: var(--dsw-font-xs-13);
+.edgeStep[data-loading] {
+  color: var(--bt-accent, #2563eb);
 }
 
 .track:focus-visible {

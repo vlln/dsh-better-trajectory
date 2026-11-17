@@ -18,12 +18,11 @@ import { HoverCard } from './HoverCard.tsx'
 import css from './TrajectoryTimeline.module.css'
 
 const MINIMUM_DRAG_PX = 3
-/** Pressing/dragging this close to either end of the track acts on that end. */
-const EDGE_TRIGGER_PX = 20
-/** Extra distance the pointer must travel out of the zone before it acts again. */
-const EDGE_LEAVE_PX = 8
-/** One right-end step reveals this share of the visible window. */
-const LATER_STEP_FRACTION = 0.5
+/** One arrow step moves this share of the visible window. */
+const EDGE_STEP_FRACTION = 2 / 3
+/** Holding an arrow waits this long before repeating, then repeats this often. */
+const HOLD_DELAY_MS = 420
+const HOLD_REPEAT_MS = 140
 const MINIMUM_ZOOM_OPERATIONS = 4
 const EDGE_PAN_ZONE_FRACTION = 0.08
 const EDGE_PAN_STEP_FRACTION = 0.025
@@ -126,12 +125,13 @@ function timelineKindLabel(kind: TrajectoryCellKind, t: TrajectoryTranslate): st
 }
 
 function formatRecordedTime(timestamp: number): string {
-  return new Date(timestamp).toLocaleTimeString(undefined, {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    fractionalSecondDigits: 3,
-  })
+  /* The date is part of the reading: one ledger can span days, and a bare clock
+     time made two different days look adjacent. */
+  const date = new Date(timestamp)
+  const two = (value: number): string => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())}`
+    + ` ${two(date.getHours())}:${two(date.getMinutes())}:${two(date.getSeconds())}`
+    + `.${String(date.getMilliseconds()).padStart(3, '0')}`
 }
 
 /** Props for the fixed full-domain overview above the trajectory ledger. */
@@ -202,44 +202,6 @@ function LaneLabels({ t }: { t: TrajectoryTranslate }) {
       <span>{t('column.model')}</span>
       <span>{t('column.tools')}</span>
     </div>
-  )
-}
-
-/**
- * Passive marker for "there is more history to the left". Loading is automatic:
- * reaching the left edge (dragging, or scrolling the ledger to the top) pulls the
- * next page, so there is no click target here any more.
- */
-function EarlierHistoryBoundary({ loading, t }: { loading: boolean; t: TrajectoryTranslate }) {
-  return (
-    <span
-      className={css.earlierHistory}
-      data-earlier-history
-      data-loading={loading || undefined}
-      role="status"
-      aria-live="polite"
-      title={loading ? t('history.loadingEarlier') : t('history.autoLoadEarlier')}
-    >
-      <span className={css.earlierDot} data-loading={loading || undefined} aria-hidden="true" />
-    </span>
-  )
-}
-
-/**
- * Passive marker for "more recent content is off-screen to the right". The left
- * end of the track pulls in history; this is its mirror, with no fetch behind it.
- */
-function LaterHistoryBoundary({ qt }: { qt: (key: string) => string }) {
-  return (
-    <span
-      className={css.laterHistory}
-      data-later-history
-      role="status"
-      aria-live="polite"
-      title={qt('timeline.moreRecent')}
-    >
-      <span className={css.laterDot} aria-hidden="true" />
-    </span>
   )
 }
 
@@ -457,85 +419,53 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
     )
   const domainDuration = viewport === null ? fullDuration : viewportDuration
   const domainStart = viewport === null ? model?.start ?? 0 : viewportStart
-  /* float tolerance: panning clamps to model.start, and exact equality made the
-     marker (and therefore the auto-load) never fire */
-  const atEarliest = model !== null
-    && domainStart - model.start <= Math.max(1e-9, fullDuration * 1e-6)
-  const showsEarlierBoundary = hasEarlierRecords && model !== null && atEarliest
   const loadEarlier = onLoadEarlier === undefined || loadingEarlier
     ? undefined
     : () => {
       setLoadingEarlier(true)
       void onLoadEarlier().finally(() => { setLoadingEarlier(false) })
     }
-  /* reaching the left edge pages the next chunk in by itself, then the domain
-     start moves left and the guard re-arms for the next page */
-  /* Parked at the left edge: keep pulling pages for as long as the pointer stays
-     there. `lastEdgeStart` is what stops the chain — a page that moves model.start
-     re-arms it, a page that brings nothing (or the last one) leaves it alone. */
-  const edgePointer = useRef(false)
-  /* No timers anywhere: a load is gated by two facts only — nothing is in flight
-     (`loadEarlier` is undefined meanwhile), and the previous page actually added
-     spans. Time-based cooldowns just inserted artificial lag: a wheel or a drag
-     would sit idle while nothing was loading. Span count is the progress signal
-     because a page that only raises the node limit leaves model.start unchanged. */
-  const lastEdgeSpans = useRef<number | null>(null)
-  const requestEarlier = useCallback((source: 'edge' | 'wheel' | 'marker' = 'marker') => {
-    if (loadEarlier === undefined || model === null) return
-    if (source === 'marker') {
-      /* only the boundary-entry effect calls this, and it arms once per entry */
-      loadEarlier()
-      return
-    }
-    if (lastEdgeSpans.current === model.spans.length) return
-    lastEdgeSpans.current = model.spans.length
-    loadEarlier()
-  }, [loadEarlier, model])
-  /* still parked at the edge when a page lands → take the next one */
-  useEffect(() => {
-    if (!edgePointer.current || loadingEarlier) return
-    requestEarlier('edge')
-  }, [loadingEarlier, requestEarlier])
-  /* One page each time the view *enters* the earliest boundary. Guarding on
-     model.start was not enough: every page moves it, so sitting idle at the
-     boundary paged through the entire history on its own. Leaving the boundary
-     re-arms the marker. */
-  const markerArmed = useRef(true)
-  useEffect(() => {
-    if (!showsEarlierBoundary) {
-      markerArmed.current = true
-      return
-    }
-    if (!markerArmed.current) return
-    markerArmed.current = false
-    requestEarlier('marker')
-  }, [requestEarlier, showsEarlierBoundary])
-  /* The right end mirrors the left one. There is nothing newer to fetch, so the
-     action reveals what is already loaded; zone, hysteresis, chain and dot are
-     shared with the left end so neither side feels dead. */
-  const laterPointer = useRef(false)
   const visibleEnd = domainStart + domainDuration
   const showsLaterBoundary = model !== null
     && viewport !== null
     && visibleEnd < model.end - Math.max(1e-9, fullDuration * 1e-6)
-  const requestLater = useCallback(() => {
-    if (model === null || viewport === null) return
-    if (visibleEnd >= model.end - Math.max(1e-9, fullDuration * 1e-6)) return
-    const step = Math.max(1, domainDuration * LATER_STEP_FRACTION)
-    const nextEnd = Math.min(model.end, visibleEnd + step)
-    const nextStart = Math.max(model.start, nextEnd - domainDuration)
+  /* Both ends are explicit arrows now. Hovering an end used to page history in
+     and resize the window under the pointer, so the strip acted on its own; a
+     press is a decision, a hold is a decision to keep going. */
+  const panWindow = useCallback((direction: -1 | 1): boolean => {
+    if (model === null || viewport === null) return false
+    const span = viewport.end - viewport.start
+    const nextStart = Math.min(
+      Math.max(viewport.start + direction * span * EDGE_STEP_FRACTION, model.start),
+      Math.max(model.start, model.end - span),
+    )
+    if (Math.abs(nextStart - viewport.start) < 1e-9) return false
     setAnimateViewport(false)
-    setViewport({ start: nextStart, end: nextEnd })
-  }, [domainDuration, fullDuration, model, viewport, visibleEnd])
-  /* still parked at the right edge after a step → take the next one */
-  useEffect(() => {
-    if (!laterPointer.current) return
-    if (!showsLaterBoundary) {
-      laterPointer.current = false
-      return
-    }
-    requestLater()
-  }, [requestLater, showsLaterBoundary])
+    setViewport({ start: nextStart, end: nextStart + span })
+    return true
+  }, [model, viewport])
+  const stepEarlier = useCallback(() => {
+    /* A zoomed window moves first; a fully zoomed-out one has nowhere to go, so
+       the press pages history in instead. */
+    if (panWindow(-1)) return
+    loadEarlier?.()
+  }, [loadEarlier, panWindow])
+  const stepLater = useCallback(() => { panWindow(1) }, [panWindow])
+  const canStepEarlier = viewport !== null || (hasEarlierRecords && loadEarlier !== undefined)
+  /* Hold to repeat: one step on press, then a steady repeat after a short delay. */
+  const holdTimer = useRef<number | null>(null)
+  const stopHold = useCallback(() => {
+    if (holdTimer.current !== null) window.clearInterval(holdTimer.current)
+    holdTimer.current = null
+  }, [])
+  const startHold = useCallback((step: () => void) => {
+    stopHold()
+    step()
+    holdTimer.current = window.setTimeout(() => {
+      holdTimer.current = window.setInterval(step, HOLD_REPEAT_MS)
+    }, HOLD_DELAY_MS)
+  }, [stopHold])
+  useEffect(() => stopHold, [stopHold])
   const projectedDomainStyle = useMemo(() => (model === null
     ? undefined
     : {
@@ -558,9 +488,9 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
       event.preventDefault()
       const track = trackRef.current
       if (track === null || model === null) return
-      /* Wheel is zoom, as before: up = zoom in, down = zoom out. Once the view is
-         already fully zoomed out there is nothing left to expand, so further
-         scrolling down pulls the next page of history. */
+      /* Wheel is zoom only: up = zoom in, down = zoom out. At full zoom-out
+         there is nothing left to expand, and paging history is the left arrow's
+         job — a scroll must never fetch on its own. */
       setAnimateViewport(false)
       const rect = track.getBoundingClientRect()
       const anchorFraction =
@@ -574,7 +504,6 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
       )
       if (nextDuration >= fullDuration * 0.999) {
         setViewport(null)
-        if (event.deltaY > 0) requestEarlier('wheel')
         return
       }
       const anchorTime = domainStart + anchorFraction * domainDuration
@@ -595,9 +524,26 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
           <LaneLabels t={t} />
           <div className={css.track}>
             <span className={css.empty}>{t('timeline.noTimingData')}</span>
-            {hasEarlierRecords && (
-              <EarlierHistoryBoundary loading={loadingEarlier} t={t} />
-            )}
+            <button
+              type="button"
+              className={css.edgeStep}
+              data-side="earlier"
+              aria-label={qt('timeline.earlier')}
+              title={qt('timeline.earlier')}
+              disabled={!canStepEarlier}
+              data-loading={loadingEarlier || undefined}
+              onPointerDown={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                if (event.button !== 0) return
+                startHold(stepEarlier)
+              }}
+              onPointerUp={stopHold}
+              onPointerLeave={stopHold}
+              onPointerCancel={stopHold}
+            >
+              <span aria-hidden="true">‹</span>
+            </button>
           </div>
         </div>
       </section>
@@ -627,29 +573,6 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
     onRangeChange(nextRange)
   }
 
-  /* Both ends of the track take the pointer the same way; only the payload of
-     the action differs (pull history vs. reveal what is loaded). */
-  const parkAtEdge = (clientX: number) => {
-    const rect = trackRef.current?.getBoundingClientRect()
-    if (rect === undefined || rect === null) return
-    const fromLeft = clientX - rect.left
-    if (fromLeft > EDGE_TRIGGER_PX + EDGE_LEAVE_PX) {
-      /* clearing must not depend on hasEarlierRecords: once every page is in,
-         that flag goes false and the parked state would stick forever */
-      edgePointer.current = false
-    } else if (hasEarlierRecords && fromLeft <= EDGE_TRIGGER_PX) {
-      edgePointer.current = true
-      requestEarlier('edge')
-    }
-    const fromRight = rect.right - clientX
-    if (fromRight > EDGE_TRIGGER_PX + EDGE_LEAVE_PX) {
-      laterPointer.current = false
-    } else if (viewport !== null && fromRight <= EDGE_TRIGGER_PX) {
-      laterPointer.current = true
-      requestLater()
-    }
-  }
-
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (event.button === 2) {
       panRef.current = {
@@ -667,8 +590,6 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
       return
     }
     if (event.button !== 0) return
-    /* pressing on an edge counts as "parked here" and starts that side's chain */
-    parkAtEdge(event.clientX)
     const anchor = fractionAt(event)
     const anchorTime = domainStart + anchor * domainDuration
     const recordIndex = recordIndexAt(event)
@@ -688,7 +609,6 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
     const fraction = fractionAt(event)
-    parkAtEdge(event.clientX)
     setHover({ fraction, recordIndex: recordIndexAt(event), x: event.clientX, y: event.clientY })
     const pan = panRef.current
     if (pan !== null && pan.pointerId === event.pointerId) {
@@ -823,8 +743,6 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
           onPointerUp={onPointerEnd}
           onPointerCancel={onPointerCancel}
           onPointerLeave={() => {
-            edgePointer.current = false
-            laterPointer.current = false
             if (dragRef.current === null && panRef.current === null) setHover(null)
           }}
           onDoubleClick={(event) => {
@@ -835,12 +753,45 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
             event.preventDefault()
           }}
         >
-          {showsEarlierBoundary && (
-            <EarlierHistoryBoundary loading={loadingEarlier} t={t} />
-          )}
-          {showsLaterBoundary && (
-            <LaterHistoryBoundary qt={qt} />
-          )}
+          <button
+            type="button"
+            className={css.edgeStep}
+            data-side="earlier"
+            aria-label={qt('timeline.earlier')}
+            title={qt('timeline.earlier')}
+            disabled={!canStepEarlier}
+            data-loading={loadingEarlier || undefined}
+            onPointerDown={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              if (event.button !== 0) return
+              startHold(stepEarlier)
+            }}
+            onPointerUp={stopHold}
+            onPointerLeave={stopHold}
+            onPointerCancel={stopHold}
+          >
+            <span aria-hidden="true">‹</span>
+          </button>
+          <button
+            type="button"
+            className={css.edgeStep}
+            data-side="later"
+            aria-label={qt('timeline.later')}
+            title={qt('timeline.later')}
+            disabled={!showsLaterBoundary}
+            onPointerDown={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              if (event.button !== 0) return
+              startHold(stepLater)
+            }}
+            onPointerUp={stopHold}
+            onPointerLeave={stopHold}
+            onPointerCancel={stopHold}
+          >
+            <span aria-hidden="true">›</span>
+          </button>
           {hover !== null && (
             <div
               className={css.hoverLine}

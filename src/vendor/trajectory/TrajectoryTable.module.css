@@ -2757,28 +2757,6 @@ tr[data-turn-start='true'] > td {
   color: var(--dsw-alias-label-secondary);
 }
 
-/* inspector header: subject line and actions */
-.detailsSubject {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  padding: 0 12px 9px;
-  border-bottom: 1px solid var(--bt-line-soft, #f0f2f4);
-  padding-top: 8px;
-}
-
-.detailsSubjectText {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--bt-text-2, #5b6470);
-  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 11px;
-  line-height: 1.5;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .headActions {
   display: inline-flex;
   flex: none;
