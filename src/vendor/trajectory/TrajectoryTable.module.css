@@ -2807,6 +2807,15 @@ tr[data-child-last] .rowLine::before {
 }
 
 /* ---------- 概述: one field per line, the same grid as a request summary ---------- */
+/* 原始 has nothing to show: the row is a folded summary, or it is still live */
+.detailNote {
+  margin: 0;
+  padding: 10px 2px;
+  color: var(--bt-text-3, #9aa1ab);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .recordSummary {
   display: flex;
   flex-direction: column;

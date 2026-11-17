@@ -6,7 +6,7 @@
  * t、useSession、useTrajectory、useDuration…）全部由槽位按原生条目的注入
  * face 原样传入，所以数据与交互语义不变。
  */
-import { useSyncExternalStore } from 'react'
+import { useMemo, useSyncExternalStore } from 'react'
 import { TrajectoryView } from '../vendor/trajectory/TrajectoryView.tsx'
 import theme from '../vendor/trajectory/theme.css'
 
@@ -19,10 +19,31 @@ export interface ProjectionFace {
 /** Resolve a session's projection face by key; undefined when unavailable. */
 export type ProjectionReader = (sessionId: string, key: string) => ProjectionFace | undefined
 
+/** The session controller's raw event window: every logged entry, in log order. */
+export interface EventWindowFace {
+  getSnapshot(): unknown
+  subscribe(listener: () => void): () => void
+}
+
+/** Resolve a session's event window; undefined when unavailable. */
+export type EventReader = (sessionId: string) => EventWindowFace | undefined
+
+/** One event-window entry, flattened for the trajectory inspector. */
+export interface SessionEventView {
+  /** Durable log sequence number, or the client-only ordering key of a live chunk. */
+  seq: number
+  /** True for a streaming entry that has no line in the session file yet. */
+  transient: boolean
+  /** The event object, verbatim. */
+  value: unknown
+}
+
 export interface ForkViewProps {
   qt: (key: string, params?: Record<string, string | number>) => string
   /** Session projection reader from this plugin's own context. */
   projectionFace?: ProjectionReader
+  /** Raw session event window from this plugin's own context. */
+  eventFace?: EventReader
   [key: string]: unknown
 }
 
@@ -55,6 +76,36 @@ function useProjection(
   )
 }
 
+const NO_EVENTS: readonly SessionEventView[] = []
+
+/** Flatten a window snapshot into ordered entries; tolerant of an unknown shape. */
+function eventsOf(window: unknown): readonly SessionEventView[] {
+  const entries = typeof window === 'object' && window !== null
+    ? (window as { entries?: unknown }).entries
+    : undefined
+  if (!Array.isArray(entries)) return NO_EVENTS
+  const out: SessionEventView[] = []
+  for (const entry of entries) {
+    if (typeof entry !== 'object' || entry === null) continue
+    const event = (entry as { event?: unknown }).event
+    if (typeof event !== 'object' || event === null) continue
+    const seq = (event as { seq?: unknown }).seq
+    if (typeof seq !== 'number') continue
+    out.push({ seq, transient: (entry as { type?: unknown }).type === 'transient', value: event })
+  }
+  return out
+}
+
+function useSessionEvents(sessionId: unknown, read: EventReader | undefined): readonly SessionEventView[] {
+  const face = typeof sessionId === 'string' && read !== undefined ? read(sessionId) : undefined
+  /* the event window is a class instance: calling its methods unbound loses `this` */
+  const window = useSyncExternalStore(
+    face === undefined ? NO_SUBSCRIBE : (listener) => face.subscribe(listener),
+    face === undefined ? NO_VALUE : () => face.getSnapshot(),
+  )
+  return useMemo(() => eventsOf(window), [window])
+}
+
 function numberField(value: unknown, field: string): number {
   if (typeof value !== 'object' || value === null) return 0
   const raw = (value as Record<string, unknown>)[field]
@@ -83,8 +134,9 @@ function installTheme(): void {
   document.head.appendChild(style)
 }
 
-export function ForkView({ qt, projectionFace, ...rest }: ForkViewProps) {
+export function ForkView({ qt, projectionFace, eventFace, ...rest }: ForkViewProps) {
   installTheme()
   const stats = sessionStatsOf(useProjection(rest.sessionId, 'sessionStats', projectionFace))
-  return <TrajectoryView {...rest} qt={qt} sessionStats={stats} />
+  const events = useSessionEvents(rest.sessionId, eventFace)
+  return <TrajectoryView {...rest} qt={qt} sessionStats={stats} sessionEvents={events} />
 }

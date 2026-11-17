@@ -19,6 +19,9 @@ interface ProjectionFaceLike {
   subscribe(listener: () => void): () => void
 }
 
+/** The session controller's raw event window (same observable shape). */
+type EventWindowLike = ProjectionFaceLike
+
 interface ClientContext {
   effect(callback: () => (() => void) | void, label?: string): () => void
   slots: {
@@ -30,6 +33,8 @@ interface ClientContext {
       session?: {
         projections?: { faceOf(key: string): ProjectionFaceLike }
       }
+      /** Raw session event window: every logged entry, in log order. */
+      eventSource?: EventWindowLike
     } | undefined
   }
   locale: {
@@ -62,8 +67,13 @@ export function apply(ctx: ClientContext): void {
   const projectionFace = (sessionId: string, key: string): ProjectionFaceLike | undefined =>
     ctx.sessions?.binding(sessionId)?.session?.projections?.faceOf(key)
 
+  /* The inspector's 原始 tab is the log itself, not a re-shaped copy: the raw
+     event window is the only honest source for it. */
+  const eventFace = (sessionId: string): EventWindowLike | undefined =>
+    ctx.sessions?.binding(sessionId)?.eventSource
+
   const Wrapped = (props: Record<string, unknown>) => (
-    <ForkView {...props} qt={t} projectionFace={projectionFace} />
+    <ForkView {...props} qt={t} projectionFace={projectionFace} eventFace={eventFace} />
   )
 
   const install = (): void => {

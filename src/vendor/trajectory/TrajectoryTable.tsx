@@ -448,6 +448,8 @@ export interface TrajectoryTableProps {
   timelineFocusIndexes?: ReadonlySet<number> | null
   /** Record indexes the active query removed; null when no query is running. */
   hiddenIndexes?: ReadonlySet<number> | null
+  /** Raw session event window: what the 原始 tab shows, verbatim. */
+  sessionEvents?: readonly { seq: number; transient: boolean; value: unknown }[]
   /** Report the record currently selected in the local inspector. */
   onSelectedIndexChange?: (index: number | null) => void
   /** Report a direct user selection from a ledger row. */
@@ -841,54 +843,78 @@ function parseMaybeJson(text: string | undefined): unknown {
  * 「原始」：这一条记录的全部字段，原样。Payloads are parsed so the tree can be
  * walked, and a payload that already appeared under another key is stored once.
  */
-function rawDataFor(record: TableRecord): unknown {
-  const cell = record.cell
-  const data: Record<string, unknown> = {
-    index: cell.index,
-    kind: cell.kind,
-    state: stateOf(record),
-    turn: record.turn,
+/** callId carried by a raw event: `tool/call` keeps it flat, `job/*` nests it. */
+function eventCallId(value: unknown): string | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const data = (value as { data?: unknown }).data
+  if (typeof data !== 'object' || data === null) return undefined
+  const flat = (data as { callId?: unknown }).callId
+  if (typeof flat === 'string') return flat
+  const job = (data as { toolCall?: unknown }).toolCall
+  if (typeof job === 'object' && job !== null) {
+    const nested = (job as { callId?: unknown }).callId
+    if (typeof nested === 'string') return nested
   }
-  /* `step` is the logged field; the localized group title the rows show is a
-     presentation of it, so it never enters the raw view. */
-  if (record.step !== null) data.step = record.step
-  const seen = new Set<string>()
-  const put = (key: string, value: unknown) => {
-    if (value === undefined || value === null || value === '') return
-    if (typeof value === 'string') {
-      if (seen.has(value)) return
-      seen.add(value)
-    }
-    data[key] = value
+  return undefined
+}
+
+/**
+ * The raw log entries one record *is*.
+ *
+ * A message, a context source or a system prompt owns exactly one event. A call
+ * owns several — `tool/call`, the job lifecycle, `tool/result` — and they are found
+ * by identity (its `callId`), never by position: a result can be logged long after
+ * the rows below it, so a sequence range would swallow other rows' events.
+ */
+function ownEventSeqs(
+  record: TableRecord,
+  callIndex: ReadonlyMap<string, readonly number[]>,
+): number[] {
+  const seqs: number[] = []
+  const push = (seq: unknown) => {
+    if (typeof seq === 'number' && !seqs.includes(seq)) seqs.push(seq)
   }
-  put('tool', cell.toolName)
-  put('callId', cell.callId)
-  put('sourceSeq', cell.sourceSeq)
-  put('source', cell.messageSource)
-  put('producer', cell.contextProducer)
-  put('form', cell.contextForm)
-  if (cell.startedAt != null) data.startedAt = new Date(cell.startedAt).toISOString()
-  if (cell.timeSeconds !== null) data.durationMs = Math.round(cell.timeSeconds * 1_000)
-  put('text', cell.text)
-  put('markdown', markdownSource(record))
-  put('thinking', cell.thinkingDetail)
-  put('args', parseMaybeJson(cell.inputDetail))
-  put('result', parseMaybeJson(cell.outputDetail ?? cell.result))
-  put('schema', parseMaybeJson(cell.schemaDetail))
-  put('prompt', cell.promptDetail)
-  put('systemPrompt', cell.systemPromptDetail)
-  put('previousPrompt', cell.previousPromptDetail)
-  put('sourceBlocks', cell.sourceBlocks)
-  put('outputBlocks', cell.outputBlocks)
-  put('metrics', cell.assistantMetrics)
-  const tokens: Record<string, number> = {}
-  if (cell.input !== undefined) tokens.input = cell.input
-  if (cell.cacheRead !== undefined) tokens.cacheRead = cell.cacheRead
-  if (cell.cacheWrite !== undefined) tokens.cacheWrite = cell.cacheWrite
-  if (cell.output !== undefined) tokens.output = cell.output
-  if (cell.think !== undefined) tokens.reasoning = cell.think
-  if (Object.keys(tokens).length > 0) data.tokens = tokens
-  return data
+  push(record.cell.sourceSeq)
+  push(record.cell.resultSeq)
+  const callId = record.cell.callId
+  if (callId !== undefined) for (const seq of callIndex.get(callId) ?? []) push(seq)
+  return seqs
+}
+
+/**
+ * The raw entries behind one row, in log order.
+ *
+ * A folded row stands for the rows it swallowed, so it collects theirs too.
+ */
+function eventsBehindRow(
+  record: TableRecord,
+  rows: readonly TableRecord[],
+  position: number,
+  allRows: readonly TableRecord[],
+  events: readonly { seq: number; transient: boolean; value: unknown }[],
+  callIndex: ReadonlyMap<string, readonly number[]>,
+): readonly { seq: number; transient: boolean; value: unknown }[] {
+  if (events.length === 0) return []
+  const at = allRows.findIndex(candidate => candidate.cell.index === record.cell.index)
+  if (at < 0) return []
+  const folded = record.turnSummary === true || record.foldSummary !== undefined
+  let end = at + 1
+  if (folded) {
+    const next = rows[position + 1]
+    const nextAt = next === undefined
+      ? -1
+      : allRows.findIndex(candidate => candidate.cell.index === next.cell.index)
+    end = nextAt < 0 ? allRows.length : nextAt
+  }
+  const seqs = new Set<number>()
+  for (let index = at; index < end; index += 1) {
+    for (const seq of ownEventSeqs(allRows[index], callIndex)) seqs.add(seq)
+  }
+  const bySeq = new Map(events.map(entry => [entry.seq, entry]))
+  return [...seqs]
+    .sort((left, right) => left - right)
+    .map(seq => bySeq.get(seq))
+    .filter((entry): entry is { seq: number; transient: boolean; value: unknown } => entry !== undefined)
 }
 
 function recordDisplayText(cell: TrajectoryCellProps, t: TrajectoryTranslate): string {
@@ -1863,6 +1889,7 @@ export function TrajectoryTable({
   streamingCells = [],
   timelineFocusIndexes = null,
   hiddenIndexes = null,
+  sessionEvents,
   callMeta = null,
   maxDurationMs = 1,
   initialScrollTop = null,
@@ -1972,6 +1999,18 @@ export function TrajectoryTable({
     [sessionRequestNumbers],
   )
   const messagesWithCalls = useMemo(() => messageIndexesWithCalls(allRecords), [allRecords])
+  /* raw-event index by callId: a call's entries are found by identity, not by position */
+  const eventSeqsByCallId = useMemo(() => {
+    const index = new Map<string, number[]>()
+    for (const entry of sessionEvents ?? []) {
+      const callId = eventCallId(entry.value)
+      if (callId === undefined) continue
+      const list = index.get(callId)
+      if (list === undefined) index.set(callId, [entry.seq])
+      else list.push(entry.seq)
+    }
+    return index
+  }, [sessionEvents])
   const records = useMemo(() => {
     type Summary = { tools: number; steps: Set<string>; names: string[]; durationMs: number | null }
     const emptySummary = (): Summary => ({ tools: 0, steps: new Set(), names: [], durationMs: null })
@@ -3543,7 +3582,28 @@ export function TrajectoryTable({
                     </div>
                   )
                 }
-                return <RawDataPanel data={rawDataFor(selected)} qt={qt} />
+                /* 原始 is the log, not a copy of it: the entries that produced
+                   this row, keyed by seq, byte-for-byte as the session wrote them */
+                const rawPosition = records.findIndex(candidate => candidate.cell.index === cell.index)
+                /* the displayed row carries the fold flags; the template does not */
+                const rawShown = rawPosition < 0 ? selected : records[rawPosition]
+                const rawEntries = eventsBehindRow(
+                  rawShown,
+                  records,
+                  rawPosition < 0 ? -1 : rawPosition,
+                  allRecords,
+                  sessionEvents ?? [],
+                  eventSeqsByCallId,
+                )
+                if (rawEntries.length === 0) {
+                  return <p className={css.detailNote}>{qt('raw.noEvents')}</p>
+                }
+                return (
+                  <RawDataPanel
+                    data={Object.fromEntries(rawEntries.map(entry => [String(entry.seq), entry.value]))}
+                    qt={qt}
+                  />
+                )
               })()}
           </div>
         </aside>

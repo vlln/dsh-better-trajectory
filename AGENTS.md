@@ -76,6 +76,8 @@ fork 里有三个宿主内部值导入，原生包会打包它们，这里用 `s
 - 查询：`tool:bash` → 36/100（只有调用行，助手/用户/上下文同时隐藏）；`type:system` → 1/13；
   `type:` 建议菜单有「类型」组；chip 删除、Esc 清空。
 - toolbar 右端常驻总统计：`13 条记录 · 5 次调用 · 3 个错误 · 6.3s`（窗口总时长超 24h 显示 `NdNNh`）。
+- `原始` = 日志本身（`eventSource` 原始事件窗口，按行取 `callId`/`seq` 对应的事件，逐字显示）；投影字段
+  （index/state/turn/step/时长/token）不进这里，见 `docs/design-language.md` §6.1。
 - 右栏：所有记录都是 `概述/预览/统计/原始`，没有第二种对象（请求面板已删，请求信息进「用户/助手」
   的概述）；四页共用一个 `DetailSection` 折叠块与一套 `Field` 字段行；复制只有 `CopyButton` 一处
   实现（悬浮显形）。失败调用行内 `→ Error: …`，右栏红色 payload（原生处理，无自造横幅）。

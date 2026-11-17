@@ -155,8 +155,10 @@ export function TrajectoryView({
   useSession, useTrajectory, useDuration, watchToolResult, loadOlder, loadImage, setActualDuration,
   viewRequest, completeViewRequest, renderSlot, t, jsonStringWrapping, qt, sessionId,
   sessionStats: wholeSessionStats,
+  sessionEvents,
 }: ConvViewProps
   & { sessionStats?: { turns: number; steps: number; llmMs: number; toolMs: number } | undefined }
+  & { sessionEvents?: readonly { seq: number; transient: boolean; value: unknown }[] }
   & Pick<PropsRenderSlots<'conversation.trajectory.images'>, 'renderSlot'>
   & InjectFace<TrajectoryViewInjected>
   & PropsLocale<'trajectory'>) {
@@ -910,6 +912,7 @@ export function TrajectoryView({
           olderHistoryLoading={olderHistoryLoading}
           historyStartSeq={historyBaseSeq}
           hasOlderRecords={hasOlderHistory}
+          sessionEvents={sessionEvents}
           onLoadOlder={loadEarlierHistory}
           onClearSelection={() => { setTimelineSelection(null) }}
           collapsedTurns={collapsedTurns}
