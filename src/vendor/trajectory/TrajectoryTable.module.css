@@ -2685,41 +2685,16 @@ tr[data-kind='subtool'] .content::before {
   line-height: 15px;
 }
 
-/* tree guide收口 + sticky turn header */
+/* tree guide收口 */
 tr[data-child-last] .rowLine::before {
   bottom: 50%;
 }
 
-tr[data-turn-start='true'] {
-  position: sticky;
-  top: 0;
-  z-index: 4;
-  background: var(--bt-surface, #fff);
-  box-shadow: inset 0 1px 0 var(--bt-line-soft, #f0f2f4);
-}
-
-/* sticky turn rows need an opaque background or content bleeds through */
-tr[data-turn-start='true'] {
-  background: var(--bt-surface, #ffffff);
-}
-
-/* border-collapse tables ignore tr background; paint the sticky row on cells */
-tr[data-turn-start='true'] > td {
-  background: var(--bt-surface, #ffffff);
-}
-
-/* canonical sticky: cells, not rows */
-tr[data-turn-start='true'] {
-  position: static;
-  z-index: auto;
-}
-
-tr[data-turn-start='true'] > td {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  background: var(--bt-surface, #ffffff);
-}
+/* A turn's boundary is the 2px rule painted on its first row's cells (above);
+   the row keeps its own band. It is not a sticky header: `.table tbody td` pins
+   `position: relative`, so every `position: sticky` declared here was inert, and
+   only the opaque surface it forced was visible — which silently erased the band
+   of any turn that opens with a context source instead of a user message. */
 
 /* fold summary chips: distinct tints instead of one flat string */
 .foldGroup {

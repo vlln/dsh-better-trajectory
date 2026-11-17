@@ -160,7 +160,7 @@ interface TableRecord {
   /** The turn has more than one content row, so folding it actually hides something. */
   turnCollapsible?: boolean
   turn: number | null
-  /** Indent level among the rows actually on screen (see assignConnectorLevels). */
+  /** Indent level inside the turn (see STRUCTURAL_LEVEL). */
   level: number
   /** Step number of the group, absent for the turn's leading Message group. */
   step: number | null
@@ -169,6 +169,8 @@ interface TableRecord {
   groupIndex?: number
   groupStart: boolean
   turnStart: boolean
+  /** This row stands for a whole collapsed turn, so it sits at the turn's own depth. */
+  turnSummary?: boolean
   cell: TrajectoryCellProps
   turnEnd: boolean
   collapsedSummary?: string
@@ -440,8 +442,8 @@ export interface TrajectoryTableProps {
   streamingCells?: readonly TrajectoryCellProps[]
   /** Record indexes emphasized by the active timeline focus. */
   timelineFocusIndexes?: ReadonlySet<number> | null
-  /** Record indexes retained by the active live search, or null without a query. */
-  searchMatchIndexes?: ReadonlySet<number> | null
+  /** Record indexes the active query removed; null when no query is running. */
+  hiddenIndexes?: ReadonlySet<number> | null
   /** Report the record currently selected in the local inspector. */
   onSelectedIndexChange?: (index: number | null) => void
   /** Report a direct user selection from a ledger row. */
@@ -528,15 +530,49 @@ export interface TrajectoryUsage {
 }
 
 /**
- * Indent level, computed from what is actually on screen — not from the kind.
+ * Depth of a record inside its turn, from the record alone.
  *
- * One rule: a row sits one step under the nearest visible row of its parent
- * kind in the same turn (turn → message/context → call → nested call), and a row
- * whose parent is not visible is a root. The kind-based constant gave every call
- * level 2 whether or not its message survived a filter, so filtering left elbows
- * pointing at an axis with no dot and rails running to nothing.
+ * The turn is level 0 — its system prompt, its user message and a compaction all
+ * sit there. A message or a context source is one step under the turn, a call one
+ * step under its message, a nested call one step further.
+ *
+ * Reading the depth off the kind keeps a list that starts in the middle of a turn
+ * — which the loaded history does, the window is cut by record count, not by turn
+ * — indented like the same rows further down: the parent is off the top edge, not
+ * missing. Deriving it from the rows on screen instead made every turn of such a
+ * window a root, so the whole ledger lost a level and a continuation turn (one
+ * that opens with a context source because no user message ever arrived) looked
+ * like it had two rows at different depths.
  */
-function assignConnectorLevels(records: readonly TableRecord[]): TableRecord[] {
+const STRUCTURAL_LEVEL: Record<TrajectoryCellKind, number> = {
+  system: 0,
+  user: 0,
+  compacted: 0,
+  message: 1,
+  context: 1,
+  tool: 2,
+  subtool: 3,
+}
+
+function withStructuralLevels(records: readonly TableRecord[]): TableRecord[] {
+  return records.map(record => ({
+    ...record,
+    /* a collapsed turn is the turn, not a child of it: the same row sits at level
+       0 when the turn opens with a user message, so the summary must too */
+    level: record.turnSummary === true ? 0 : STRUCTURAL_LEVEL[record.cell.kind],
+  }))
+}
+
+/**
+ * Indent level for a *filtered* list, where ancestors are deliberately absent.
+ *
+ * A row sits one step under the nearest row of its parent kind in the same turn
+ * that the filter kept, and a row whose parent was filtered out is a root — a
+ * kind-based constant left elbows pointing at an axis with no dot and rails
+ * running to nothing. Unfiltered lists use withStructuralLevels: there the
+ * parent is merely above the window, so it still holds its children.
+ */
+function assignVisibleParentLevels(records: readonly TableRecord[]): TableRecord[] {
   let turn: number | null | undefined
   let turnVisible = false
   let messageLevel: number | null = null
@@ -603,31 +639,6 @@ function flattenRecords(turns: readonly TrajectoryTurnModel[]): TableRecord[] {
     if (last !== undefined) last.turnEnd = true
     return records
   })
-}
-
-function filterRecords(
-  records: readonly TableRecord[],
-  matches: ReadonlySet<number>,
-): TableRecord[] {
-  const filtered = records
-    .filter(record =>
-      record.cell.requestOnly !== true && matches.has(record.cell.index),
-    )
-    .map(record => ({ ...record, groupStart: false, turnStart: false, turnEnd: false }))
-  const startedSections = new Set<number>()
-  for (const [index, record] of filtered.entries()) {
-    const previous = filtered[index - 1]
-    const next = filtered[index + 1]
-    record.groupStart = previous === undefined
-      || previous.section !== record.section
-      || previous.group !== record.group
-    record.turnStart = !startedSections.has(record.section)
-      && record.cell.kind !== 'system'
-      && (record.cell.kind !== 'compacted' || record.turn === null)
-    if (record.turnStart) startedSections.add(record.section)
-    record.turnEnd = next === undefined || next.section !== record.section
-  }
-  return filtered
 }
 
 function requestKey(turn: number | null, group: string): string {
@@ -1847,7 +1858,6 @@ export function TrajectoryTable({
   turns,
   streamingCells = [],
   timelineFocusIndexes = null,
-  searchMatchIndexes = null,
   hiddenIndexes = null,
   callMeta = null,
   maxDurationMs = 1,
@@ -1959,9 +1969,6 @@ export function TrajectoryTable({
   )
   const messagesWithCalls = useMemo(() => messageIndexesWithCalls(allRecords), [allRecords])
   const records = useMemo(() => {
-    if (searchMatchIndexes !== null) {
-      return assignConnectorLevels(filterRecords(allRecords, searchMatchIndexes))
-    }
     type Summary = { tools: number; steps: Set<string>; names: string[]; durationMs: number | null }
     const emptySummary = (): Summary => ({ tools: 0, steps: new Set(), names: [], durationMs: null })
     const addToSummary = (summary: Summary, record: TableRecord) => {
@@ -2049,6 +2056,7 @@ export function TrajectoryTable({
              end — otherwise the row has no chevron to unfold it again */
           turnStart: true,
           turnEnd: true,
+          turnSummary: true,
           foldSummary: {
             tools: summary.tools,
             steps: summary.steps.size,
@@ -2128,8 +2136,13 @@ export function TrajectoryTable({
         if (endsTurn) (record as TableRecord).childLast = true
       }
     }
-    return assignConnectorLevels(out)
-  }, [allRecords, collapsedAssistants, collapsedTools, collapsedTurns, messagesWithCalls, searchMatchIndexes, callMeta, requestGroups])
+    /* A query hides rows on purpose, so a call whose message was filtered out
+       becomes a root; an unfiltered list only has its *window* cut, and the
+       parent above the window still holds its children. */
+    return hiddenIndexes === null
+      ? withStructuralLevels(out)
+      : assignVisibleParentLevels(out)
+  }, [allRecords, collapsedAssistants, collapsedTools, collapsedTurns, messagesWithCalls, hiddenIndexes, callMeta, requestGroups])
 
   const projectedVirtualRows = useMemo(
     () => groupTrajectoryVirtualRows(records),
