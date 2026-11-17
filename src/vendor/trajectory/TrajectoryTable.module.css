@@ -2915,30 +2915,62 @@ tr[data-child-last] .rowLine::before {
 }
 
 /* 筛选态: the tree is replaced by the row's coordinates, in the slot the
-   connectors would have used. One right-aligned, tabular column: `轮·步`, so the
-   kind tag's left edge is the same on every row. */
+   connectors would have used — two fixed-width chips, so the kind tag's left edge
+   is the same on every row. */
 .rowPosition {
+  display: inline-flex;
   flex: none;
-  min-width: 52px;
+  align-items: center;
+  gap: 4px;
   margin-right: 10px;
-  color: var(--bt-text-2, #5b6470);
+}
+
+.rowPositionChip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  box-sizing: border-box;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 4px;
   font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 10px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.01em;
-  text-align: right;
+  line-height: 1;
   white-space: nowrap;
 }
 
-/* the turn is the same for a whole block of rows and the step changes on every
-   one: keep the turn quieter so the eye follows the number that moves */
-.rowPositionTurn {
-  opacity: 0.6;
+/* the number grows leftwards inside a fixed slot: the unit keeps its place and
+   the kind tag never moves */
+.rowPositionValue {
+  flex: 1;
+  text-align: right;
 }
 
-.rowPositionDot {
-  margin: 0 2px;
-  opacity: 0.5;
+.rowPositionChip[data-part='turn'] {
+  min-width: 38px;
+  background: var(--dsw-alias-bg-module-platform);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.rowPositionChip[data-part='step'] {
+  min-width: 44px;
+  background: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      var(--dsw-alias-brand-primary-new-colorprimary-new-color) 55%,
+      var(--dsw-alias-state-error-secondary)
+    ) 15%,
+    var(--dsw-alias-bg-layer-1)
+  );
+  color: color-mix(
+    in srgb,
+    var(--dsw-alias-brand-primary-new-colorprimary-new-color) 60%,
+    var(--dsw-alias-state-error-secondary)
+  );
 }
 
 .rail {

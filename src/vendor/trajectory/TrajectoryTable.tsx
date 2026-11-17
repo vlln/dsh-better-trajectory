@@ -2730,7 +2730,7 @@ export function TrajectoryTable({
                       data-child-last={record.childLast || undefined}
                       data-level={level}
                       data-has-children={record.hasChildren || undefined}
-                      data-has-fold={record.hasFold || undefined}
+                      data-has-fold={(record.hasFold === true && hiddenIndexes === null) || undefined}
                       onMouseEnter={(event) => {
                         if (isRequestOnly) return
                         const x = event.clientX
@@ -2865,13 +2865,18 @@ export function TrajectoryTable({
                               {hiddenIndexes !== null && (
                                 /* A query drops rows, so the tree is gone: the row
                                    states its own position where the connector would
-                                   have been. Two numbers, one column, so the tag's
-                                   left edge never moves — the full `第 N 轮 · 第 M 步`
-                                   is in the row's hover card. */
+                                   have been. Two chips of fixed width, so the kind
+                                   tag's left edge never moves, each with its unit
+                                   spelled out — `86 · 177` needed a legend. */
                                 <span className={css.rowPosition} aria-hidden="true">
-                                  <span className={css.rowPositionTurn}>{record.turn ?? '–'}</span>
-                                  <span className={css.rowPositionDot}>·</span>
-                                  {record.step ?? '–'}
+                                  <span className={css.rowPositionChip} data-part="turn">
+                                    <span className={css.rowPositionValue}>{record.turn ?? '–'}</span>
+                                    {qt('position.turn')}
+                                  </span>
+                                  <span className={css.rowPositionChip} data-part="step">
+                                    <span className={css.rowPositionValue}>{record.step ?? '–'}</span>
+                                    {qt('position.step')}
+                                  </span>
                                 </span>
                               )}
                               <span className={css.rails} aria-hidden="true">
@@ -2913,6 +2918,12 @@ export function TrajectoryTable({
                                 const turnFold = record.turnStart && record.turn !== null
                                   && !isCollapsedSummary
                                   && record.turnCollapsible === true
+                                /* the filtered list has no tree, so no fold dot: the
+                                   turn start it invents is the first row that survived
+                                   the query, and its circle only looked like a hole */
+                                if (hiddenIndexes !== null) {
+                                  return <span className={css.rowChevronSpace} />
+                                }
                                 if (turnFold) {
                                   const collapsed = collapsedTurns.has(record.turn as number)
                                   return (
