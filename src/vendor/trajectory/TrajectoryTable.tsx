@@ -486,6 +486,20 @@ export interface TrajectoryTableProps {
   inspectCallId?: string | null
   /** Acknowledge a consumed (or unresolvable) inspect request. */
   onInspectApplied?: (() => void) | undefined
+  /** Scroll offset to restore after this instance mounts; null follows the tail. */
+  initialScrollTop?: number | null
+  /** Whether the time column is rendered. */
+  showTime?: boolean
+  /** Source of the tool records' duration / error-code facts. */
+  callMeta?: ReadonlyMap<string, { durationMs?: number; errorCode?: string }>
+  /** Longest call in the window, for the duration bar scale. */
+  maxDurationMs?: number
+  /** Clear folds nested under one turn. */
+  onClearDescendantFolds?: (turn: number, id: string) => void
+  /** Reset the query from the "nothing matched" state. */
+  onShowAll?: () => void
+  /** Localised label for a plugin key; the host's trajectory dictionary by default. */
+  qt?: (key: string, params?: Record<string, unknown>) => string
 }
 
 /** Request-inspector fields shared by ordinary generation and compaction. */
@@ -2559,9 +2573,19 @@ export function TrajectoryTable({
     if (!tableScrollInitialized.current) {
       if (historyLoading) return
       tableScrollInitialized.current = true
-      followsTableTail.current = true
-      if (virtualizationEnabled) rowVirtualizer.scrollToEnd({ behavior: 'auto' })
-      else pane.scrollTop = pane.scrollHeight
+      /* A query change remounts this table with the reader's offset: restoring
+         it here (after the first measurement) beats following the tail, which
+         would drop the reader at the bottom of a list they were reading. */
+      const restore = initialScrollTop ?? null
+      followsTableTail.current = restore === null
+      if (restore !== null) {
+        if (virtualizationEnabled) rowVirtualizer.scrollToOffset(restore, { behavior: 'auto' })
+        pane.scrollTop = restore
+      } else if (virtualizationEnabled) {
+        rowVirtualizer.scrollToEnd({ behavior: 'auto' })
+      } else {
+        pane.scrollTop = pane.scrollHeight
+      }
       setTableScrollReady(true)
       return
     }
@@ -2979,7 +3003,7 @@ export function TrajectoryTable({
                                         event.currentTarget.click()
                                       }}
                                       className={css.rowChevron}
-                                      aria-label={t(collapsedHere ? 'assistant.expand' : 'assistant.collapse')}
+                                      aria-label={qt(collapsedHere ? 'row.expandCalls' : 'row.collapseCalls')}
                                       aria-expanded={!collapsedHere}
                                       onDoubleClick={(event) => { event.stopPropagation() }}
                                       onClick={(event) => {
@@ -3005,7 +3029,7 @@ export function TrajectoryTable({
                                         event.currentTarget.click()
                                       }}
                                       className={css.rowChevron}
-                                      aria-label={folded ? t('tool.expandSubCalls') : t('tool.collapseSubCalls')}
+                                      aria-label={qt(folded ? 'row.expandSubCalls' : 'row.collapseSubCalls')}
                                       aria-expanded={!folded}
                                       onDoubleClick={(event) => { event.stopPropagation() }}
                                       onClick={(event) => {
@@ -3040,10 +3064,10 @@ export function TrajectoryTable({
                               {record.foldSummary !== undefined && (
                                 <span className={css.foldGroup}>
                                   {record.foldSummary.steps > 0 && (
-                                    <span className={css.foldChip} data-kind="steps">{record.foldSummary.steps} 步</span>
+                                    <span className={css.foldChip} data-kind="steps">{record.foldSummary.steps} {qt('totals.steps')}</span>
                                   )}
                                   {record.foldSummary.tools > 0 && (
-                                    <span className={css.foldChip} data-kind="tools">{record.foldSummary.tools} 工具</span>
+                                    <span className={css.foldChip} data-kind="tools">{record.foldSummary.tools} {qt('totals.tool')}</span>
                                   )}
                                   {record.foldSummary.durationMs != null && record.foldSummary.durationMs > 0 && (
                                     <span className={css.foldChip} data-kind="time">{compactDuration(record.foldSummary.durationMs)}</span>

@@ -1,61 +1,141 @@
-# Better Trajectory
+<h1 align="center"><img src="icon.svg" width="34" height="34" valign="middle">&nbsp;Better Trajectory</h1>
 
-把 DSH 内置的「轨迹」页签换成一个 Logfire 式的调试面：**一条可组合的查询**、**不塌的树**、**按记录类型分 tab 的详情**。仍然只有一个页签、一个时间轴、一套折叠——不是另起一套 UI。
+[![dsh](https://img.shields.io/badge/dsh-0.2.2--rc.2-blue)](https://www.deepseek.com/harness/)
 
-![查询条与过滤结果](docs/query-bar.png)
+把内置的「轨迹」页签换成一个能查的调试面：**一条可组合的查询**、**一套按行类型统一的详情**、**一个就是日志本身的「原始」**。仍然只有一个页签、一个时间轴、一套折叠——不是另起一套 UI。
 
-## 用法
+![轨迹页签：查询条、时间轴与台账](docs/overview.jpg)
 
-打开任意会话的 **轨迹** 页签，搜索框里输入 token：
+## 30 秒安装
 
-| token | 含义 |
-|---|---|
-| `tool:bash` | 只看某个工具；`-tool:read` 排除 |
-| `status:error` | `error` / `running` / `ok`，可写 `status:error\|running` |
-| `turn:3` / `turn:2-5` | 单个回合或区间 |
-| `ms:>1000` / `ms:<200` | 耗时阈值或区间 |
-| `code:401` | 错误码 |
+**在 dsh web / Desktop 里**：打开 **Plugins → 添加插件**，填 `github:vlln/dsh-better-trajectory`，装完刷新页面。
 
-- 其余文字按自由文本匹配工具名 / 参数 / 结果 / 错误文本（AND）。
-- 输入时给建议：工具名带调用次数、状态、回合、慢查询。
-- 已选条件显示为 chip，`×` 删除，`显示全部` 清空，`Esc` 清空。
-- Quick 药丸：`错误 N` / `运行中 N` / `慢`；`平铺` 只列命中的调用。
-- 过滤只裁剪**工具调用**：用户、助手、上下文、回合头都保留；被隐藏的调用在组尾显示「本组 N 个调用被过滤 · 显示全部」。
+**用 CLI**：
 
-## 详情
+```sh
+# web
+dsh plugin --profile web add github:vlln/dsh-better-trajectory
 
-![右栏](docs/inspector.png)
-
-- 顶部 chips：工具、状态、回合、耗时、callId。
-- 工具记录 tab：`概述 / 参数 / 结果`，失败时多一个 `异常`，始终有 `原始`。
-- `异常`：红色横幅 + 错误正文 + 复制。
-- `原始`：可搜索 JSON 树，展开/收起全部、复制整个 JSON、复制任意子树、长字符串与长数组分页。
-- 非工具记录保留原生 rendered / source / raw 视图。
-
-![原始数据](docs/raw-data.png)
-
-## 实现方式
-
-- `src/vendor/trajectory/` 是内置 `@deepseek-ai/dsh-client-ui-trajectory` 的源码 fork（MIT），随包分发；查询条、右栏、行样式都在 fork 上直接改。
-- 客户端入口接管原生 `trajectory` 条目的 `component`，**不新增页签**；`inject` face、图片子槽、时间轴数据仍由原生条目提供。
-- 构建用 esbuild，`*.module.css` 由 postcss-modules 生成 `bt_` 前缀类名并注入 `<style>`；宿主只 external `react` / `client-store` / `ui-primitives` / `react-virtual`。
-
-### 升级 dsh 时
-
-1. 取新版本包的 `src/client/` 覆盖 `src/vendor/trajectory/`；
-2. 重新应用三处改动：`TrajectoryToolbar` → `QueryBar`、`TrajectoryTable` 的 chips/异常/原始 tab、行内时间槽与隐藏提示；
-3. 核对 `TrajectoryView` 的 props 与 `entry.inject` face。
-
-## 已知边界
-
-- 耗时/时间槽依赖事件里的 `callTime`；没有时间戳的会话只显示工具与状态。
-- `原始` tab 目前是固定结构，不是任意事件 JSON。
-- 过滤只在已加载的窗口内生效；过滤态下不触发「加载更早」。
-
-## 安装
-
-```bash
-dsh plugin --profile web add ./dsh-better-trajectory-0.2.0.tgz
+# 官方 Desktop（先完全退出应用，用应用自带的 dsh）
+dsh plugin --profile desktop add github:vlln/dsh-better-trajectory
 ```
 
-MIT。
+- **生效**：刷新页面即可——纯客户端插件，不用重启宿主。
+- **前置**：dsh `0.2.2-rc.x`（实测 `0.2.2-rc.2`）。
+- **升级**：再执行一次 `add`（会解析最新的 `main`），然后刷新页面。
+- **卸载**：`dsh plugin --profile web remove dsh-better-trajectory`。
+- **装不上时**：「轨迹」页签还是原生的样子——多半是 profile 不对（只支持 `web` / `desktop`）或页面没刷新。
+
+**装好之后**：任意会话打开「轨迹」，搜索框里输入 `role:assistant` 回车——列表只剩助手行，每行右侧出现 `86轮` `177步` 两个位置标签；点任意一行，右栏是 `概述 / 预览 / 统计 / 原始` 四个页签。
+
+## 为什么需要它
+
+原生轨迹能看到「发了什么」，但很难回答这些：
+
+- 这一堆 30px 的行里，哪些是**用户**说的、哪些是**助手**、哪些是**上下文注入**？
+- 这行属于第几轮、第几步？是哪个模型、哪个提供方跑出来的那一步？
+- 出错的调用在哪、慢的调用在哪，能不能一条查询把它们单独留下来？
+- 这条记录落到日志里**到底长什么样**——不是我们整理过的样子。
+
+内置的轨迹只能按文本搜、按组折叠，回答不了上面的问题。Better Trajectory 把这三件事做成一条查询、一组位置标签、一个原始事件视图，其余（时间轴、折叠、图片、Schema）全部保留原生行为。
+
+与官方的 `ui-trajectory` 是同一份源码（fork，MIT），区别只在查询条、右栏和行的画法；不新增页签，也不接管宿主数据。
+
+## 用起来是什么样
+
+### 台账：一棵按日志边界算的树
+
+层级不看屏幕上还剩哪些行，而看日志自己的边界：**轮开场**（系统提示词 + 该轮第一条助手消息之前的全部输入）第 0 层、助手消息与其余消息第 1 层、调用第 2 层、子调用第 3 层。历史是分页取的，窗口切在轮中间时开场行不在窗口里，那批行自然是 1/2 层，竖线从列表上沿进来。
+
+- 轮开场的几行挂在同一根**脊柱**上，第一行把圆点的线垂下来，其余行接着画到正文；换轮即收口。
+- 底纹按**步号**（每轮第一步必定有底），只上给正文行。
+- 行高恒定 30px，长内容单行截断——完整内容看右栏。
+- 「轮次 / 调用 / 子调用」是折叠开关；折叠点只出现在折了确实会少东西的轮上。
+
+### 查询：token 组合，条件即 chip
+
+![查询与命中](docs/query.jpg)
+
+输入 `tool:bash`、`status:error`、`step:170-180` 这类 token，回车变成 chip；chip 点 `×` 删除，`清除` 一次清空，`Esc` 收掉建议菜单。右侧常驻 `命中 N · M 个被过滤`。
+
+**筛选是对所有行生效的**（工具、子调用、助手、用户、上下文、压缩点一视同仁）——不然 `status:error` 会留下一屏不相关的助手消息。筛选态不画连线和折叠点，改成每行两个定宽的位置标签：`86轮` `177步`。
+
+### 详情：一条记录、四个页签
+
+![右栏四个页签](docs/inspector.png)
+
+工具、助手、用户、上下文、压缩点、系统提示词用**同一组页签**，切记录不换读法：
+
+| 页签 | 它回答什么 |
+|---|---|
+| 概述 | 它是什么：状态 · Token · 推理 · 开始时间 · 耗时 · 来源 · 层级 · 请求 · 调用 ID，以及可折叠的 `参数` / `Schema` / `来源内容` |
+| 预览 | 它渲染成什么：消息 → Markdown，调用 → 返回内容（JSON 树 / 文本 / 代码输出），系统提示词 → 提示词正文（改版时带 `差异`） |
+| 统计 | 它花了多少：首 token · 生成 · 吞吐 + 输入 / 缓存读 / 缓存写 / 输出 / 推理 |
+| 原始 | 它字面是什么：这一行对应的**日志事件**，逐字显示 |
+
+### 原始：就是日志本身
+
+![原始事件](docs/raw.png)
+
+不是重新拼一份「看起来像日志」的 JSON：读会话的原始事件窗口，把这一行对应的条目逐字显示——消息是那一条 `user/message`，调用是它的 `tool/call` + `job/*` + `tool/result`（按 `callId` 定位，不按位置：一次调用的结果可能远晚于下面几行才落盘），折叠的行是它吞掉的全部事件。事件不在已加载窗口里时显示一行说明，而不是空白。
+
+### 时间轴：两端对称的平移
+
+- 两端 `‹` `›`：单击移一屏的 2/3，按住连续走；左端没有平移余量时取一页更早的历史。
+- 滚轮缩放；拖拽选择区间（选区可以 `←` 清空、`→` 还原）。
+- 悬停出虚线光标与卡片：时间 / 区间 / 耗时 / 记录条数。
+- 滚到列表顶部继续向上滚，就一页一页往回取历史（筛选态同样）；取回的页会补偿滚动位置，画面不跳。
+
+## 查询语法
+
+空格分隔，多个条件叠加（AND）；`-` 取反，`|` 并列，`*` 通配，`"…"` 保留空格。
+
+| 字段 | 取值 | 例子 |
+|---|---|---|
+| `role:` | `user` / `assistant` / `system` / `tool`（上下文注入在日志里就是 `user`） | `role:assistant` |
+| `kind:` | `tool` / `subtool` / `message` / `user` / `context` / `system` / `compacted`（`type:` 是旧名） | `kind:context` |
+| `model:` `provider:` | 该行**所在步骤**请求的模型 / 提供方 | `model:deepseek-flash` |
+| `source:` `form:` | 上下文行的来源与形式（`tool-jobs`、`time-context`、`notice`、`snapshot`…） | `source:tool-jobs` |
+| `step:` `turn:` | 步骤号 / 回合号，或区间（`step:` 每轮从 1 开始） | `step:170-180` |
+| `tool:` | 工具名，只命中调用行 | `-tool:read` |
+| `status:` | `ok` / `error` / `running` | `status:error\|running` |
+| `ms:` | 耗时毫秒，支持 `>` `<` 与区间 | `ms:>1000` |
+| `code:` | 错误码；`code:*` 表示「有错误码」 | `code:401` |
+| `args:` `result:` `error:` `text:` | 只在输入侧 / 输出侧 / 错误文本 / 全字段里搜 | `args:AGENTS.md` |
+| 裸词 | 全文（名称 / 参数 / 结果 / 正文） | `timeout` |
+
+名字类字段（`model:` `provider:` `source:` `form:`）缺这个字段的行**不算命中**，`*` 也一样——`source:*` 是「有来源」，不是「所有行」。
+
+输入时给建议：`role:` / `kind:` 两组字段，工具名带调用次数，状态、回合、慢查询。`Tab` 补全、`Enter` 提交。
+
+## 安全与数据
+
+- 纯前端插件：只读当前会话的快照与事件日志，在浏览器里渲染。
+- 不发任何网络请求，不写文件，不执行日志里的命令或参数（只显示文本，用 React 转义）。
+- 不收集遥测；查询与折叠状态按会话存在 `sessionStorage`，刷新还在、换会话不串。
+
+## 已知限制
+
+- **只在已加载的窗口内查询**：历史分页取回（滚到顶部继续向上滚，或点时间轴左端箭头），取回后计数跟着变。
+- `ms:` 依赖日志里的时间戳；没有耗时字段的记录不会命中 `ms:` 条件。
+- 「原始」只覆盖已加载事件窗口；折叠摘要行、流式尚未落盘的行没有自己的事件，显示一行说明。
+- 文本匹配是子串、忽略大小写，不支持正则。
+- 层级与位置标签都来自日志的 `turn` / `step` 字段；日志缺这些字段的旧会话只有时间与内容。
+
+## 插件管理
+
+装卸启停用官方 CLI：`dsh plugin --profile web add|remove <包>`。已装插件在**侧边栏 Plugins 页**里查看与配置（Settings 里的「插件」只是只读清单）。web 与 Desktop 的 profile 互不相通，两个宿主各装一次。
+
+## 兼容性
+
+| 宿主 | profile | 状态 |
+|---|---|---|
+| 官方 `dsh web` | `web` | ✅ 已验证（dsh `0.2.2-rc.2`，2026-11-16） |
+| 官方 Desktop | `desktop` | ⚠️ 未验证（安装路径相同，未实测） |
+| 其它 profile / 第三方宿主 | — | ⚠️ 未验证 |
+
+`engines` 声明 `dsh >=0.2.2-rc.1 <0.3.0-0`；只在 `0.2.2-rc.2` 上实测过，其它 `0.2.2-rc.x` 未逐个验证。内置轨迹的组件是插件的接管目标，宿主升级后如果内置组件改名或换 props，页签会退回原生样式——这类问题开 issue 附宿主版本。
+
+## 许可
+
+MIT。`src/vendor/trajectory/` 是内置 `@deepseek-ai/dsh-client-ui-trajectory` 的 fork（MIT），随包分发；`docs/design-language.md` 记录 UI 规则，`docs/design-logfire.md` 记录对齐 Logfire 的方案。

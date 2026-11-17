@@ -607,6 +607,13 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
       onPointerUp={stopHold}
       onPointerLeave={stopHold}
       onPointerCancel={stopHold}
+      onKeyDown={(event) => {
+        /* a pointer gesture never fires a click, so the keyboard path is free
+           to step once per keypress */
+        if (event.key !== 'Enter' && event.key !== ' ') return
+        event.preventDefault()
+        stepEarlierRef.current()
+      }}
     >
       <span aria-hidden="true">‹</span>
     </button>
@@ -628,6 +635,11 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
       onPointerUp={stopHold}
       onPointerLeave={stopHold}
       onPointerCancel={stopHold}
+      onKeyDown={(event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return
+        event.preventDefault()
+        stepLaterRef.current()
+      }}
     >
       <span aria-hidden="true">›</span>
     </button>

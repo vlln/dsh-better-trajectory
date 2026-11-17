@@ -1,7 +1,29 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 — 2026-11-16
 
+首个对外版本。读者视角的四条：
+
+- **查询换成行上稳定的字段**：`role:` / `kind:`（`type:` 是旧名）/ `model:` / `provider:` /
+  `source:` / `form:` / `step:`，加上原有的 `turn:` / `tool:` / `status:` / `ms:` / `code:` 与
+  作用域文本 `args:` / `result:` / `error:` / `text:`；`-` 取反、`|` 并列、`*` 通配、`"…"` 短语。
+- **`原始` 页签就是日志本身**：读会话的原始事件窗口，逐字显示这一行对应的条目（调用按
+  `callId` 找它的 `tool/call` + `job/*` + `tool/result`），不再拼一份投影。
+- **台账按日志的 turn / step 边界分层**：轮开场挂在一根脊柱上，筛选态不画树、改标
+  `86轮` / `177步` 两个定宽位置标签。
+- **历史分页**：滚到顶部继续向上滚就一页一页往回取（筛选态同样），取回的页补偿滚动位置；
+  右栏所有记录统一成 `概述 / 预览 / 统计 / 原始` 四页签。
+
+细节（按时间倒序）：
+
+- 修「改查询后列表落到空白底部」：每次换查询台账都会重挂，而重挂后的首帧无条件滚到尾部，把读者原来的位置顶掉（实测滚到 600 再输入 `tool:bash`：落点 30,804、行全在视口上方、画面是空白）。现在 `restoreScroll` 用 `null` 表示「没有要还原的位置」，首帧测量后把位置设回去且不再跟尾；同一实测落点 76，视口里有 22 行。
+- 修窗口统计的 `≥ 已加载`：判据原来只看「会话还有更早的历史」，漏了「本机已取回的记录比窗口更早」这种情况，于是计数只覆盖最后 50 条却显示成完整。现在两者取或。
+- 英文界面里 7 条文案还是中文（`toast.cleared` / `empty.none` / `toast.collapsedAll` / `toast.expandedAll` / `empty.noMatch` / `toast.undo` / `toast.dismiss`），已翻译；`tests/locales.test.mjs` 加两条门禁：英文值里不许出现中文，每个 key 都必须被 `src/` 读到。
+- 折叠摘要的「N 步 / N 工具」写死中文、两个折叠控件的 `aria-label` 用的 key 根本不存在（读屏读到 `tool.expandSubCalls` 这种原始 key）：单元与标签都改走字典（`totals.steps` / `totals.tool` / `row.expandCalls` …）。
+- 轨迹条箭头原来只认指针：指针手势不触发 `click`，所以聚焦后按 Enter / Space 什么也不发生。现在两个箭头各自响应键盘单步。
+- 删掉 79 个没人读的文案 key（`filter.*` / `debug.*` / `json.*` / `view.*` / `hint.filtered` 等，zh + en 共 158 行）；整份 `TrajectoryToolbar.tsx` 也删了——被 `QueryBar` 取代后没有任何 importer。
+- 补 `NOTICE`：`src/vendor/trajectory/` 是 DeepSeek 的 MIT 代码（随包分发），必须带原始版权声明；`files` 里加上了它。
+- `TrajectoryTableProps` 补齐组件实际在用的 7 个 prop（`qt` / `callMeta` / `maxDurationMs` / `initialScrollTop` / `showTime` / `onClearDescendantFolds` / `onShowAll`）；投影 face 的两个方法改为绑定后传给 `useSyncExternalStore`（事件窗口那边一直是这么做的）。
 - 查询语法改成行上稳定的字段，不再拿日志的事件类型当轴（日志的 `type` 是 `user/message`、`tool/call` 这种两级路径，而一行本来就是若干事件合并出来的，粒度反了）：
   - 新增 `role:`（user / assistant / system / tool，上下文行在日志里就是 `user`）、`model:` / `provider:`（该行所在步骤请求的模型与提供方）、`source:` / `form:`（上下文行的 producer 与形式）、`step:` / `step:a-b`。
   - `kind:` 接替原来的 `type:`（`type:` 保留为别名，老查询不失效）。
@@ -100,7 +122,7 @@
 - `kind:` 作为 `type:` 的等价别名；语法速查里写明 **type 是记录类型、不是日志级别**（级别语义在 `status:`）。
 - 光标卡片瘦身：去掉「可见窗口」（未缩放时恒为 `0 – 全长`，不变量不该占一行）、去掉三条按键说明。
 - 光标卡片的「记录 N 条」改成**跟选区走**：有选区时标签为 `选中`、数字是落在选区内的记录；没有选区时才是可视窗口内的条数。
-- 查询语法补全成一套完整设计（见 `docs/design-language.md` §6.1.0a，产品内是搜索框右侧的 ⓘ）：
+- 查询语法补全成一套完整设计（见 `docs/design-language.md` §6.1.0b，产品内是搜索框右侧的 ⓘ）：
   - 新增**作用域文本** `args:`（输入侧）/ `result:`（输出侧）/ `error:`（仅失败记录）/ `text:`（全字段）；裸词仍是全文。
   - 裸词也能取反：`-success` 排除含 success 的记录（原来 `-` 只对 `字段:值` 生效，裸词会当成带连字符的字符串）。
   - `tool:` 支持 `*` 通配与 `|` 并列（`tool:todo*`、`tool:bash|read`）；`code:*` 表示「有错误码」。

@@ -1,90 +1,93 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { matchesCell, matchesQuery, parseQuery, removeToken, toggleToken } from '../src/client/query.mjs'
+import { KINDS, ROLE_VALUES, matchesCell, parseQuery, tokenizeQuery } from '../src/client/query.mjs'
 
-const call = (over = {}) => ({
-  callId: 'c1',
-  name: 'bash',
-  status: 'ok',
-  turn: 2,
-  durationMs: 120,
+const cell = (over = {}) => ({
+  kind: 'message',
+  text: 'Done. The workspace is readable.',
+  turn: 4,
+  timeSeconds: 1.2,
   ...over,
 })
+
+const toolCell = (over = {}) => cell({ kind: 'tool', toolName: 'bash', outputDetail: 'ok', ...over })
+/* no elapsed time of its own: duration comes from the tool index via `meta` */
+const noTime = (over = {}) => toolCell({ timeSeconds: undefined, ...over })
 
 test('empty query matches everything', () => {
   const query = parseQuery('')
   assert.equal(query.active, false)
-  assert.equal(matchesQuery(call(), query), true)
+  assert.equal(matchesCell(toolCell(), query), true)
 })
 
 test('tool token filters by name', () => {
   const query = parseQuery('tool:bash')
-  assert.equal(matchesQuery(call(), query), true)
-  assert.equal(matchesQuery(call({ name: 'read' }), query), false)
+  assert.equal(matchesCell(toolCell(), query), true)
+  assert.equal(matchesCell(toolCell({ toolName: 'read' }), query), false)
 })
 
 test('negated tool excludes', () => {
   const query = parseQuery('-tool:read')
-  assert.equal(matchesQuery(call(), query), true)
-  assert.equal(matchesQuery(call({ name: 'read' }), query), false)
+  assert.equal(matchesCell(toolCell(), query), true)
+  assert.equal(matchesCell(toolCell({ toolName: 'read' }), query), false)
 })
 
 test('status supports alternatives', () => {
   const query = parseQuery('status:error|running')
-  assert.equal(matchesQuery(call({ status: 'error' }), query), true)
-  assert.equal(matchesQuery(call({ status: 'running' }), query), true)
-  assert.equal(matchesQuery(call({ status: 'ok' }), query), false)
+  assert.equal(matchesCell(toolCell({ isError: true }), query), true)
+  assert.equal(matchesCell(toolCell({ outputDetail: undefined }), query), true)
+  assert.equal(matchesCell(toolCell(), query), false)
 })
 
 test('turn supports single value and range', () => {
   const single = parseQuery('turn:3')
-  assert.equal(matchesQuery(call({ turn: 3 }), single), true)
-  assert.equal(matchesQuery(call({ turn: 2 }), single), false)
+  assert.equal(matchesCell(toolCell({ turn: 3 }), single), true)
+  assert.equal(matchesCell(toolCell({ turn: 2 }), single), false)
   const range = parseQuery('turn:2-4')
-  assert.equal(matchesQuery(call({ turn: 4 }), range), true)
-  assert.equal(matchesQuery(call({ turn: 5 }), range), false)
+  assert.equal(matchesCell(toolCell({ turn: 4 }), range), true)
+  assert.equal(matchesCell(toolCell({ turn: 5 }), range), false)
 })
 
 test('duration treats missing value as not matching a minimum', () => {
   const query = parseQuery('ms:>1000')
-  assert.equal(matchesQuery(call({ durationMs: 1500 }), query), true)
-  assert.equal(matchesQuery(call({ durationMs: 800 }), query), false)
-  assert.equal(matchesQuery(call({ durationMs: undefined }), query), false)
+  assert.equal(matchesCell(noTime(), query, { durationMs: 1500 }), true)
+  assert.equal(matchesCell(noTime(), query, { durationMs: 800 }), false)
+  assert.equal(matchesCell(noTime(), query), false)
 })
 
 test('duration range and upper bound', () => {
-  assert.equal(matchesQuery(call({ durationMs: 150 }), parseQuery('ms:100-200')), true)
-  assert.equal(matchesQuery(call({ durationMs: 150 }), parseQuery('ms:<200')), true)
-  assert.equal(matchesQuery(call({ durationMs: 120 }), parseQuery('ms:>200')), false)
+  assert.equal(matchesCell(noTime(), parseQuery('ms:100-200'), { durationMs: 150 }), true)
+  assert.equal(matchesCell(noTime(), parseQuery('ms:<200'), { durationMs: 150 }), true)
+  assert.equal(matchesCell(noTime(), parseQuery('ms:>200'), { durationMs: 120 }), false)
 })
 
 test('error code filters by numeric equality', () => {
   const query = parseQuery('code:401')
-  assert.equal(matchesQuery(call({ errorCode: 401 }), query), true)
-  assert.equal(matchesQuery(call({ errorCode: 500 }), query), false)
+  assert.equal(matchesCell(toolCell(), query, { errorCode: 401 }), true)
+  assert.equal(matchesCell(toolCell(), query, { errorCode: 500 }), false)
 })
 
 test('free text searches name, args, result and error text', () => {
   const query = parseQuery('pnpm')
-  assert.equal(matchesQuery(call({ args: '{"command":"pnpm test"}' }), query), true)
-  assert.equal(matchesQuery(call({ result: 'pnpm ok' }), query), true)
-  assert.equal(matchesQuery(call({ errorText: 'PNPM failed' }), query), true)
-  assert.equal(matchesQuery(call(), query), false)
+  assert.equal(matchesCell(toolCell({ inputDetail: '{"command":"pnpm test"}' }), query), true)
+  assert.equal(matchesCell(toolCell({ outputDetail: 'pnpm ok' }), query), true)
+  assert.equal(matchesCell(toolCell({ isError: true, outputDetail: 'PNPM failed' }), query), true)
+  assert.equal(matchesCell(toolCell(), query), false)
 })
 
 test('tokens combine with AND', () => {
   const query = parseQuery('tool:bash status:error')
-  assert.equal(matchesQuery(call({ status: 'error' }), query), true)
-  assert.equal(matchesQuery(call({ status: 'ok' }), query), false)
-  assert.equal(matchesQuery(call({ name: 'read', status: 'error' }), query), false)
+  assert.equal(matchesCell(toolCell({ isError: true }), query), true)
+  assert.equal(matchesCell(toolCell(), query), false)
+  assert.equal(matchesCell(toolCell({ toolName: 'read', isError: true }), query), false)
 })
 
 test('invalid values are kept as tokens but ignored', () => {
   const query = parseQuery('status:weird')
   assert.equal(query.tokens.length, 1)
   assert.equal(query.tokens[0].valid, false)
-  assert.equal(matchesQuery(call(), query), true)
+  assert.equal(matchesCell(toolCell(), query), true)
 })
 
 test('unknown fields fall back to text', () => {
@@ -92,17 +95,18 @@ test('unknown fields fall back to text', () => {
   assert.equal(query.tokens[0].kind, 'text')
 })
 
-test('removeToken and toggleToken edit the raw query', () => {
-  assert.equal(removeToken('tool:bash status:error', 'tool:bash'), 'status:error')
-  assert.equal(toggleToken('tool:bash', 'status:error'), 'tool:bash status:error')
-  assert.equal(toggleToken('tool:bash status:error', 'status:error'), 'tool:bash')
+test('tokenizeQuery keeps quoted phrases whole and splits on whitespace', () => {
+  assert.deepEqual(tokenizeQuery('"git push" origin'), ['git push', 'origin'])
+  assert.deepEqual(tokenizeQuery('tool:bash  status:error'), ['tool:bash', 'status:error'])
 })
-const cell = (over = {}) => ({
-  kind: 'message',
-  text: 'Done. The workspace is readable.',
-  turn: 4,
-  timeSeconds: 1.2,
-  ...over,
+
+test('the suggestion vocabulary is the parser vocabulary', () => {
+  /* one list, not two: every value the menu offers must parse as that field */
+  for (const role of ROLE_VALUES) assert.deepEqual(parseQuery(`role:${role}`).filters.role, [role])
+  for (const kind of KINDS) {
+    const canonical = kind === 'message' ? 'message' : kind
+    assert.equal(matchesCell(cell({ kind: canonical }), parseQuery(`kind:${kind}`)), true, kind)
+  }
 })
 
 test('type selects record kinds and accepts assistant as a message alias', () => {
@@ -197,15 +201,12 @@ test('unknown a:b stays a plain search term, with negation', () => {
   assert.equal(matchesCell(cell({ text: 'http://example.com' }), excluded), false)
 })
 
-test('quoted phrases keep their spaces and survive removal', () => {
+test('quoted phrases keep their spaces', () => {
   const query = parseQuery('"git push" origin')
   assert.equal(query.tokens.length, 2)
   assert.equal(query.tokens[0].value, 'git push')
   assert.equal(matchesCell(cell({ text: 'ran git push --force on origin' }), query), true)
   assert.equal(matchesCell(cell({ text: 'git commits on origin' }), query), false)
-  assert.equal(removeToken('"git push" origin', 'git push'), 'origin')
-  assert.equal(toggleToken('"git push" origin', 'git push'), 'origin')
-  assert.equal(toggleToken('origin', 'git push'), 'origin "git push"')
 })
 
 test('args and result search their own side only', () => {

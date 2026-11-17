@@ -70,9 +70,10 @@ function useProjection(
   const face = typeof sessionId === 'string' && read !== undefined
     ? read(sessionId, key)
     : undefined
+  /* a projection face is an object; its methods must be called through it */
   return useSyncExternalStore(
-    face?.subscribe ?? NO_SUBSCRIBE,
-    face?.getSnapshot ?? NO_VALUE,
+    face === undefined ? NO_SUBSCRIBE : (notify) => face.subscribe(notify),
+    face === undefined ? NO_VALUE : () => face.getSnapshot(),
   )
 }
 

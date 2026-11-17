@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Better Trajectory",
-    "description": "A super-set of the native Trajectory view: tool / status / turn filters on top of the built-in timeline, folds, search and inspector."
+    "description": "A super-set of the native trajectory: one composable query (role / kind / model / step), one four-tab inspector, and the raw session log verbatim."
   }
 }

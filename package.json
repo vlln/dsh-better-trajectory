@@ -1,7 +1,7 @@
 {
   "name": "dsh-better-trajectory",
-  "version": "0.2.0",
-  "description": "Logfire-style super-set for the DeepSeek Harness trajectory: token query bar, record chips, error/raw-data tabs, single tab.",
+  "version": "0.3.0",
+  "description": "Make the DeepSeek Harness trajectory queryable: role / kind / model / step fields, one inspector for every record, and the raw session log itself.",
   "license": "MIT",
   "type": "module",
   "main": "index.mjs",
@@ -24,7 +24,8 @@
     "docs",
     "README.md",
     "CHANGELOG.md",
-    "LICENSE"
+    "LICENSE",
+    "NOTICE"
   ],
   "dsh": {
     "bundle": {
@@ -60,8 +61,9 @@
     "dsh-plugin",
     "deepseek-harness",
     "trajectory",
+    "observability",
     "debugging",
-    "observability"
+    "ui"
   ],
   "repository": {
     "type": "git",

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { IconSearchOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import css from './QueryBar.module.css'
+import { KINDS, ROLE_VALUES } from '../../client/query.mjs'
 
 export interface QueryChip {
   raw: string
@@ -134,12 +135,13 @@ function buildSuggestions(props: QueryBarProps, lastWord: string): Suggestion[] 
     }
   }
   if (field === '' || field === 'role') {
-    for (const role of ['user', 'assistant', 'system', 'tool']) {
+    /* the parser's own vocabulary: a value the menu offers must parse */
+    for (const role of ROLE_VALUES) {
       if (wholeGroup('role') || match(role)) out.push({ insert: `role:${role}`, label: role, group: 'role:' })
     }
   }
   if (field === '' || field === 'kind' || field === 'type') {
-    for (const kind of ['tool', 'subtool', 'message', 'user', 'system', 'context', 'compacted']) {
+    for (const kind of KINDS) {
       if (wholeGroup('kind') || wholeGroup('type') || match(kind)) out.push({ insert: `kind:${kind}`, label: kind, group: 'kind:' })
     }
   }

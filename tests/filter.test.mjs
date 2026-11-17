@@ -1,10 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import {
-  buildToolIndex, collectStats, emptyFilters, errorCalls, filterSnapshot, filteredCalls,
-  isActive, matchesRecord, slowestCalls, summarizeTools,
-} from '../src/client/filter.mjs'
+import { buildToolIndex, isErrorStatus, summarizeTools } from '../src/client/filter.mjs'
 import { snapshot, emptySnapshot } from './fixture.mjs'
 
 const index = buildToolIndex(snapshot)
@@ -52,42 +49,7 @@ test('tool index also sees assistant tool-call blocks outside the paired window'
   assert.equal(cutIndex.records.find(record => record.callId === 'call-outside')?.status, 'ok')
 })
 
-test('facets count errors/running and keep tool options stable', () => {
-  const filters = emptyFilters()
-  const stats = collectStats(index, filters)
-  assert.equal(stats.total, 5)
-  assert.equal(stats.matched, 5)
-  assert.equal(stats.errors, 1)
-  assert.equal(stats.running, 1)
-  assert.deepEqual(stats.tools.map(item => item.name).sort(), ['bash', 'read', 'run_code'])
-  assert.deepEqual(stats.turns.map(item => item.turn), [1, 3])
-  assert.deepEqual(stats.errorCodes, [{ code: 'ENOENT', count: 1 }])
-
-  const errorStats = collectStats(index, { ...filters, status: 'error' })
-  assert.equal(errorStats.matched, 1)
-  assert.equal(errorStats.errors, 1)
-  assert.deepEqual(errorStats.tools.map(item => item.name).sort(), ['bash', 'read', 'run_code'])
-
-  const bashStats = collectStats(index, { ...filters, tools: ['bash'] })
-  assert.equal(bashStats.matched, 3)
-  assert.equal(bashStats.running, 1)
-})
-
-test('duration and error-code filters narrow calls', () => {
-  const bash = index.records.find(record => record.name === 'bash')
-  assert.equal(matchesRecord(bash, { ...emptyFilters(), minDuration: 100 }), true)
-  assert.equal(matchesRecord(bash, { ...emptyFilters(), minDuration: 151 }), false)
-  assert.equal(matchesRecord(bash, { ...emptyFilters(), errorCode: 'ENOENT' }), false)
-
-  const read = index.records.find(record => record.name === 'read')
-  assert.equal(matchesRecord(read, { ...emptyFilters(), errorCode: 'ENOENT' }), true)
-  assert.equal(matchesRecord(read, { ...emptyFilters(), minDuration: 101 }), false)
-
-  const filtered = filterSnapshot(snapshot, { ...emptyFilters(), errorCode: 'ENOENT' }, index)
-  assert.equal(filtered.eventNodes.filter(node => node.kind === 'tool-result').length, 1)
-})
-
-test('tool summaries, slowest calls and error calls', () => {
+test('tool summaries aggregate calls, errors and durations', () => {
   const tools = summarizeTools(index)
   const bash = tools.find(tool => tool.name === 'bash')
   assert.equal(bash.calls, 3)
@@ -100,74 +62,21 @@ test('tool summaries, slowest calls and error calls', () => {
   assert.equal(read.errors, 1)
   assert.equal(read.totalMs, 100)
 
-  const slowest = slowestCalls(index, emptyFilters())
-  assert.equal(slowest[0].name, 'run_code')
-  assert.equal(slowest[0].durationMs, 200)
-
-  const failures = errorCalls(index, emptyFilters())
-  assert.equal(failures.length, 1)
-  assert.equal(failures[0].callId, 'call-read')
-
-  assert.equal(filteredCalls(index, { ...emptyFilters(), tools: ['bash'] }).length, 3)
+  const run = tools.find(tool => tool.name === 'run_code')
+  assert.equal(run.calls, 1)
+  assert.equal(run.errors, 0)
 })
 
-test('matchesRecord applies tool, status and turn filters', () => {
-  const bash = index.records.find(record => record.name === 'bash')
-  assert.equal(matchesRecord(bash, emptyFilters()), true)
-  assert.equal(matchesRecord(bash, { tools: ['read'], status: 'all', turn: null }), false)
-  assert.equal(matchesRecord(bash, { tools: [], status: 'error', turn: null }), false)
-  assert.equal(matchesRecord(bash, { tools: [], status: 'all', turn: 3 }), false)
-  assert.equal(matchesRecord({ ...bash, turn: 1 }, { tools: [], status: 'all', turn: 1 }), true)
+test('isErrorStatus counts interrupted calls as failures', () => {
+  assert.equal(isErrorStatus('error'), true)
+  assert.equal(isErrorStatus('interrupted'), true)
+  assert.equal(isErrorStatus('ok'), false)
+  assert.equal(isErrorStatus('running'), false)
 })
 
-test('no active filters returns the original snapshot by identity', () => {
-  assert.equal(isActive(emptyFilters()), false)
-  assert.equal(filterSnapshot(snapshot, emptyFilters(), index), snapshot)
-})
-
-test('error filter removes successful tools and keeps messages/context', () => {
-  const filters = { ...emptyFilters(), status: 'error' }
-  const filtered = filterSnapshot(snapshot, filters, index)
-  const tools = filtered.eventNodes.filter(node => node.kind === 'tool-result')
-  assert.equal(tools.length, 1)
-  assert.equal(tools[0].name, 'read')
-  assert.equal(filtered.runningCalls.length, 0)
-  // user/assistant text survives as native turn context
-  assert.ok(filtered.eventNodes.some(node => node.kind === 'user'))
-  assert.ok(filtered.eventNodes.some(node => node.kind === 'assistant'))
-  // the assistant tool-call block for the successful bash call is removed
-  const assistant2 = filtered.eventNodes.find(node => node.kind === 'assistant' && node.seq === 2)
-  assert.ok(assistant2)
-  assert.ok(!assistant2.blocks.some(block => block.kind === 'tool-call' && block.callId === 'call-bash'))
-})
-
-test('tool filter keeps matching calls and ancestor containers', () => {
-  const filters = { ...emptyFilters(), tools: ['bash'] }
-  const filtered = filterSnapshot(snapshot, filters, index)
-  assert.equal(filtered.eventNodes.filter(node => node.kind === 'tool-result').length, 2)
-  const run = filtered.eventNodes.find(node => node.kind === 'tool-result' && node.callId === 'call-run')
-  assert.ok(run)
-  assert.deepEqual(run.subCalls.map(call => call.callId), ['call-sub'])
-  const read = filtered.eventNodes.find(node => node.kind === 'tool-result' && node.callId === 'call-read')
-  assert.equal(read, undefined)
-  assert.equal(filtered.runningCalls.length, 1)
-  assert.equal(filtered.runningCalls[0].name, 'bash')
-})
-
-test('turn filter keeps only that turn and its requests', () => {
-  const filters = { ...emptyFilters(), turn: 3 }
-  const filtered = filterSnapshot(snapshot, filters, index)
-  assert.ok(filtered.eventNodes.every(node => node.turn === 3 || node.kind === 'tool-result'))
-  assert.equal(filtered.runningCalls.length, 1)
-  assert.ok(filtered.requests.every(request => request.turn === 3))
-  assert.equal(filtered.systemPrompts, undefined)
-})
-
-test('empty snapshot produces empty facets without throwing', () => {
+test('empty snapshot produces an empty index without throwing', () => {
   const emptyIndex = buildToolIndex(emptySnapshot)
-  const stats = collectStats(emptyIndex, emptyFilters())
-  assert.deepEqual(stats.tools, [])
-  assert.deepEqual(stats.turns, [])
-  assert.equal(stats.total, 0)
-  assert.equal(stats.matched, 0)
+  assert.deepEqual(emptyIndex.records, [])
+  assert.equal(emptyIndex.byName.size, 0)
+  assert.equal(emptyIndex.turns.size, 0)
 })

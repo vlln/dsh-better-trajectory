@@ -4,11 +4,15 @@
  * 形态：`字段:值` 的 token 用空格分隔；`-` 前缀取反；`|` 在值内并列；
  * `"..."` 保留空格；`*` 在名字类字段里是通配；裸词按全文匹配。
  *
- * 字段：`tool:` `type:` `status:` `turn:` `ms:` `code:`
+ * 字段：`role:` `kind:`（`type:` 是旧名）`model:` `provider:` `source:`
+ *      `form:` `step:` `turn:` `tool:` `status:` `ms:` `code:`
  *      `args:` `result:` `error:` `text:`
  *
- * 谓词对**所有记录**生效（工具、子调用、助手、用户、上下文、压缩点），
- * 不满足的记录在树里隐藏——不然 `status:error` 会留下满屏助手消息。
+ * 对外入口：`parseQuery` 解析 token 与过滤条件，`matchesCell` 判断一条树记录
+ * 是否命中（所有记录共用一份判据）；`tokenizeQuery`
+ * 在 chip / 草稿与查询串之间转换。谓词对**所有记录**生效（工具、子调用、
+ * 助手、用户、上下文、压缩点），不满足的记录在树里隐藏——不然
+ * `status:error` 会留下满屏助手消息。
  *
  * 纯函数，不依赖 React，单测直接 import。
  */
@@ -41,8 +45,9 @@ const KIND_ALIASES = new Map([
   ['compacted', ['compacted']],
 ])
 
-/** 建议菜单用的行种类全集（不含别名）。 */
+/** 建议菜单用的行种类全集（别名不单列，`assistant` 归入 `message`）。 */
 export const KINDS = [...KIND_ALIASES.keys()]
+  .filter(kind => KIND_ALIASES.get(kind)[0] === kind)
 
 /**
  * 行的角色：这一行说的是谁发的。上下文注入在日志里就是 `user` 角色的消息，
@@ -108,9 +113,6 @@ export function tokenizeQuery(text) {
 }
 
 /** 带空格的词写回查询时要补引号。 */
-export function joinQueryTokens(words) {
-  return words.map(word => (/\s/.test(word) ? `"${word}"` : word)).join(' ')
-}
 
 /** `*` 通配转正则；没有 `*` 时返回 null（按等值处理）。 */
 function globToRegExp(pattern) {
@@ -315,14 +317,6 @@ export function parseQuery(text) {
   return query
 }
 
-/** 调用记录的可检索文本（工具索引一侧）。 */
-function searchText(record) {
-  return [record.name, record.args, record.result, record.errorText]
-    .filter(value => typeof value === 'string' && value !== '')
-    .join('\n')
-    .toLowerCase()
-}
-
 const lower = (value) => (typeof value === 'string' ? value.toLowerCase() : '')
 
 /**
@@ -399,32 +393,6 @@ function matchesFilters(subject, filters) {
   return true
 }
 
-/**
- * 一条调用是否命中当前查询。
- * @param {any} record `buildToolIndex` 产出的记录。
- * @param {ReturnType<typeof emptyQuery>} query 解析结果。
- * @returns {boolean}
- */
-export function matchesQuery(record, query) {
-  if (!query.active) return true
-  const errorText = record.status === 'error' || record.status === 'interrupted'
-    ? (record.errorText ?? record.result ?? '')
-    : ''
-  return matchesFilters({
-    kind: record.kind ?? 'tool',
-    name: record.name,
-    /* interrupted is a failure too, and `status:error` must catch it */
-    status: record.status === 'interrupted' ? 'error' : record.status,
-    turn: record.turn,
-    durationMs: record.durationMs,
-    errorCode: record.errorCode,
-    text: searchText(record),
-    args: record.args ?? '',
-    result: record.result ?? '',
-    errorText,
-  }, query.filters)
-}
-
 /** 一条树记录（任意类型）的归一化字段。 */
 function cellSubject(cell, meta) {
   const kind = cell.kind ?? ''
@@ -492,31 +460,4 @@ function cellSubject(cell, meta) {
 export function matchesCell(cell, query, meta) {
   if (!query.active) return true
   return matchesFilters(cellSubject(cell, meta), query.filters)
-}
-
-/**
- * 从查询里抽掉一个 token（chip 的 ×）。
- * @param {string} text 原文。
- * @param {string} raw 要去掉的 token 原文（不含引号）。
- * @returns {string}
- */
-export function removeToken(text, raw) {
-  const words = tokenizeQuery(text)
-  const index = words.lastIndexOf(raw)
-  if (index >= 0) words.splice(index, 1)
-  return joinQueryTokens(words)
-}
-
-/**
- * 把某个 token 写回查询：已有则移除，没有则追加。
- * @param {string} text 原文。
- * @param {string} raw token 原文。
- * @returns {string}
- */
-export function toggleToken(text, raw) {
-  const words = tokenizeQuery(text)
-  const index = words.lastIndexOf(raw)
-  if (index >= 0) words.splice(index, 1)
-  else words.push(raw)
-  return joinQueryTokens(words)
 }

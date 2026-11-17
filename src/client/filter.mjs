@@ -1,34 +1,15 @@
 /**
- * Better Trajectory 的纯筛选层。
+ * Better Trajectory 的纯工具索引与统计层。
  *
- * 目标：**不改内置轨迹视图**，只把它的轨迹快照裁掉不匹配的工具调用，
- * 再把裁剪后的快照交给内置 `TrajectoryView` 渲染。因此回合、步骤、折叠、
- * 搜索、时间轴、详情等原生能力全部保留；消息与回合头作为上下文保留。
+ * 把原生 `TrajectorySnapshot` 展开成扁平的调用记录（`buildToolIndex`），
+ * 再按工具聚合调用数 / 错误数 / 耗时（`summarizeTools`），并提供共用的
+ * 错误状态判定（`isErrorStatus`）。
+ *
+ * 查询与筛选判据只有一份，在 `query.mjs`（`matchesCell` → `matchesFilters`）；
+ * 本文件不再保留第二份筛选实现。
  *
  * 纯 ESM，`node --test` 可直接导入。
  */
-
-/** 状态选项。 */
-export const FILTER_STATUSES = ['all', 'error', 'running']
-
-/**
- * @returns {{
- *   tools: string[],
- *   status: 'all'|'error'|'running',
- *   turn: number|null,
- *   minDuration: number|null,
- *   errorCode: string|null,
- * }}
- */
-export function emptyFilters() {
-  return { tools: [], status: 'all', turn: null, minDuration: null, errorCode: null }
-}
-
-/** @param {ReturnType<typeof emptyFilters>} filters */
-export function isActive(filters) {
-  return filters.tools.length > 0 || filters.status !== 'all' || filters.turn !== null
-    || filters.minDuration !== null || filters.errorCode !== null
-}
 
 /** @param {unknown} value */
 function isObject(value) {
@@ -220,70 +201,6 @@ export function buildToolIndex(snapshot) {
   return { records, byKey, byName, turns, nodeTurns, keyOf }
 }
 
-/** 一条调用是否命中筛选。 */
-export function matchesRecord(record, filters) {
-  if (!isObject(record)) return false
-  if (filters.tools.length > 0 && !filters.tools.includes(record.name)) return false
-  if (filters.status === 'error' && !isErrorStatus(record.status)) return false
-  if (filters.status === 'running' && record.status !== 'running') return false
-  if (filters.turn !== null && record.turn !== filters.turn) return false
-  if (filters.errorCode !== null && record.errorCode !== filters.errorCode) return false
-  if (filters.minDuration !== null && (record.durationMs ?? -1) < filters.minDuration) return false
-  return true
-}
-
-/**
- * 分面计数：工具名忽略状态、保留回合；状态忽略状态自身；回合忽略回合自身。
- * @param {ReturnType<typeof buildToolIndex>} index
- * @param {ReturnType<typeof emptyFilters>} filters
- */
-export function collectStats(index, filters) {
-  const toolCounts = new Map()
-  const codeCounts = new Map()
-  let errors = 0
-  let running = 0
-  let matched = 0
-  const turnCounts = new Map()
-
-  for (const record of index.records) {
-    const turnOk = filters.turn === null || record.turn === filters.turn
-    if (turnOk && record.name !== '') {
-      toolCounts.set(record.name, (toolCounts.get(record.name) ?? 0) + 1)
-    }
-    const toolsOk = filters.tools.length === 0 || filters.tools.includes(record.name)
-    const otherOk = turnOk
-      && (filters.errorCode === null || record.errorCode === filters.errorCode)
-      && (filters.minDuration === null || (record.durationMs ?? -1) >= filters.minDuration)
-    if (toolsOk && otherOk) {
-      if (isErrorStatus(record.status)) errors += 1
-      if (record.status === 'running') running += 1
-    }
-    if (toolsOk && turnOk && isErrorStatus(record.status) && record.errorCode) {
-      codeCounts.set(record.errorCode, (codeCounts.get(record.errorCode) ?? 0) + 1)
-    }
-    if (toolsOk && record.turn !== undefined) {
-      turnCounts.set(record.turn, (turnCounts.get(record.turn) ?? 0) + 1)
-    }
-    if (matchesRecord(record, filters)) matched += 1
-  }
-
-  return {
-    tools: [...toolCounts.entries()]
-      .map(([name, count]) => ({ name, count }))
-      .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name)),
-    errors,
-    running,
-    matched,
-    total: index.records.length,
-    turns: [...turnCounts.entries()]
-      .map(([turn, count]) => ({ turn, count }))
-      .sort((left, right) => left.turn - right.turn),
-    errorCodes: [...codeCounts.entries()]
-      .map(([code, count]) => ({ code, count }))
-      .sort((left, right) => right.count - left.count || left.code.localeCompare(right.code)),
-  }
-}
-
 /** 按工具聚合调用数、错误数、总耗时、平均 / p95 耗时。 */
 export function summarizeTools(index) {
   /** @type {Map<string, {name: string, calls: number, errors: number, running: number, totalMs: number, durations: number[]}>} */
@@ -318,124 +235,4 @@ export function summarizeTools(index) {
       p95Ms: at(0.95),
     }
   }).sort((left, right) => right.calls - left.calls || left.name.localeCompare(right.name))
-}
-
-/** 当前筛选下最慢的调用。 */
-export function slowestCalls(index, filters, limit = 12) {
-  return index.records
-    .filter(record => matchesRecord(record, filters) && typeof record.durationMs === 'number')
-    .sort((left, right) => (right.durationMs ?? 0) - (left.durationMs ?? 0))
-    .slice(0, limit)
-}
-
-/** 当前筛选下的错误调用。 */
-export function errorCalls(index, filters) {
-  return index.records
-    .filter(record => matchesRecord(record, filters) && isErrorStatus(record.status))
-    .sort((left, right) => (left.turn ?? 0) - (right.turn ?? 0) || (left.time ?? 0) - (right.time ?? 0))
-}
-
-/** 当前筛选下的调用。 */
-export function filteredCalls(index, filters) {
-  return index.records.filter(record => matchesRecord(record, filters))
-}
-
-/**
- * 裁掉不匹配的工具调用，保留消息与回合上下文。
- * 没有筛选时返回原快照（身份不变）。
- * @param {any} snapshot
- * @param {ReturnType<typeof emptyFilters>} filters
- * @param {ReturnType<typeof buildToolIndex>} [index]
- */
-export function filterSnapshot(snapshot, filters, index = buildToolIndex(snapshot)) {
-  if (!isActive(filters)) return snapshot
-  const nodeTurns = index.nodeTurns
-
-  const recordFor = (block, fallbackTurn) => {
-    const callId = asString(block?.callId)
-    const known = callId === '' ? undefined : index.byKey.get(index.keyOf(fallbackTurn, callId))
-    if (known !== undefined) return known
-    return {
-      callId,
-      name: asString(block?.name) || asString(block?.call?.name),
-      status: statusOf(block),
-      ...(fallbackTurn === undefined ? {} : { turn: fallbackTurn }),
-    }
-  }
-
-  const filterToolBlock = (block, fallbackTurn) => {
-    if (!isObject(block)) return null
-    const record = recordFor(block, fallbackTurn)
-    const subCalls = (Array.isArray(block.subCalls) ? block.subCalls : [])
-      .map(sub => filterToolBlock(sub, record.turn ?? fallbackTurn))
-      .filter(sub => sub !== null)
-    if (!matchesRecord(record, filters) && subCalls.length === 0) return null
-    return { ...block, subCalls }
-  }
-
-  const filterAssistant = (node) => {
-    const blocks = (Array.isArray(node.blocks) ? node.blocks : []).filter((block) => {
-      if (!isObject(block) || block.kind !== 'tool-call') return true
-      return matchesRecord(recordFor(
-        { callId: block.callId, name: block.name },
-        node.turn,
-      ), filters)
-    })
-    if (blocks.length === 0) return null
-    return { ...node, blocks }
-  }
-
-  const nodes = (Array.isArray(snapshot.eventNodes) ? snapshot.eventNodes : []).flatMap((node) => {
-    if (!isObject(node)) return []
-    const info = nodeTurns.get(node.seq) ?? {}
-    const turn = typeof node.turn === 'number' ? node.turn : info.turn
-    if (filters.turn !== null && turn !== filters.turn) return []
-    if (node.kind === 'tool-result') {
-      const filtered = filterToolBlock(node, turn)
-      return filtered === null ? [] : [filtered]
-    }
-    if (node.kind === 'assistant') {
-      const filtered = filterAssistant(node)
-      return filtered === null ? [] : [filtered]
-    }
-    // 原生视图不渲染 turn-error / retry / max-tokens；筛选时无需保留。
-    if (node.kind === 'turn-error' || node.kind === 'model-retry' || node.kind === 'turn-max-tokens') {
-      return []
-    }
-    return [node]
-  })
-
-  const runningCalls = (Array.isArray(snapshot.runningCalls) ? snapshot.runningCalls : [])
-    .map(call => filterToolBlock(call, call.turn))
-    .filter(call => call !== null)
-
-  let partial = snapshot.partial
-  if (partial !== null && partial !== undefined) {
-    if (filters.turn !== null && partial.turn !== filters.turn) partial = null
-    else {
-      const blocks = (Array.isArray(partial.blocks) ? partial.blocks : []).filter((block) => {
-        if (!isObject(block) || block.kind !== 'tool-call') return true
-        return matchesRecord(recordFor(
-          { callId: block.callId, name: block.name },
-          partial.turn,
-        ), filters)
-      })
-      partial = blocks.length === 0 ? null : { ...partial, blocks }
-    }
-  }
-
-  const requests = filters.turn === null
-    ? snapshot.requests
-    : (Array.isArray(snapshot.requests) ? snapshot.requests : [])
-      .filter(request => request.turn === filters.turn)
-
-  return {
-    ...snapshot,
-    eventNodes: nodes,
-    runningCalls,
-    requests,
-    partial,
-    // 初始系统提示不属于任何回合，筛选时隐藏，避免占据首行。
-    systemPrompts: undefined,
-  }
 }

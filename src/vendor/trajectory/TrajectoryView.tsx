@@ -17,7 +17,7 @@ import {
 import type { WatchToolResult } from './watch-tool-result.ts'
 import { QueryBar } from './QueryBar.tsx'
 import { buildToolIndex, isErrorStatus, summarizeTools } from '../../client/filter.mjs'
-import { joinQueryTokens, matchesCell, parseQuery, tokenizeQuery } from '../../client/query.mjs'
+import { matchesCell, parseQuery, tokenizeQuery } from '../../client/query.mjs'
 import { TrajectoryTimeline } from './TrajectoryTimeline.tsx'
 import {
   appendTrajectoryPartialLayout, deriveTrajectoryLayout,
@@ -215,7 +215,9 @@ export function TrajectoryView({
     }
   }, [queryChips, queryDraft, sessionId])
   const [showTime, setShowTime] = useState(true)
-  const restoreScroll = useRef(0)
+  /* `null` means "nothing to restore": a fresh table follows the tail. `0` is a
+     real position, so it must stay distinguishable from "no request". */
+  const restoreScroll = useRef<number | null>(null)
   const [toast, setToast] = useState<{ id: number; text: string; undo?: () => void } | null>(null)
   const toastTimer = useRef<number | null>(null)
   const toastSeq = useRef(0)
@@ -512,11 +514,11 @@ export function TrajectoryView({
       calls: toolCells.length,
       errors,
       durationMs: start === null || end === null ? null : Math.max(0, end - start),
-      /* The window is what the client holds; the session may have older events
-         that were never paged in, so the totals are a floor, not the whole log. */
-      partial: sessionHasOlderHistory,
+      /* The window is what the client holds. Older history counts as missing
+         whether it is resident-but-outside this window or never paged in. */
+      partial: hasOlderHistory,
     }
-  }, [allCells, sessionHasOlderHistory, toolCells])
+  }, [allCells, hasOlderHistory, toolCells])
   const queryTurns = useMemo(
     () => [...toolIndex.turns.entries()]
       .sort((left, right) => left[0] - right[0])

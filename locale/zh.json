@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Better Trajectory",
-    "description": "原生轨迹的超集：在原生 Trajectory 视图上增加工具 / 状态 / 回合筛选，保留时间轴、折叠、搜索与详情。"
+    "description": "原生轨迹的超集：一条可组合的查询（角色 / 类型 / 模型 / 步骤）、统一的四页签详情，以及逐字显示的原始日志。"
   }
 }
