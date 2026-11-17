@@ -74,8 +74,9 @@ AND。未知字段回退为文本，非法值保留 token 但不参与过滤。`
 
 - 宿主 **0.2.2-rc.2**（2026-11-14），隔离 web profile，端口 3197。
 - 单页签接管：只剩「对话 / 轨迹」，旧的 `Trajectory+`、筛选栏、调试面板、JSON 浮层已删。
-- 查询：`tool:bash` → 36/100（只有调用行，助手/用户/上下文同时隐藏）；`type:system` → 1/13；
-  `type:` 建议菜单有「类型」组；chip 删除、Esc 清空。
+- 查询：`tool:bash` → 36/100（只有调用行，助手/用户/上下文同时隐藏）；大会话本窗口 50 条实测
+  `role:assistant` 25 / `role:tool` 23 / `kind:context` 2 / `source:tool-jobs` 1 / `step:170-180` 10 /
+  `model:deepseek-flash` 50 / `model:gpt*` 0；建议菜单有 `role:` / `kind:` 组；chip 删除、Esc 清空。
 - toolbar 右端常驻总统计：`13 条记录 · 5 次调用 · 3 个错误 · 6.3s`（窗口总时长超 24h 显示 `NdNNh`）。
 - `原始` = 日志本身（`eventSource` 原始事件窗口，按行取 `callId`/`seq` 对应的事件，逐字显示）；投影字段
   （index/state/turn/step/时长/token）不进这里，见 `docs/design-language.md` §6.1。
