@@ -540,14 +540,26 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
      page). */
   const holdTimer = useRef<number | null>(null)
   const holdStep = useRef<() => void>(() => {})
+  const holdRelease = useRef<(() => void) | null>(null)
   const stopHold = useCallback(() => {
     if (holdTimer.current !== null) window.clearTimeout(holdTimer.current)
     holdTimer.current = null
+    holdRelease.current?.()
+    holdRelease.current = null
   }, [])
   const startHold = useCallback((step: () => void) => {
     stopHold()
     holdStep.current = step
     step()
+    /* A press released outside the button never reaches its pointerup: the page
+       would keep paging after the reader let go. */
+    const release = () => { stopHold() }
+    window.addEventListener('pointerup', release)
+    window.addEventListener('pointercancel', release)
+    holdRelease.current = () => {
+      window.removeEventListener('pointerup', release)
+      window.removeEventListener('pointercancel', release)
+    }
     holdTimer.current = window.setTimeout(() => {
       holdTimer.current = window.setInterval(() => { holdStep.current() }, HOLD_REPEAT_MS)
     }, HOLD_DELAY_MS)
