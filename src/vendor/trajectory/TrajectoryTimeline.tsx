@@ -12,6 +12,7 @@ import {
   deriveTrajectoryTimeline,
   type TrajectoryTimelineMode,
   type TrajectoryTimelineModel,
+  type TrajectoryTimelineSpan,
   type TrajectoryTimeRange,
 } from './timeline.ts'
 import { HoverCard } from './HoverCard.tsx'
@@ -526,13 +527,26 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
   /* A press pans; the window keeps its size. At the loaded edge the press asks
      for the next page instead, and the pan is completed once that page lands —
      "move the window left, fetching what it uncovers". */
-  const pendingPan = useRef<{ duration: number; fromStart: number } | null>(null)
+  /* The window size lives here, not in `domainDuration`: a fully zoomed-out
+     strip reports the whole loaded range as its own size, and every page grows
+     that range — recapturing it made the window swallow the log page by page,
+     so every bar shrank under the reader. */
+  const windowSize = useRef<number | null>(null)
+  const pendingPan = useRef<{ fromStart: number; size: number | null } | null>(null)
+  useEffect(() => {
+    if (viewport === null) return
+    const size = viewport.end - viewport.start
+    if (size > 0) windowSize.current = size
+  }, [viewport])
   const stepEarlier = useCallback(() => {
     if (panWindow(-1)) return
     if (model === null) return
-    pendingPan.current = { duration: domainDuration, fromStart: model.start }
+    /* Fully zoomed out there is no window yet: take the page that arrives as the
+       window (one page is the only span the reader has seen there), then keep
+       that size for every later press. */
+    pendingPan.current ??= { fromStart: model.start, size: windowSize.current }
     loadEarlier?.()
-  }, [domainDuration, loadEarlier, model, panWindow])
+  }, [loadEarlier, model, panWindow])
   const stepLater = useCallback(() => { panWindow(1) }, [panWindow])
   const stepEarlierRef = useRef<() => void>(() => {})
   const stepLaterRef = useRef<() => void>(() => {})
@@ -618,18 +632,23 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
       <span aria-hidden="true">›</span>
     </button>
   )
-  /* Complete a deferred pan: the loaded range grew, so show the newly uncovered
-     span at the same window size. */
+  /* Complete a deferred pan once the page has landed: move by the same 2/3 step
+     the window would have taken, so a third of it stays on screen and the size
+     never changes. From a fully zoomed-out strip the first press adopts the
+     page's own span as the window — the only size the reader has seen there. */
   useEffect(() => {
     const pending = pendingPan.current
     if (pending === null || model === null) return
     if (model.start >= pending.fromStart) return
     pendingPan.current = null
+    const size = pending.size ?? (pending.fromStart - model.start)
+    if (!(size > 0)) return
+    windowSize.current = size
+    const start = Math.max(model.start, pending.fromStart - size * EDGE_STEP_FRACTION)
+    const end = Math.min(model.end, start + size)
+    if (!(end > start)) return
     setAnimateViewport(false)
-    setViewport({
-      start: model.start,
-      end: Math.min(model.end, model.start + pending.duration),
-    })
+    setViewport({ start, end })
   }, [model])
   const projectedDomainStyle = useMemo(() => (model === null
     ? undefined
@@ -713,13 +732,36 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
     return clampFraction((event.clientX - rect.left) / Math.max(1, rect.width))
   }
 
+  /** Lane under the pointer: lanes sit 14px apart, 8px tall, from 7px down. */
+  const laneAt = (event: PointerEvent<HTMLDivElement>, rect: DOMRect): number | null => {
+    const offset = event.clientY - rect.top - 7
+    if (offset < 0) return null
+    return Math.floor(offset / 14)
+  }
+
   const recordIndexAt = (event: PointerEvent<HTMLDivElement>): number | null => {
     const target = event.target instanceof HTMLElement ? event.target : null
     const value = target?.closest<HTMLElement>('[data-timeline-record-index]')
       ?.dataset.timelineRecordIndex
-    if (value === undefined) return null
-    const index = Number(value)
-    return Number.isFinite(index) ? index : null
+    if (value !== undefined) {
+      const index = Number(value)
+      if (Number.isFinite(index)) return index
+    }
+    /* Dense windows draw pixel buckets, which carry no record index. The model
+       still knows every span, so resolve the record under the pointer by time
+       and lane — hovering a call must keep opening its card at any density. */
+    if (model === null) return null
+    const rect = event.currentTarget.getBoundingClientRect()
+    const time = domainStart
+      + clampFraction((event.clientX - rect.left) / Math.max(1, rect.width)) * domainDuration
+    const lane = laneAt(event, rect)
+    if (lane === null) return null
+    let best: TrajectoryTimelineSpan | undefined
+    for (const span of model.spans) {
+      if (span.lane !== lane || span.start > time || span.end < time) continue
+      if (best === undefined || span.end - span.start < best.end - best.start) best = span
+    }
+    return best?.index ?? null
   }
 
   const commit = (nextRange: TrajectoryTimeRange) => {
