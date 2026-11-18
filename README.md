@@ -16,6 +16,7 @@ dsh plugin --profile web add dsh-better-trajectory        # web
 dsh plugin --profile desktop add dsh-better-trajectory    # 官方 Desktop（先退出应用）
 ```
 
+- 装某个具体版本：`dsh plugin --profile web add dsh-better-trajectory@0.3.6`。pnpm 会跳过发布不到一天的版本，所以刚发版时按包名装可能拿到上一版。
 - 跟进 `main` 上还没发版的最新改动：`dsh plugin --profile web add github:vlln/dsh-better-trajectory`。
 - 前置：dsh `0.2.2-rc.x`（实测 `0.2.2-rc.2`）。
 - 升级：`dsh plugin --profile web update dsh-better-trajectory`。卸载：`remove dsh-better-trajectory`。
