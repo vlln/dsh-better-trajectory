@@ -514,14 +514,14 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
   const stepEarlier = useCallback(() => {
     if (panWindow(-1)) return
     if (model === null) return
-    /* Fully zoomed out there is no window to move: the strip already shows
-       everything loaded, so a press only fetches more history. Creating a window
-       from the page that arrives would shrink what the reader was looking at. */
-    if (viewport === null) {
-      loadEarlier?.()
-      return
+    /* The window keeps the span it has on screen right now. A fully zoomed-out
+       strip has no viewport object, and its span is the whole loaded range —
+       reading it from the range (not from a remembered size) is what makes the
+       press a pan instead of a rescale of everything on screen. */
+    pendingPan.current ??= {
+      fromStart: model.start,
+      size: viewport === null ? model.end - model.start : viewport.end - viewport.start,
     }
-    pendingPan.current ??= { fromStart: model.start, size: viewport.end - viewport.start }
     loadEarlier?.()
   }, [loadEarlier, model, panWindow, viewport])
   const stepLater = useCallback(() => { panWindow(1) }, [panWindow])

@@ -1,6 +1,6 @@
 {
   "name": "dsh-better-trajectory",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Make the DeepSeek Harness trajectory queryable: role / kind / model / step fields, one inspector for every record, and the raw session log itself.",
   "license": "MIT",
   "type": "module",
