@@ -4,7 +4,9 @@
 
 把内置的「轨迹」页签换成一个能查的调试面：**一条可组合的查询**、**一套按行类型统一的详情**、**一个就是日志本身的「原始」**。仍然只有一个页签、一个时间轴、一套折叠——不是另起一套 UI。
 
-![轨迹页签：查询条、时间轴与台账](docs/overview.jpg)
+https://github.com/user-attachments/assets/b53b4d48-4307-41f8-8a1b-606f62b3c192
+
+<sub>31 秒录屏（无声）：台账的层线与折叠、查询条、右栏四个页签、原始事件。</sub>
 
 ## 30 秒安装
 
@@ -54,15 +56,11 @@ dsh plugin --profile desktop add github:vlln/dsh-better-trajectory
 
 ### 查询：token 组合，条件即 chip
 
-![查询与命中](docs/query.jpg)
-
 输入 `tool:bash`、`status:error`、`step:170-180` 这类 token，回车变成 chip；chip 点 `×` 删除，`清除` 一次清空，`Esc` 收掉建议菜单。右侧常驻 `命中 N · M 个被过滤`。
 
 **筛选是对所有行生效的**（工具、子调用、助手、用户、上下文、压缩点一视同仁）——不然 `status:error` 会留下一屏不相关的助手消息。筛选态不画连线和折叠点，改成每行两个定宽的位置标签：`86轮` `177步`。
 
 ### 详情：一条记录、四个页签
-
-![右栏四个页签](docs/inspector.png)
 
 工具、助手、用户、上下文、压缩点、系统提示词用**同一组页签**，切记录不换读法：
 
@@ -74,8 +72,6 @@ dsh plugin --profile desktop add github:vlln/dsh-better-trajectory
 | 原始 | 它字面是什么：这一行对应的**日志事件**，逐字显示 |
 
 ### 原始：就是日志本身
-
-![原始事件](docs/raw.png)
 
 不是重新拼一份「看起来像日志」的 JSON：读会话的原始事件窗口，把这一行对应的条目逐字显示——消息是那一条 `user/message`，调用是它的 `tool/call` + `job/*` + `tool/result`（按 `callId` 定位，不按位置：一次调用的结果可能远晚于下面几行才落盘），折叠的行是它吞掉的全部事件。事件不在已加载窗口里时显示一行说明，而不是空白。
 
