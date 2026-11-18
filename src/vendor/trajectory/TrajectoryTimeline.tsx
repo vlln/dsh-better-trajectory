@@ -506,26 +506,24 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
   /* A press pans; the window keeps its size. At the loaded edge the press asks
      for the next page instead, and the pan is completed once that page lands —
      "move the window left, fetching what it uncovers". */
-  /* The window size lives here, not in `domainDuration`: a fully zoomed-out
-     strip reports the whole loaded range as its own size, and every page grows
-     that range — recapturing it made the window swallow the log page by page,
-     so every bar shrank under the reader. */
-  const windowSize = useRef<number | null>(null)
-  const pendingPan = useRef<{ fromStart: number; size: number | null } | null>(null)
-  useEffect(() => {
-    if (viewport === null) return
-    const size = viewport.end - viewport.start
-    if (size > 0) windowSize.current = size
-  }, [viewport])
+  /* The window size comes from the viewport itself, never from `domainDuration`:
+     a fully zoomed-out strip reports the whole loaded range as its size, and
+     every page grows that range — recapturing it made the window swallow the log
+     page by page, so every bar shrank under the reader. */
+  const pendingPan = useRef<{ fromStart: number; size: number } | null>(null)
   const stepEarlier = useCallback(() => {
     if (panWindow(-1)) return
     if (model === null) return
-    /* Fully zoomed out there is no window yet: take the page that arrives as the
-       window (one page is the only span the reader has seen there), then keep
-       that size for every later press. */
-    pendingPan.current ??= { fromStart: model.start, size: windowSize.current }
+    /* Fully zoomed out there is no window to move: the strip already shows
+       everything loaded, so a press only fetches more history. Creating a window
+       from the page that arrives would shrink what the reader was looking at. */
+    if (viewport === null) {
+      loadEarlier?.()
+      return
+    }
+    pendingPan.current ??= { fromStart: model.start, size: viewport.end - viewport.start }
     loadEarlier?.()
-  }, [loadEarlier, model, panWindow])
+  }, [loadEarlier, model, panWindow, viewport])
   const stepLater = useCallback(() => { panWindow(1) }, [panWindow])
   const stepEarlierRef = useRef<() => void>(() => {})
   const stepLaterRef = useRef<() => void>(() => {})
@@ -632,9 +630,8 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
     if (pending === null || model === null) return
     if (model.start >= pending.fromStart) return
     pendingPan.current = null
-    const size = pending.size ?? (pending.fromStart - model.start)
+    const { size } = pending
     if (!(size > 0)) return
-    windowSize.current = size
     const start = Math.max(model.start, pending.fromStart - size * EDGE_STEP_FRACTION)
     const end = Math.min(model.end, start + size)
     if (!(end > start)) return

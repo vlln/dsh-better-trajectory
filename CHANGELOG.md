@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.3 — 2026-11-17
+
+- 修「轨道窗口放大后再按箭头，窗口自己缩回去」：把窗口放到最大（铺满已加载范围，`viewport === null`）后按左箭头，会先把窗口缩回「上一次的窗口大小」再平移。原因是延迟平移用的尺寸取自一个 ref（`windowSize`），而它只在**存在窗口**时更新——放到最大时窗口是 null，ref 里留着的是更早那个更小的值。现在：铺满时按箭头只取更早的一页、保持铺满（不凭空造一个窗口）；有窗口时尺寸直接取当前视口（`viewport.end - viewport.start`），ref 整个删掉。实测同一操作：修前 `100% → 145.57%`（记录 1,151 → 1,201），修后 `100% → 100%`（350 → 651）；有窗口时平移尺寸不变（`182.21% → 182.21%`，左沿 `-41.08% → 0%`）。
+
 ## 0.3.2 — 2026-11-17
 
 - 删掉 86 条没有任何引用的 CSS 规则（626 行）：`requestBoundaryControl*`、`selectionRail`、`turnRail`、`turnLabel*`、`usagePanel*`、`overview*`、`schema*`、`collapsedTurn*`、`errorPanel*`、`rowStack` / `rowMeta` / `rowTime` 这些，都是已经删掉的面板和行结构留下的样式。判定时把 `css.x`、`css['x']` 和两处动态查表（`promptDiffLine${kind}`、`css[cell.kind]`）都算引用，只删「选择器里每个类都无人引用」的规则；混着在用类的 17 条整条保留。
