@@ -63,7 +63,12 @@ AND。未知字段回退为文本，非法值保留 token 但不参与过滤。`
 - `*.module.css` 由 postcss-modules 生成 `bt_` 前缀类名，运行时注入 `<style data-bt-css>`。
 - 产物 `lib/client.js` 必须入库。
 
-`npm run verify` = 单测 + `tsc --noEmit` + build + `node --check`。
+`npm run verify` = 单测 + `tsc --noEmit` + `check:fork` + build + `node --check`。
+
+`check:fork` 是 fork 的专用门禁：`// @ts-nocheck` 会吞掉「这个名字不存在」这类错，而 esbuild 把未定义
+标识符留成全局读，只有渲染到那条分支才抛 `ReferenceError`（0.3.2 删 import 时踩过：带附件的消息
+一开预览就炸）。它把 `src/` 复制到 `.work/fork-check`、去掉指令后跑 `tsc`，只报 `TS2304` / `TS2552`；
+配置本身跑不起来也算失败。
 
 ## 已验证
 

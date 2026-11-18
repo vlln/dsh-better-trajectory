@@ -14,6 +14,8 @@ import {
   FileTypeIcon,
   IconChevronRightOutlineRegular,
   IconWrapLinesOutlineRegular,
+  fileExtension,
+  fileSizeText,
   JsonTree,
   MarkdownText,
   StateDot,
@@ -36,7 +38,7 @@ import type { TrajectoryTurnModel } from './layout.ts'
 import { trajectoryPreviewText } from './trajectory-preview.ts'
 import type { TrajectoryKey, TrajectoryTranslate } from './locales.ts'
 import { COMPACTION_INTERRUPTED_ERROR } from './copy-codes.ts'
-import { codeProgram, PTC_TOOL_NAME } from './code-program.ts'
+import { codeProgram, PTC_TOOL_NAME, type CodeProgram } from './code-program.ts'
 import css from './TrajectoryTable.module.css'
 import { RawDataPanel, payloadBadge } from './RawDataPanel.tsx'
 import { formatTimestamp } from './format.ts'
@@ -1751,7 +1753,7 @@ export function TrajectoryTable({
     ? undefined
     : currentRecord(selectedTemplate)
   const resultSeq = activeTab === 'preview' ? selected?.cell.resultSeq : undefined
-  const [liveResult, setLiveResult] = useState<{ seq: number; owner: WatchToolResult; value: JsonValue | undefined }>()
+  const [liveResult, setLiveResult] = useState<{ seq: number; owner: WatchToolResult; value: unknown }>()
   useEffect(() => {
     setLiveResult(undefined)
     if (resultSeq === undefined || watchToolResult === undefined) return

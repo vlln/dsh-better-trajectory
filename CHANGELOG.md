@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.6 — 2026-11-17
+
+- 修「点开带图片的用户消息，预览页整块消失」：`预览` 里附件的元信息（`image/jpeg · 233KB · 2237 × 1096`）调用 `fileExtension()` 与 `fileSizeText()`，而这两个 import 在 0.3.2 的清理里被当成未使用删掉了。`// @ts-nocheck` 让 `tsc` 不报这个错、esbuild 把未定义标识符留成全局读，于是只有真的渲染到带附件的消息时才抛 `ReferenceError: fileSizeText is not defined`。两个 import 已恢复，`JsonValue` / `CodeProgram` 这两个只作类型用的 import 也一并恢复（后者改成内联 `unknown`）。
+- 新增门禁 `npm run check:fork`（已并入 `verify`）：把 `src/` 复制到 `.work/fork-check`、去掉每个文件的 `// @ts-nocheck` 后跑一次 `tsc`，只报 `TS2304`（找不到名字）与 `TS2552`（拼错名字）——正是这类「编译得过、运行时炸」的错。配置本身跑不起来（如 `@types` 解析失败）也算失败，避免空输出被当成通过。
+- 实测：修复前该门禁报 `TrajectoryTable.tsx(970,9): error TS2304: Cannot find name 'fileSizeText'`，修复后无告警；站点里带图片的用户消息预览页正常显示正文 + `image.png · image/jpeg · 233KB · 2237 × 1096`。
+
 ## 0.3.5 — 2026-11-17
 
 - 收掉 fork 里 26 个不可达文件（3,207 行）：`trajectory-*-definition.ts`、`trajectory-snapshot-builder.ts`、`duration-store.ts`、`string-wrapping-store.ts`、`trajectory-event-projection.ts` / `-search-index.ts` / `types.ts`、旧的分组组件（`TrajectoryCell` / `TrajectoryTurn` / `TurnHeader` / `GroupHeader`）与 `src/vendor/host/`。它们没有任何 import 能到达、也不在产物里（`lib/client.js` 删除前后字节一致，450.1 KB），只是当初整包拷贝留下的。定义、快照、store 仍由官方插件注册——本插件不禁用它。

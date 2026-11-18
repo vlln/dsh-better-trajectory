@@ -1,6 +1,6 @@
 {
   "name": "dsh-better-trajectory",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "Make the DeepSeek Harness trajectory queryable: role / kind / model / step fields, one inspector for every record, and the raw session log itself.",
   "license": "MIT",
   "type": "module",
@@ -45,7 +45,8 @@
     "check": "node --check index.mjs && node --check lib/client.js",
     "prepack": "npm run build",
     "typecheck": "tsc --noEmit",
-    "verify": "npm run test && npm run typecheck && npm run build && npm run check"
+    "verify": "npm run test && npm run typecheck && npm run check:fork && npm run build && npm run check",
+    "check:fork": "node scripts/check-fork.mjs"
   },
   "devDependencies": {
     "@tanstack/react-virtual": "^3.14.26",
