@@ -4,7 +4,7 @@
 
 把内置的「轨迹」页签换成一个能查的调试面：**一条可组合的查询**、**一套按行类型统一的详情**、**一个就是日志本身的「原始」**。仍然只有一个页签、一个时间轴、一套折叠——不是另起一套 UI。
 
-https://github.com/user-attachments/assets/b53b4d48-4307-41f8-8a1b-606f62b3c192
+https://github.com/user-attachments/assets/b8e3c8b2-1110-4ce5-aff7-743a7fac769b
 
 <sub>31 秒录屏（无声）：台账的层线与折叠、查询条、右栏四个页签、原始事件。</sub>
 

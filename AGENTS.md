@@ -109,6 +109,9 @@ AND。未知字段回退为文本，非法值保留 token 但不参与过滤。`
 - `NOTICE` 随包分发：`src/vendor/trajectory/` 是 DeepSeek 的 MIT 代码，原始版权声明不能丢；
   `files` 里包含 `NOTICE`，README 的「许可」节指向它。
 - README 只写使用者内容（安装 / 用法 / 语法 / 限制 / 兼容性 / 插件管理），工程契约在本文件。
+- README 顶部那段录屏是 GitHub **user-attachment**：用临时 issue 的 `--attach` 上传、拿到
+  `https://github.com/user-attachments/assets/…` 后删掉 issue（附件不会跟着消失），README 里**裸写一行**
+  （包 `<video>` 会被剥掉）。源文件与压缩版放在 `.work/<插件>/demo/`，不进仓库。
 
 ## 改动前先看
 
