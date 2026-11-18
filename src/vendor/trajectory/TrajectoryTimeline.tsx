@@ -17,6 +17,7 @@ import {
 } from './timeline.ts'
 import { HoverCard } from './HoverCard.tsx'
 import css from './TrajectoryTimeline.module.css'
+import { formatDurationSpan, formatTimestamp } from './format.ts'
 
 const MINIMUM_DRAG_PX = 3
 /** One arrow step moves this share of the visible window. */
@@ -100,18 +101,6 @@ function timelineRecordDetail(cell: TrajectoryCellProps): TimelineRecordDetail {
   }
 }
 
-/** Compact offset for the cursor card: `56ms` / `2.5s` / `1m05s` / `1h02m`. */
-function formatOffset(milliseconds: number): string {
-  const ms = Math.max(0, milliseconds)
-  if (ms < 1_000) return `${Math.round(ms)}ms`
-  const seconds = ms / 1_000
-  if (seconds < 10) return `${seconds.toFixed(1)}s`
-  if (seconds < 60) return `${Math.round(seconds)}s`
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes}m${String(Math.round(seconds % 60)).padStart(2, '0')}s`
-  return `${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, '0')}m`
-}
-
 /** Domain value in the active projection: an ordinal, a compressed offset or a clock time. */
 function formatDomainValue(
   value: number,
@@ -119,8 +108,8 @@ function formatDomainValue(
   origin: number,
 ): string {
   if (mode === 'sequence') return `#${Math.round(value)}`
-  if (mode === 'duration') return formatOffset(Math.max(0, value - origin))
-  return formatRecordedTime(value)
+  if (mode === 'duration') return formatDurationSpan(Math.max(0, value - origin))
+  return formatTimestamp(value)
 }
 
 function timelineKindLabel(kind: TrajectoryCellKind, t: TrajectoryTranslate): string {
@@ -133,16 +122,6 @@ function timelineKindLabel(kind: TrajectoryCellKind, t: TrajectoryTranslate): st
     case 'tool': return t('kind.tool')
     case 'subtool': return t('kind.subtool')
   }
-}
-
-function formatRecordedTime(timestamp: number): string {
-  /* The date is part of the reading: one ledger can span days, and a bare clock
-     time made two different days look adjacent. */
-  const date = new Date(timestamp)
-  const two = (value: number): string => String(value).padStart(2, '0')
-  return `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())}`
-    + ` ${two(date.getHours())}:${two(date.getMinutes())}:${two(date.getSeconds())}`
-    + `.${String(date.getMilliseconds()).padStart(3, '0')}`
 }
 
 /** Props for the fixed full-domain overview above the trajectory ledger. */
@@ -1040,7 +1019,7 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
             ? []
             : [{
               label: t('timing.started'),
-              value: formatRecordedTime(detail.startedAt),
+              value: formatTimestamp(detail.startedAt),
             }]),
           ...(span === undefined
             ? []
@@ -1054,7 +1033,7 @@ export const TrajectoryTimeline = memo(function TrajectoryTimeline({
               label: qt('chip.duration'),
               value: mode === 'sequence'
                 ? qt('timeline.records', { count: Math.round(span.end - span.start) })
-                : formatOffset(detail.durationMs),
+                : formatDurationSpan(detail.durationMs),
             }]),
           {
             label: activeRange === null ? qt('timeline.count') : qt('timeline.selected'),

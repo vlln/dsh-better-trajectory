@@ -39,6 +39,7 @@ import { COMPACTION_INTERRUPTED_ERROR } from './copy-codes.ts'
 import { codeProgram, PTC_TOOL_NAME } from './code-program.ts'
 import css from './TrajectoryTable.module.css'
 import { RawDataPanel, payloadBadge } from './RawDataPanel.tsx'
+import { formatTimestamp } from './format.ts'
 
 const BOTTOM_FOLLOW_THRESHOLD_PX = 2
 const OLDER_LOAD_THRESHOLD_PX = 48
@@ -244,12 +245,7 @@ function formatClock(timestamp: number | null | undefined): string {
 
 function formatStartedAt(timestamp: number | null, t: TrajectoryTranslate): string {
   if (timestamp === null || !Number.isFinite(timestamp)) return t('timing.notAvailable')
-  const date = new Date(timestamp)
-  const two = (value: number) => String(value).padStart(2, '0')
-  const three = (value: number) => String(value).padStart(3, '0')
-  const time = `${two(date.getHours())}:${two(date.getMinutes())}:${two(date.getSeconds())}.${three(date.getMilliseconds())}`
-  const day = `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())}`
-  return `${day} ${time}`
+  return formatTimestamp(timestamp)
 }
 
 /** Whether a click lands on an active text selection and should keep it. */
@@ -1788,9 +1784,12 @@ export function TrajectoryTable({
     [sessionRequestNumbers],
   )
   const messagesWithCalls = useMemo(() => messageIndexesWithCalls(allRecords), [allRecords])
-  /* raw-event index by callId: a call's entries are found by identity, not by position */
+  /* Raw-event index by callId: a call's entries are found by identity, not by
+     position. Only the 原始 tab reads it, so a closed tab must not pay for a
+     rebuild on every event the session appends. */
   const eventSeqsByCallId = useMemo(() => {
     const index = new Map<string, number[]>()
+    if (activeTab !== 'raw') return index
     for (const entry of sessionEvents ?? []) {
       const callId = eventCallId(entry.value)
       if (callId === undefined) continue
@@ -1799,7 +1798,7 @@ export function TrajectoryTable({
       else list.push(entry.seq)
     }
     return index
-  }, [sessionEvents])
+  }, [activeTab, sessionEvents])
   const records = useMemo(() => {
     type Summary = { tools: number; steps: Set<string>; names: string[]; durationMs: number | null }
     const emptySummary = (): Summary => ({ tools: 0, steps: new Set(), names: [], durationMs: null })

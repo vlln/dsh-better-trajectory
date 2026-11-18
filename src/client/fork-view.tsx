@@ -6,7 +6,7 @@
  * t、useSession、useTrajectory、useDuration…）全部由槽位按原生条目的注入
  * face 原样传入，所以数据与交互语义不变。
  */
-import { useMemo, useSyncExternalStore } from 'react'
+import { useMemo, useRef, useSyncExternalStore } from 'react'
 import { TrajectoryView } from '../vendor/trajectory/TrajectoryView.tsx'
 import theme from '../vendor/trajectory/theme.css'
 
@@ -79,14 +79,33 @@ function useProjection(
 
 const NO_EVENTS: readonly SessionEventView[] = []
 
-/** Flatten a window snapshot into ordered entries; tolerant of an unknown shape. */
-function eventsOf(window: unknown): readonly SessionEventView[] {
+interface EventCache {
+  entries: readonly unknown[]
+  out: readonly SessionEventView[]
+  window: unknown
+}
+
+const EMPTY_CACHE: EventCache = { entries: [], out: NO_EVENTS, window: undefined }
+
+/**
+ * Flatten a window snapshot into ordered entries; tolerant of an unknown shape.
+ *
+ * A live session appends to the same log, so the array usually grows by a few
+ * entries. Reusing the previous result when the old entries are still a prefix
+ * keeps the per-append cost proportional to what arrived, not to the log.
+ */
+function eventsOf(window: unknown, cache: EventCache): EventCache {
+  if (cache.window === window) return cache
   const entries = typeof window === 'object' && window !== null
     ? (window as { entries?: unknown }).entries
     : undefined
-  if (!Array.isArray(entries)) return NO_EVENTS
-  const out: SessionEventView[] = []
-  for (const entry of entries) {
+  if (!Array.isArray(entries)) return { ...EMPTY_CACHE, window }
+  const appended = cache.entries.length > 0
+    && entries.length >= cache.entries.length
+    && entries[cache.entries.length - 1] === cache.entries[cache.entries.length - 1]
+  const out = appended ? cache.out.slice() : []
+  for (let index = appended ? cache.entries.length : 0; index < entries.length; index += 1) {
+    const entry = entries[index]
     if (typeof entry !== 'object' || entry === null) continue
     const event = (entry as { event?: unknown }).event
     if (typeof event !== 'object' || event === null) continue
@@ -94,7 +113,7 @@ function eventsOf(window: unknown): readonly SessionEventView[] {
     if (typeof seq !== 'number') continue
     out.push({ seq, transient: (entry as { type?: unknown }).type === 'transient', value: event })
   }
-  return out
+  return { entries, out, window }
 }
 
 function useSessionEvents(sessionId: unknown, read: EventReader | undefined): readonly SessionEventView[] {
@@ -104,7 +123,11 @@ function useSessionEvents(sessionId: unknown, read: EventReader | undefined): re
     face === undefined ? NO_SUBSCRIBE : (listener) => face.subscribe(listener),
     face === undefined ? NO_VALUE : () => face.getSnapshot(),
   )
-  return useMemo(() => eventsOf(window), [window])
+  const cache = useRef<EventCache>(EMPTY_CACHE)
+  return useMemo(() => {
+    cache.current = eventsOf(window, cache.current)
+    return cache.current.out
+  }, [window])
 }
 
 function numberField(value: unknown, field: string): number {

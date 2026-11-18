@@ -35,6 +35,7 @@ fork 的 `TrajectoryView` 渲染。只有一个「轨迹」页签，没有第二
 | `TrajectoryTimeline.tsx` | 两端对称的贴边动作、虚线光标 + 光标卡片、右端标记点 |
 | `TrajectoryTable.tsx` | 四页签（概述/预览/统计/原始）、字段行（`Field`）、工具/消息共用的折叠块、行内 `→ Error`、右端定位 |
 | `TrajectoryView.tsx` | 查询解析、`visibleTurns` 过滤（全类型）、`callMeta`、Table 按隐藏集换 key |
+| `format.ts`（新增） | `formatDurationSpan` / `formatTimestamp`：工具条与轨迹条共用一套时长/时间写法 |
 
 `RawDataPanel.tsx` 是可搜索 JSON 树，只被「原始」tab 使用。
 

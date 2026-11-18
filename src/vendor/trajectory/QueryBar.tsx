@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { IconSearchOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import css from './QueryBar.module.css'
 import { KINDS, ROLE_VALUES } from '../../client/query.mjs'
+import { formatDurationSpan } from './format.ts'
 
 export interface QueryChip {
   raw: string
@@ -57,22 +58,6 @@ export interface QueryBarProps {
   onToggleAllSubCalls: () => void
   t: (key: string) => string
   qt: (key: string, params?: Record<string, string | number>) => string
-}
-
-/** Wall-clock span of the loaded window: `812ms` / `4.2s` / `51m05s` / `3h12m` / `19d18h`. */
-function formatSpan(milliseconds: number): string {
-  const ms = Math.max(0, Math.round(milliseconds))
-  if (ms < 1_000) return `${ms}ms`
-  const seconds = ms / 1_000
-  if (seconds < 10) return `${seconds.toFixed(1)}s`
-  if (seconds < 60) return `${Math.round(seconds)}s`
-  const minutes = Math.floor(seconds / 60)
-  const rest = Math.round(seconds % 60)
-  if (minutes < 60) return `${minutes}m${String(rest).padStart(2, '0')}s`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h${String(minutes % 60).padStart(2, '0')}m`
-  const days = Math.floor(hours / 24)
-  return `${days}d${String(hours % 24).padStart(2, '0')}h`
 }
 
 interface Suggestion {
@@ -417,13 +402,13 @@ export function QueryBar(props: QueryBarProps) {
             {props.whole.llmMs > 0 && (
               <span className={css.totalsItem}>
                 <i>{qt('totals.llm')}</i>
-                <b>{formatSpan(props.whole.llmMs)}</b>
+                <b>{formatDurationSpan(props.whole.llmMs)}</b>
               </span>
             )}
             {props.whole.toolMs > 0 && (
               <span className={css.totalsItem}>
                 <i>{qt('totals.tool')}</i>
-                <b>{formatSpan(props.whole.toolMs)}</b>
+                <b>{formatDurationSpan(props.whole.toolMs)}</b>
               </span>
             )}
           </div>
@@ -451,7 +436,7 @@ export function QueryBar(props: QueryBarProps) {
           {props.totals.durationMs !== null && (
             <span className={css.totalsItem}>
               <i>{qt('totals.duration')}</i>
-              <b>{formatSpan(props.totals.durationMs)}</b>
+              <b>{formatDurationSpan(props.totals.durationMs)}</b>
             </span>
           )}
           {props.totals.partial && (

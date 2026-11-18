@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.2 — 2026-11-17
+
+- 删掉 86 条没有任何引用的 CSS 规则（626 行）：`requestBoundaryControl*`、`selectionRail`、`turnRail`、`turnLabel*`、`usagePanel*`、`overview*`、`schema*`、`collapsedTurn*`、`errorPanel*`、`rowStack` / `rowMeta` / `rowTime` 这些，都是已经删掉的面板和行结构留下的样式。判定时把 `css.x`、`css['x']` 和两处动态查表（`promptDiffLine${kind}`、`css[cell.kind]`）都算引用，只删「选择器里每个类都无人引用」的规则；混着在用类的 17 条整条保留。
+- 时长/时间格式化 4 处收成 2 处：`formatSpan`（工具条）与 `formatOffset`（轨迹条光标与坐标轴）合并成 `formatDurationSpan`；`formatStartedAt` 与 `formatRecordedTime` 合并成 `formatTimestamp`（新文件 `src/vendor/trajectory/format.ts`）。输出逐字不变——实测工具条仍是 `16h08m` / `6h44m` / `35m57s`，光标卡 `46s`，开始时间 `2026-11-07 20:59:41.912`；唯一差异是轨迹条偏移超过 24 小时时改写成 `1d05h`，与工具条同一套阶梯。
+- 「原始」的事件索引只在「原始」页签打开时构建：原来会话每追加一条事件都会把整份事件窗口重建成 `callId → seq[]`，哪怕页签没开、根本看不到。事件窗口的展平也改成按前缀增量——追加时只解析新来的条目，不再每次重建整个数组。
+
 ## 0.3.1 — 2026-11-17
 
 - 修「概述里的 `参数` / `来源内容` 这类块太矮」：内联 JSON 树的高度上限原来写死 260px（约 9 行），现在随视口走（`min(56vh, 480px)`；1440×960 下实测 480px，原来 260px）。文字载荷那层 132px 裁切也去掉了——那个 `full` 开关的唯一调用方一直传 `true`，等于从未生效。
