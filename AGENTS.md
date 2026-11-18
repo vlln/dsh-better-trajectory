@@ -27,7 +27,8 @@ fork 的 `TrajectoryView` 渲染。只有一个「轨迹」页签，没有第二
 ### fork 的轨迹源码
 
 `src/vendor/trajectory/` = 内置包 `src/client/` 的拷贝（MIT，随包分发），文件头有 `// @ts-nocheck`。
-改动集中在三处：
+只收录**渲染层可达**的 30 个文件：definition / snapshot builder / duration store / 旧的分组组件
+都不在这里——那些仍由官方插件注册（本插件不禁用它，见下）。改动集中在五处：
 
 | 文件 | 改了什么 |
 |---|---|
@@ -38,13 +39,6 @@ fork 的 `TrajectoryView` 渲染。只有一个「轨迹」页签，没有第二
 | `format.ts`（新增） | `formatDurationSpan` / `formatTimestamp`：工具条与轨迹条共用一套时长/时间写法 |
 
 `RawDataPanel.tsx` 是可搜索 JSON 树，只被「原始」tab 使用。
-
-### 宿主导入的补齐
-
-fork 里有三个宿主内部值导入，原生包会打包它们，这里用 `src/vendor/host/` 复刻：
-
-- `dsh-util-values`：`assertNever`、`JsonValue`、`PartialArguments`（`partial-arguments.ts` 原样拷贝）；
-- `dsh-llm/assistant-stream`：只移植 `assistantStreamFirstTokenTime` 及其两个小助手。
 
 ### 查询语法
 
@@ -115,7 +109,7 @@ AND。未知字段回退为文本，非法值保留 token 但不参与过滤。`
 
 ## 改动前先看
 
-- 升级 dsh：覆盖 vendor 后重新贴三处改动；核对 `TrajectoryView` props 与 `entry.inject`。
+- 升级 dsh：覆盖 vendor 后重新贴五处改动（`QueryBar` / `Table` / `View` / `Timeline` / `format`）；核对 `TrajectoryView` props 与 `entry.inject`。
 - 不要声明 `conversation.trajectory.images`（会顶掉原生声明）。
 - 查询语义改动先加 `tests/query.test.mjs` 用例，再改 `matchesCell`。
 - UI 只消费 `--dsw-alias-*` / `--dsw-specific-*`，不写死颜色。

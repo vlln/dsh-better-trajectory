@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.5 — 2026-11-17
+
+- 收掉 fork 里 26 个不可达文件（3,207 行）：`trajectory-*-definition.ts`、`trajectory-snapshot-builder.ts`、`duration-store.ts`、`string-wrapping-store.ts`、`trajectory-event-projection.ts` / `-search-index.ts` / `types.ts`、旧的分组组件（`TrajectoryCell` / `TrajectoryTurn` / `TurnHeader` / `GroupHeader`）与 `src/vendor/host/`。它们没有任何 import 能到达、也不在产物里（`lib/client.js` 删除前后字节一致，450.1 KB），只是当初整包拷贝留下的。定义、快照、store 仍由官方插件注册——本插件不禁用它。
+- `src/vendor/trajectory/` 从 56 个文件收到 30 个，同步面减半；`AGENTS.md` 里那段「宿主导入的补齐」随之删除。
+
 ## 0.3.4 — 2026-11-17
 
 - 修「轨道窗口放到最大后按左箭头，靠左的块移动得远、靠右的几乎不动（像压缩）」：上一版让铺满时按箭头只取一页、保持铺满——范围变大了而缩放没变，所有条被重新压进同一个宽度，越靠左位移越大，看起来就是压缩。现在铺满时按箭头会把**当前可见的时间跨度**（= 整个已加载范围）当成窗口尺寸：新页面落地后窗口仍是这个跨度、只是往左平移 2/3，每像素对应的时间不变，所以是平移而不是压缩。实测前后 `--trajectory-domain-width`：`100% → 169.83%`（范围变长，但 lanes 宽度 / 范围 = 每像素时间与之前完全相同：1443px/单位 → 2451px 对 1.698 倍范围），窗口左沿 `-3.4%`，其余条按同一位移右移。
