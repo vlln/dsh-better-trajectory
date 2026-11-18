@@ -65,3 +65,48 @@ test('every query / inspector key is translated', () => {
     assert.ok(keysOf('en').has(key), `en missing ${key}`)
   }
 })
+
+/**
+ * Keys the fork passes to the host's `t`. The host looks in the trajectory
+ * namespace and then in the shared `common` namespace before rendering the raw
+ * key, so a key in neither is a visible "copy.value" in the UI.
+ */
+const COMMON_KEYS = new Set([
+  'collapse', 'copied', 'copy', 'copy.compactJson', 'copy.failed', 'copy.json',
+  'copy.optionsHint', 'copy.path', 'copy.prettyJson', 'copy.value', 'expand',
+  'markdown.footnotes',
+])
+
+test('every t()/qt() key the fork asks for is defined', () => {
+  // the host's trajectory dictionary ships with the fork under src/vendor
+  const host = new Set()
+  const hostSource = readFileSync(new URL('../src/vendor/trajectory/locales.ts', import.meta.url), 'utf8')
+  for (const match of hostSource.matchAll(/'([a-zA-Z0-9_.]+)':/g)) host.add(match[1])
+  const ours = keysOf('zh')
+  const dir = new URL('../src', import.meta.url).pathname
+  const files = []
+  const walk = (path) => {
+    for (const entry of readdirSync(path, { withFileTypes: true })) {
+      const child = `${path}/${entry.name}`
+      if (entry.isDirectory()) { walk(child); continue }
+      if (!/\.(ts|tsx)$/.test(entry.name) || entry.name === 'locales.ts') continue
+      files.push(child)
+    }
+  }
+  walk(dir)
+  const missingQt = []
+  const missingT = []
+  for (const file of files) {
+    const text = readFileSync(file, 'utf8')
+    for (const match of text.matchAll(/\bqt\('([^']+)'/g)) {
+      if (!ours.has(match[1])) missingQt.push(`${file.split('/src/')[1]}: qt('${match[1]}')`)
+    }
+    for (const match of text.matchAll(/(?<![\w.])t\('([^']+)'/g)) {
+      if (!host.has(match[1]) && !COMMON_KEYS.has(match[1])) {
+        missingT.push(`${file.split('/src/')[1]}: t('${match[1]}')`)
+      }
+    }
+  }
+  assert.deepEqual(missingQt, [], 'qt() keys with no dictionary entry')
+  assert.deepEqual(missingT, [], "t() keys in neither the host nor the common namespace")
+})
