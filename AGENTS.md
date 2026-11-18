@@ -69,10 +69,10 @@ AND。未知字段回退为文本，非法值保留 token 但不参与过滤。`
 
 - 宿主 **0.2.2-rc.2**（2026-11-14），隔离 web profile，端口 3197。
 - 门禁：`npm run verify` 全绿，43 个单测（query 34 / filter 5 / locales 4）。
-- 发布通道实测（2026-11-16）：`dsh plugin --profile web add github:vlln/dsh-better-trajectory`
-  在干净 `DSH_HOME` 里装上（1m15s），启动后 `/plugins/??dsh-better-trajectory/client.js`
-  返回 200、502 KB，`__ModuleLoader__.load` 的 id 正确；`npm pack` 的 tarball（17 个文件、
-  925 KB）同样装上并起站验证过。
+- 发布通道实测（2026-11-16 / 11-17）：git 源 `… add github:vlln/dsh-better-trajectory` 在干净
+  `DSH_HOME` 里装上（1m15s），启动后 `/plugins/??dsh-better-trajectory/client.js` 返回 200、502 KB；
+  npm 包 `0.3.5` 装进干净 `DSH_HOME`（端口 3203）同样返回 200、461 KB，`__ModuleLoader__.load`
+  的 id 正确，发布 tarball 的 `lib/client.js` 与仓库构建 sha256 一致。
 - 单页签接管：只剩「对话 / 轨迹」，旧的 `Trajectory+`、筛选栏、调试面板、JSON 浮层已删。
 - 查询：`tool:bash` → 36/100（只有调用行，助手/用户/上下文同时隐藏）；大会话本窗口 50 条实测
   `role:assistant` 25 / `role:tool` 23 / `kind:context` 2 / `source:tool-jobs` 1 / `step:170-180` 10 /
@@ -98,8 +98,11 @@ AND。未知字段回退为文本，非法值保留 token 但不参与过滤。`
 
 ## 分发
 
-- 通道：git 源（`dsh plugin --profile web add github:vlln/dsh-better-trajectory`）。`lib/client.js`
-  必须入库，装的时候不跑构建脚本。
+- 通道：npm（`dsh plugin --profile web add dsh-better-trajectory`，0.3.5 起）与 git 源
+  （`… add github:vlln/dsh-better-trajectory`，用于跟进未发版的 `main`）。`lib/client.js` 必须入库，
+  git 源安装时不跑构建脚本；npm 发布由 `prepack` 当场构建。
+- 发 npm 前核对：`npm pack` 出来的 `lib/client.js` 与仓库构建的 sha256 一致（0.3.5 实测
+  `8ffcd840…`），tarball 13 个文件、143 KB，含 `NOTICE` 与 `locale`。
 - `NOTICE` 随包分发：`src/vendor/trajectory/` 是 DeepSeek 的 MIT 代码，原始版权声明不能丢；
   `files` 里包含 `NOTICE`，README 的「许可」节指向它。
 - README 只写使用者内容（安装 / 用法 / 语法 / 限制 / 兼容性 / 插件管理），工程契约在本文件。

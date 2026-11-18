@@ -1,5 +1,6 @@
 <h1 align="center"><img src="icon.svg" width="34" height="34" valign="middle">&nbsp;Better Trajectory</h1>
 
+[![npm](https://img.shields.io/npm/v/dsh-better-trajectory)](https://www.npmjs.com/package/dsh-better-trajectory)
 [![dsh](https://img.shields.io/badge/dsh-0.2.2--rc.2-blue)](https://www.deepseek.com/harness/)
 
 把内置的「轨迹」页签换成一个可查询的调试面：一条查询、一套统一详情、一个原始日志视图。
@@ -8,15 +9,16 @@ https://github.com/user-attachments/assets/b8e3c8b2-1110-4ce5-aff7-743a7fac769b
 
 ## 30 秒安装
 
-**Plugins → 添加插件**，填 `github:vlln/dsh-better-trajectory`，刷新页面。
+**Plugins → 添加插件**，填 `dsh-better-trajectory`，刷新页面。
 
 ```sh
-dsh plugin --profile web add github:vlln/dsh-better-trajectory        # web
-dsh plugin --profile desktop add github:vlln/dsh-better-trajectory    # 官方 Desktop（先退出应用）
+dsh plugin --profile web add dsh-better-trajectory        # web
+dsh plugin --profile desktop add dsh-better-trajectory    # 官方 Desktop（先退出应用）
 ```
 
+- 跟进 `main` 上还没发版的最新改动：`dsh plugin --profile web add github:vlln/dsh-better-trajectory`。
 - 前置：dsh `0.2.2-rc.x`（实测 `0.2.2-rc.2`）。
-- 升级：再执行一次 `add`。卸载：`dsh plugin --profile web remove dsh-better-trajectory`。
+- 升级：`dsh plugin --profile web update dsh-better-trajectory`。卸载：`remove dsh-better-trajectory`。
 - 装好后打开「轨迹」，输入 `role:assistant` 回车：列表只剩助手行，右栏出现四个页签。
 
 ## 相比原生
